@@ -28,6 +28,13 @@ const FOOT_ROUTER =
   'https://routing.openstreetmap.de/routed-foot/route/v1/driving';
 
 let lastRoutingRequestAt = 0;
+const WALKING_ROUTE_CACHE_TTL = 2 * 60 * 1000;
+const walkingRouteCache = new Map<string, { expiresAt: number; route: WalkingRoute }>();
+
+function walkingRouteCacheKey(start: GeoPoint, destination: GeoPoint) {
+  const round = (value: number) => value.toFixed(5);
+  return `${round(start.latitude)},${round(start.longitude)}>${round(destination.latitude)},${round(destination.longitude)}`;
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,8 +64,13 @@ async function fetchWithTimeout(url: string, timeoutMs: number) {
 
 export async function fetchWalkingRoute(
   start: GeoPoint,
-  destination: GeoPoint
+  destination: GeoPoint,
+  timeoutMs = 12000
 ): Promise<WalkingRoute> {
+  const cacheKey = walkingRouteCacheKey(start, destination);
+  const cached = walkingRouteCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.route;
+
   await throttleRouter();
 
   const coordinates = [
@@ -69,7 +81,7 @@ export async function fetchWalkingRoute(
   const url =
     `${FOOT_ROUTER}/${coordinates}` +
     '?overview=full&geometries=geojson&steps=true&alternatives=false';
-  const response = await fetchWithTimeout(url, 12000);
+  const response = await fetchWithTimeout(url, timeoutMs);
 
   if (!response.ok) throw new Error(`Walking router ${response.status}`);
 
@@ -80,7 +92,7 @@ export async function fetchWalkingRoute(
     throw new Error('No walking route');
   }
 
-  return {
+  const normalized: WalkingRoute = {
     coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({
       latitude,
       longitude,
@@ -88,6 +100,27 @@ export async function fetchWalkingRoute(
     distanceMeters: route.distance,
     durationSeconds: route.duration,
   };
+
+  walkingRouteCache.set(cacheKey, {
+    expiresAt: Date.now() + WALKING_ROUTE_CACHE_TTL,
+    route: normalized,
+  });
+
+  return normalized;
+}
+
+export async function prewarmWalkingRoutes(
+  start: GeoPoint,
+  candidates: SceneCandidate[],
+  limit = 2
+) {
+  for (const scene of candidates.slice(0, Math.max(0, limit))) {
+    try {
+      await fetchWalkingRoute(start, scene.point, 4200);
+    } catch {
+      // Prewarming is opportunistic; ticket issue can still try another route.
+    }
+  }
 }
 
 function targetDistance(minutes: number) {
@@ -190,24 +223,30 @@ export async function resolveRoutedScene(args: {
   const sideMissionCount = args.sideMissionCount ?? 0;
   const avoidRoutes = args.avoidRoutes ?? [];
   const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
+  const routingStartedAt = Date.now();
+  const TICKET_ROUTING_BUDGET_MS = 6800;
 
+  // Candidate quality is already ranked upstream. Only consider a small window,
+  // then prefer the one whose straight-line distance best fits this duration.
   const shortlist = args.candidates
-    .slice(0, 14)
+    .slice(0, 7)
     .sort(
       (a, b) =>
         Math.abs(a.straightDistanceMeters - straightTarget) -
         Math.abs(b.straightDistanceMeters - straightTarget)
     )
-    .slice(0, 8);
+    .slice(0, 3);
 
-  let bestViable: RoutedScene | null = null;
-  let bestViableScore = Number.POSITIVE_INFINITY;
   let bestFallback: RoutedScene | null = null;
   let bestFallbackScore = Number.POSITIVE_INFINITY;
 
   for (const scene of shortlist) {
+    if (Date.now() - routingStartedAt > TICKET_ROUTING_BUDGET_MS && bestFallback) {
+      break;
+    }
+
     try {
-      const route = await fetchWalkingRoute(args.start, scene.point);
+      const route = await fetchWalkingRoute(args.start, scene.point, 4400);
       const overlap = routeOverlapRatio(route.coordinates, avoidRoutes);
       const estimatedSeconds = estimatedJourneySeconds(
         route,
@@ -220,10 +259,7 @@ export async function resolveRoutedScene(args: {
       const overtimePenalty = overtimeSeconds * 1.4;
       const score = distanceDelta + noveltyPenalty + overtimePenalty;
 
-      if (
-        route.distanceMeters <= maxDistance * 1.08 &&
-        score < bestFallbackScore
-      ) {
+      if (route.distanceMeters <= maxDistance * 1.08 && score < bestFallbackScore) {
         bestFallback = { scene, route };
         bestFallbackScore = score;
       }
@@ -234,16 +270,16 @@ export async function resolveRoutedScene(args: {
       const timeFits = estimatedSeconds <= timeBudgetSeconds;
       const noveltyFits = overlap <= 0.62;
 
-      if (distanceFits && timeFits && noveltyFits && score < bestViableScore) {
-        bestViable = { scene, route };
-        bestViableScore = score;
+      // Fast path: a route that clears all product gates is good enough. Do not
+      // make the user wait while we compare mathematically nicer alternatives.
+      if (distanceFits && timeFits && noveltyFits) {
+        return { scene, route };
       }
     } catch {
-      // Try the next Scene. Public routing can occasionally miss a snap.
+      // Try the next Scene while the small routing budget remains.
     }
   }
 
-  if (bestViable) return bestViable;
   if (bestFallback) return bestFallback;
 
   throw new Error(
