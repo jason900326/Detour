@@ -93,7 +93,6 @@ type Stage =
   | 'settings'
   | 'time'
   | 'mood'
-  | 'color'
   | 'preparing'
   | 'ready'
   | 'journey'
@@ -596,12 +595,10 @@ export default function HomeScreen() {
   const screenY = useRef(new Animated.Value(0)).current;
   const routeProgress = useRef(new Animated.Value(0)).current;
   const timeSliderProgress = useRef(
-    new Animated.Value((15 - TIME_MIN) / (TIME_MAX - TIME_MIN))
+    new Animated.Value(0)
   ).current;
   const timeSliderWidthRef = useRef(1);
-  const timeSliderStartProgressRef = useRef(
-    (15 - TIME_MIN) / (TIME_MAX - TIME_MIN)
-  );
+  const timeSliderStartProgressRef = useRef(0);
   const timeSliderDisplayRef = useRef(15);
   const minutePulse = useRef(new Animated.Value(1)).current;
   const homeEntrance = useRef(new Animated.Value(0)).current;
@@ -1571,15 +1568,6 @@ export default function HomeScreen() {
     transitionTo('preparing');
   }
 
-  async function chooseColor(color: ColorChoice) {
-    await Haptics.selectionAsync();
-    transitionTo('preparing', () => setSelectedColor(color));
-  }
-
-  async function randomColor() {
-    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-    await chooseColor(color);
-  }
 
   function resetDetour() {
     const testSessionId =
@@ -1704,12 +1692,6 @@ export default function HomeScreen() {
 
     if (stage === 'mood') {
       transitionTo('time');
-      return;
-    }
-
-    if (stage === 'color') {
-      setSelectedMood(null);
-      transitionTo('mood');
       return;
     }
 
@@ -2530,11 +2512,39 @@ export default function HomeScreen() {
       if (cached && cachedCandidates.length > 0) {
         startPoint = cached.point;
         context = cached.context;
+
+        // Prewarm is primarily an OSM/network warm-up. Candidate distance
+        // scoring must still use the duration the user actually selected.
+        const visitedSceneIds = passport
+          .map((entry) => entry.sceneId)
+          .filter((value): value is string => typeof value === 'string');
+        const sceneFeedback = await loadSceneFeedback();
+        const durationCandidates = await findSceneCandidates({
+          start: startPoint,
+          moodId: finalMood,
+          context,
+          minutes,
+          excludeSceneIds: visitedSceneIds,
+          feedback: sceneFeedback,
+          distanceScale: paceDistanceScale,
+        });
+
+        if (durationCandidates.length === 0) {
+          throw new Error(
+            finalMood === 'food'
+              ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
+              : '附近暫時沒有找到適合現在情境的 Scene。'
+          );
+        }
+
         rankedCandidates = applyCachedRanking(
-          cachedCandidates,
+          durationCandidates,
           cached.rankedIdsByMood[finalMood]
         );
-        rankingUsedAI = cached.aiUsedByMood[finalMood] ?? false;
+        rankingUsedAI =
+          finalMood === 'food' || finalMood === 'color'
+            ? false
+            : cached.aiUsedByMood[finalMood] ?? false;
 
         advanceTicketProgress(
           0.58,
@@ -4350,64 +4360,6 @@ export default function HomeScreen() {
               <Text style={styles.v35MoodPrimaryText}>{selectedMood ? '出發吧！' : '先選一種心情'}</Text>
               <View style={styles.v35MoodPrimaryDivider} /><Text style={styles.v35MoodPrimaryArrow}>→</Text>
             </Pressable>
-          </View>
-        )}
-
-        {stage === 'color' && (
-          <View style={styles.lightScreen}>
-            <View style={styles.brandRow}>
-              <Pressable onPress={goBack} hitSlop={16} style={styles.backInline}>
-                <Text style={styles.backArrow}>←</Text>
-              </Pressable>
-              <Text style={styles.brand}>COLOR WALK</Text>
-              <Text style={styles.meta}>{selectedTime} MIN</Text>
-            </View>
-
-            <View style={styles.colorHero}>
-              <Text style={styles.kicker}>這個顏色會穿過整條主線。</Text>
-              <Text style={styles.sectionTitle}>
-                今天追哪個{`\n`}
-                顏色？
-              </Text>
-            </View>
-
-            <View>
-              <View style={styles.colorGrid}>
-                {COLORS.map((color) => (
-                  <Pressable
-                    key={color.id}
-                    onPress={() => chooseColor(color)}
-                    style={({ pressed }) => [
-                      styles.colorButton,
-                      pressed && styles.colorButtonPressed,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.colorSwatch,
-                        { backgroundColor: color.hex },
-                      ]}
-                    />
-                    <View>
-                      <Text style={styles.colorLabel}>{color.label}</Text>
-                      <Text style={styles.colorCode}>{color.code}</Text>
-                    </View>
-                    <Text style={styles.colorArrow}>→</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Pressable
-                onPress={randomColor}
-                style={({ pressed }) => [
-                  styles.randomButton,
-                  pressed && styles.pressedLight,
-                ]}
-              >
-                <Text style={styles.randomButtonText}>隨機替我選</Text>
-                <Text style={styles.randomButtonText}>↻</Text>
-              </Pressable>
-            </View>
           </View>
         )}
 
