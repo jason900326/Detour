@@ -175,7 +175,7 @@ export function getJourneyProfile(minutes: number): JourneyProfile {
   else if (safeMinutes <= 15) { targetDistanceMeters = 680; sideMissionCount = 3; }
   else if (safeMinutes <= 30) { targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28); sideMissionCount = 4; }
   else if (safeMinutes <= 45) { targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22); sideMissionCount = 5; }
-  else { targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18); sideMissionCount = 6; }
+  else { targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18); sideMissionCount = 5; }
   const milestones = Array.from({ length: sideMissionCount }, (_, index) => Number((((index + 1) / (sideMissionCount + 1)) * 0.9).toFixed(2)));
   return { minutes: safeMinutes, targetDistanceMeters, sideMissionCount, milestones };
 }
@@ -599,6 +599,124 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 
+function cameraFirstSideMissions(context: LightContext): Mission[] {
+  const nightNote = context === 'night'
+    ? '留在有照明、公開可走的位置。'
+    : '';
+
+  return withIds('camera-first', [
+    {
+      code: 'RED HIT',
+      family: 'visual',
+      title: '拍一個紅色。',
+      instruction: `${nightNote} 不用找漂亮的；沿主線看到一個清楚的紅色物件就拍。`,
+      completion: '照片裡有一個明確的紅色物件。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'ONE CIRCLE',
+      family: 'pattern',
+      title: '拍一個圓形。',
+      instruction: `${nightNote} 招牌、輪子、蓋子、燈或圖案都可以；只要一眼看得出是圓的。`,
+      completion: '拍到一個清楚的圓形。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'ONE NUMBER',
+      family: 'count',
+      title: '拍一個數字。',
+      instruction: `${nightNote} 門牌、路牌、價目、標示都可以；看到第一個清楚的數字就拍。`,
+      completion: '照片裡有一個讀得出的數字。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'ONE ARROW',
+      family: 'perspective',
+      title: '拍一個箭頭。',
+      instruction: `${nightNote} 地面、路牌、貼紙或標示都算；不要為了找它繞路。`,
+      completion: '照片裡有一個清楚的箭頭。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'BLUE HIT',
+      family: 'contrast',
+      title: '拍一個藍色。',
+      instruction: `${nightNote} 只選一個明顯的藍色物件，不用安排構圖。`,
+      completion: '照片裡有一個明確的藍色物件。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'TWO SAME',
+      family: 'framing',
+      title: '把兩個一樣的東西拍在一起。',
+      instruction: `${nightNote} 兩張椅子、兩個盆栽、兩扇窗、兩個路樁都可以。`,
+      completion: '同一張照片裡看得到兩個相同或幾乎相同的東西。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'UTILITY BOX',
+      family: 'texture',
+      title: '拍一個電箱。',
+      instruction: `${nightNote} 找路邊公開可見的配電箱、控制箱或金屬設備箱。找不到就直接跳過。`,
+      completion: '拍到一個箱型的公共設備。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'MANHOLE',
+      family: 'boundary',
+      title: '拍一個人孔蓋。',
+      instruction: `${nightNote} 不用走到馬路中央；只拍安全可見的人孔蓋或排水蓋。找不到就跳過。`,
+      completion: '拍到一個地面金屬蓋。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'ONE STICKER',
+      family: 'mystery',
+      title: '拍一張貼紙。',
+      instruction: `${nightNote} 只拍公共可見、已經貼著的貼紙；不要撕、不要碰。`,
+      completion: '照片裡有一張清楚的貼紙。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'ONE TRIANGLE',
+      family: 'scale',
+      title: '拍一個三角形。',
+      instruction: `${nightNote} 標誌、屋頂、支架、圖案都可以。`,
+      completion: '照片裡有一個一眼能認出的三角形。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'WHITE HIT',
+      family: 'visual',
+      title: '拍一個白色。',
+      instruction: `${nightNote} 找一個清楚的白色物件，第一個合格的就拍。`,
+      completion: '照片裡有一個明確的白色物件。',
+      photo: true,
+      portable: true,
+    },
+    {
+      code: 'STRAIGHT LINE',
+      family: 'pattern',
+      title: '拍一條很直的線。',
+      instruction: `${nightNote} 牆邊、欄杆、磁磚縫、路面標線都可以。`,
+      completion: '照片裡有一條明確的直線。',
+      photo: true,
+      portable: true,
+    },
+  ]);
+}
+
+
 export type MissionFamily =
   | 'sound'
   | 'movement'
@@ -617,6 +735,7 @@ export type MissionFamily =
   | 'perspective';
 
 function missionFamily(mission: Mission): MissionFamily {
+  if (mission.family) return mission.family;
   if (mission.photo) return 'photo';
 
   const code = mission.code.toUpperCase();
@@ -844,35 +963,13 @@ export function buildJourneyPlan(args: {
   const profile = getJourneyProfile(args.minutes);
   const meta = getContextMeta(args.context);
 
-  let unique: Mission[];
-
-  if (args.moodId === 'food') {
-    unique = buildFoodMissionSequence(
-      args.context,
-      profile.sideMissionCount
-    );
-  } else {
-    let pool: Mission[];
-
-    if (args.moodId === 'quiet') {
-      pool = quietMissions(args.context);
-    } else if (args.moodId === 'weird') {
-      pool = weirdMissions(args.context);
-    } else if (args.moodId === 'surprise') {
-      pool = [
-        ...portableWanderMissions(args.context),
-        ...quietMissions(args.context),
-        ...weirdMissions(args.context),
-      ];
-    } else {
-      pool = portableWanderMissions(args.context);
-    }
-
-    unique = selectVariedMissions(
-      pool,
-      profile.sideMissionCount
-    );
-  }
+  // v0.38 mission rule: mood changes the destination taste, not the
+  // basic Side Quest grammar. Every Side Quest is a quick, concrete camera
+  // prompt so the user naturally returns with a small visual record.
+  const unique = selectVariedMissions(
+    cameraFirstSideMissions(args.context),
+    profile.sideMissionCount
+  );
 
   return {
     context: args.context,

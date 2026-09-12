@@ -40,20 +40,23 @@ SIDE QUEST DESIGN
 - Each quest should take about 10–45 seconds.
 - Each quest needs an objective completion condition.
 - Make each quest use a different mechanic/family within one journey.
-- Prefer: counting, contrast, scale, texture, sound, movement, framing, boundaries, patterns, perspective.
-- Do not require a specific object that may not exist on the route.
+- Camera-first rule: prefer one concrete, instantly recognizable visual target (a color, number, circle, arrow, repeated pair, sticker, utility box, manhole cover, simple line or shape).
+- Keep each prompt simple: one target or one tiny composition rule, never an abstract interpretation.
+- Do not use listening, breathing, speaking, describing, guessing, memory-only, mindfulness, or subjective ranking tasks.
+- If a less-common object is requested, the app must allow a graceful skip.
 - Use the supplied mission slot phase:
   warmup = extremely easy, immediate success;
   discover = notice a concrete pattern while walking;
   shift = change how the same street is perceived without detouring;
   anticipate = create slight tension before arrival without revealing the destination.
 - Do not repeat recent mission titles, codes, or the same mechanic when recentMissions are supplied.
-- At most one side quest may require a photo. Photo=false is preferred.
+- Photo=true is the default for Side Quests. The journey should naturally return with photos rather than relying on verbal completion.
 
 ARRIVAL DESIGN
 - Arrival is the payoff. The destination is now revealed by the app.
 - Arrival may use supplied Scene name/type/tags, but only facts actually present.
-- Give one concise task that makes this exact Scene worth stopping for.
+- Give one concise camera task that makes this exact Scene worth stopping for. Arrival must have photo=true.
+- Never ask the user to speak, describe in words, guess, listen, breathe, remember, or write text as the completion action.
 - Do not turn arrival into a history lesson.
 - Food mood: DETOUR already chose the place. Do not ask the user what to eat or whether to choose another place. Never require a purchase; the task must still be completable from public space.
 
@@ -356,8 +359,8 @@ Deno.serve(async (req: Request) => {
           "A portable side quest must not assume a mural, sign, shop, traffic light, tree, bench, staircase, person, animal, vehicle, water, or any other specific object will exist.",
           "Completion must be objective: count reached, comparison made, frame found, two sounds identified, boundary identified, etc.",
           "Keep title short. Keep instruction to one or two short sentences.",
-          "At most one side mission may have photo=true.",
-          "Arrival must be about the supplied destination and should feel meaningfully different from the side quests.",
+          "Side missions should be camera-first. Use photo=true and ask for one concrete visual target or one tiny composition rule.",
+          "Arrival must be about the supplied destination, must have photo=true, and must never require speaking, describing, listening, guessing, breathing, remembering, or writing words.",
           "For food mood, arrival must not require purchasing, ordering, entering, or choosing a dish.",
         ],
       };

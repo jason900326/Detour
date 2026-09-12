@@ -1102,137 +1102,39 @@ export function buildSceneArrivalMission(args: {
   moodId: MoodId;
   context: LightContext;
 }): Mission {
-  const { scene, moodId } = args;
-
-  if (moodId === 'quiet') {
-    return {
-      id: `scene-${scene.id}-quiet`,
-      code: 'ARRIVAL · LISTEN',
-      title: '先不要拍。',
-      instruction:
-        '站在公共可停留的位置，找出最近和最遠的兩個聲音。不要閉眼，也不用離開原地。',
-      completion: '兩個聲音都能指出來，就完成。',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (moodId === 'weird') {
-    return {
-      id: `scene-${scene.id}-weird`,
-      code: 'ARRIVAL · COLOR HIT',
-      title: '找最搶眼的一個顏色。',
-      instruction:
-        '只看公共可見範圍。不要分析意義，直接選第一眼最搶眼的顏色。',
-      completion: '把那個顏色和 Scene 的一部分拍進同一張照片。',
-      photo: true,
-      portable: false,
-    };
-  }
-
-  if (scene.kind === 'mural' || scene.kind === 'street-art') {
-    return {
-      id: `scene-${scene.id}-mural`,
-      code: 'ARRIVAL · COLOR TRACE',
-      title: '不要拍整面。',
-      instruction:
-        '找作品裡最小但最搶眼的一塊顏色，讓它和旁邊真實街景同時留在畫面裡。',
-      completion: '拍一張只有這兩個重點的照片。',
-      photo: true,
-      portable: false,
-    };
-  }
+  const { scene } = args;
 
   if (scene.kind === 'statue') {
     return {
       id: `scene-${scene.id}-statue`,
-      code: 'ARRIVAL · STATUE DETAIL',
-      title: '只拍一個明確細節。',
-      instruction:
-        '找手上拿的東西、衣服紋路、底座文字或姿勢裡最清楚的一個細節。不要拍整尊。',
-      completion: '把那個細節拍下來。',
+      code: 'ARRIVAL · DETAIL',
+      title: '拍一個雕像細節。',
+      instruction: '只選手上的東西、衣服紋路、底座文字或姿勢裡的一個，不用拍整尊。',
+      completion: '照片裡只有一個清楚可辨的細節。',
       photo: true,
       portable: false,
     };
   }
 
-  if (scene.kind === 'artwork') {
+  if (scene.kind === 'mural' || scene.kind === 'street-art' || scene.kind === 'artwork') {
     return {
-      id: `scene-${scene.id}-artwork`,
-      code: 'ARRIVAL · WRONG SIDE',
-      title: '換一個不正面的角度。',
-      instruction:
-        '沿公共可走範圍移動幾步，找到它輪廓變化最大的一個角度。',
-      completion: '拍下那個角度。',
+      id: `scene-${scene.id}-art`,
+      code: 'ARRIVAL · ONE PART',
+      title: '不要拍整個作品。',
+      instruction: '找一個最清楚的顏色、形狀或材質細節，只拍那一小塊。',
+      completion: '拍下一個你能直接指出的作品細節。',
       photo: true,
       portable: false,
     };
   }
 
   if (scene.kind === 'food' || scene.kind === 'market') {
-    const foodDecision =
-      foodDecisionLabel(scene.tags);
-
     return {
       id: `scene-${scene.id}-food`,
-      code: 'ARRIVAL · DETOUR PICK',
-      title: '今天就這裡。',
-      instruction:
-        `${scene.name} 是 DETOUR 幫你做的決定。這趟的答案是「${foodDecision}」。不要再打開地圖比較下一家；先走到店前或公開入口，看現場是不是正常營業。`,
-      completion:
-        `到達 ${scene.name}，就完成主線。你不用再決定「去哪裡吃」。`,
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (scene.kind === 'historic') {
-    return {
-      id: `scene-${scene.id}-historic`,
-      code: 'ARRIVAL · NEW / OLD',
-      title: '找新東西碰到舊東西的地方。',
-      instruction:
-        '看管線、招牌、修補、門窗或材質。找一個明顯比主體更新的細節。',
-      completion: '找到一個就完成；想留下就拍。',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (scene.kind === 'steps') {
-    return {
-      id: `scene-${scene.id}-steps`,
-      code: 'ARRIVAL · REPEAT',
-      title: '只看重複。',
-      instruction:
-        '不要急著走完整段階梯。站在公共安全位置，找一組重複線條或陰影。',
-      completion: '拍一張讓重複變成主角的照片。',
-      photo: true,
-      portable: false,
-    };
-  }
-
-  if (scene.kind === 'footbridge') {
-    return {
-      id: `scene-${scene.id}-bridge`,
-      code: 'ARRIVAL · CROSSING',
-      title: '等一個東西穿過畫面。',
-      instruction:
-        '留在公共可走的位置，選一個固定背景，等一個移動物經過。',
-      completion: '在它穿過背景時拍一張。',
-      photo: true,
-      portable: false,
-    };
-  }
-
-  if (scene.kind === 'viewpoint') {
-    return {
-      id: `scene-${scene.id}-view`,
-      code: 'ARRIVAL · FRAME IT',
-      title: '不要拍整片風景。',
-      instruction:
-        '先找一個很近的東西當前景，再用它框住遠方。',
-      completion: '拍一張同時有近和遠的照片。',
+      code: 'ARRIVAL · PROOF',
+      title: '拍下「到了」的證據。',
+      instruction: `留在公開位置，把「${scene.name}」的店名、攤位名或入口標示拍進去；不用消費。`,
+      completion: '照片裡看得到這個目的地的名稱或入口。',
       photo: true,
       portable: false,
     };
@@ -1242,62 +1144,93 @@ export function buildSceneArrivalMission(args: {
     return {
       id: `scene-${scene.id}-book`,
       code: 'ARRIVAL · ONE TITLE',
-      title: '只找一個書名。',
-      instruction:
-        '不用翻書。從公共可看的書脊裡，找一個你完全沒預期會在這裡看到的書名。',
-      completion: '記住那個書名；想留紀錄就拍。',
-      photo: false,
-      portable: true,
+      title: '拍一個書名。',
+      instruction: '不用翻書，只從公共可見的書脊或封面選一個清楚的書名。',
+      completion: '照片裡讀得到一個書名。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'historic' || scene.kind === 'culture') {
+    return {
+      id: `scene-${scene.id}-culture`,
+      code: 'ARRIVAL · ONE MARK',
+      title: '拍一個這裡才有的標記。',
+      instruction: '只看館外或公共可見範圍，找名稱、年份、符號、牌子或刻字中的一個。',
+      completion: '拍下一個能辨認這個地方的文字或符號。',
+      photo: true,
+      portable: false,
     };
   }
 
   if (scene.kind === 'heritage-tree') {
     return {
       id: `scene-${scene.id}-tree`,
-      code: 'ARRIVAL · OLDER / NEWER',
-      title: '讓老和新同框。',
-      instruction:
-        '找附近一個明顯比這棵樹新的城市物件。',
-      completion: '把老樹和那個新物件放進同一張照片。',
+      code: 'ARRIVAL · BARK',
+      title: '拍一小塊樹皮。',
+      instruction: '不用碰樹，也不要拍整棵；只取樹幹上一塊清楚的紋理。',
+      completion: '照片裡看得到明確的樹皮紋理。',
       photo: true,
       portable: false,
-    };
-  }
-
-  if (scene.kind === 'culture') {
-    return {
-      id: `scene-${scene.id}-culture`,
-      code: 'ARRIVAL · OUTSIDE CLUE',
-      title: '先不要急著進去。',
-      instruction:
-        '只看外面和公共可見範圍。找一個細節，猜它裡面最可能在做什麼。',
-      completion: '先猜一個答案，再看現場資訊驗證。',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (scene.kind === 'green-space') {
-    return {
-      id: `scene-${scene.id}-green`,
-      code: 'ARRIVAL · EDGE',
-      title: '不要走去正中央。',
-      instruction:
-        '沿公共路徑找這塊綠地和城市接壤最奇怪的一個邊界：牆、招牌、住宅、道路都算。',
-      completion: '找到一個你覺得最有反差的邊界，就完成。',
-      photo: false,
-      portable: true,
     };
   }
 
   if (scene.kind === 'fountain') {
     return {
       id: `scene-${scene.id}-water`,
-      code: 'ARRIVAL · WATER / HARD',
-      title: '找水碰到硬東西的地方。',
-      instruction:
-        '不要拍完整噴泉。只找水和石頭、金屬或地面交界的一小塊。',
-      completion: '拍下那個交界。',
+      code: 'ARRIVAL · WATER EDGE',
+      title: '拍水碰到邊緣的地方。',
+      instruction: '只拍水和石頭、金屬或地面接觸的一小塊，不用拍完整噴泉。',
+      completion: '照片裡同時有水和一個硬質邊緣。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'steps') {
+    return {
+      id: `scene-${scene.id}-steps`,
+      code: 'ARRIVAL · LINES',
+      title: '拍三條重複的線。',
+      instruction: '留在安全位置，用階梯本身的邊緣完成，不必走完整段。',
+      completion: '照片裡至少有三條重複線。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'footbridge') {
+    return {
+      id: `scene-${scene.id}-bridge`,
+      code: 'ARRIVAL · LINE',
+      title: '拍橋上最長的一條線。',
+      instruction: '只在公共可走的位置找欄杆、地面或結構的一條長直線。',
+      completion: '讓那條線從照片一側延伸到另一側。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'viewpoint') {
+    return {
+      id: `scene-${scene.id}-view`,
+      code: 'ARRIVAL · NEAR / FAR',
+      title: '拍一個近的，也留一個遠的。',
+      instruction: '站在原地，把一個近處物件放在畫面下緣，遠方留在後面。',
+      completion: '同一張照片裡明顯看得到近景和遠景。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'green-space') {
+    return {
+      id: `scene-${scene.id}-green`,
+      code: 'ARRIVAL · GREEN',
+      title: '拍一個綠色。',
+      instruction: '不用走進草地；從公共路徑拍一個清楚的綠色物件或植物。',
+      completion: '照片裡有一個明確的綠色主體。',
       photo: true,
       portable: false,
     };
@@ -1305,25 +1238,23 @@ export function buildSceneArrivalMission(args: {
 
   if (scene.kind === 'square' || scene.kind === 'pedestrian') {
     return {
-      id: `scene-${scene.id}-flow`,
-      code: 'ARRIVAL · FLOW',
-      title: '找一條大家自然會走的線。',
-      instruction:
-        '站在邊緣，不擋路。看十秒，找出人或車最常穿過的一條路徑。',
-      completion: '用手指出那條線，就完成；照片可選。',
-      photo: false,
-      portable: true,
+      id: `scene-${scene.id}-shape`,
+      code: 'ARRIVAL · SHAPE',
+      title: '拍一個圓形。',
+      instruction: '只看你站著就能安全看到的範圍；標誌、燈、蓋子或圖案都可以。',
+      completion: '照片裡有一個清楚的圓形。',
+      photo: true,
+      portable: false,
     };
   }
 
   return {
     id: `scene-${scene.id}-arrival`,
-    code: 'ARRIVAL',
-    title: '到了。先看看這裡。',
-    instruction:
-      '只看公共可見範圍。找一個你原本不會注意的細節。',
-    completion: '找到一個就完成。',
-    photo: false,
-    portable: true,
+    code: 'ARRIVAL · NUMBER',
+    title: '拍一個數字。',
+    instruction: '只看目的地外面或公共可見範圍；門牌、年份、標示或牌子上的數字都可以。',
+    completion: '照片裡有一個讀得出的數字。',
+    photo: true,
+    portable: false,
   };
 }

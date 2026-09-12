@@ -23,6 +23,7 @@ import { Album, Asset, requestPermissionsAsync as requestMediaLibraryPermissions
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Circle, Polyline } from 'react-native-maps';
+import { captureRef } from 'react-native-view-shot';
 
 import {
   buildJourneyPlan,
@@ -228,10 +229,9 @@ const TIME_STEPS = Array.from(
 const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
   { id: 'wander', label: '隨便走走', code: 'WANDER' },
   { id: 'food', label: '吃點東西', code: 'FOOD' },
-  { id: 'quiet', label: '放鬆一下', code: 'QUIET' },
-  { id: 'weird', label: '探索新鮮', code: 'WEIRD' },
-  { id: 'photo', label: '拍照走走', code: 'PHOTO' },
-  { id: 'surprise', label: '交給驚喜', code: 'SURPRISE' },
+  { id: 'quiet', label: '想安靜一下', code: 'QUIET' },
+  { id: 'weird', label: '奇怪一點', code: 'WEIRD' },
+  { id: 'surprise', label: '隨機帶我走', code: 'SURPRISE' },
 ];
 
 const FREE_CAMERA_MISSION: Mission = {
@@ -262,11 +262,10 @@ function walkingPaceLabel(
 
 function moodSymbol(moodId: MoodId) {
   if (moodId === 'wander') return '↗';
-  if (moodId === 'food') return '●';
-  if (moodId === 'quiet') return '⌒';
+  if (moodId === 'food') return '♨';
+  if (moodId === 'quiet') return '☾';
   if (moodId === 'weird') return '?';
-  if (moodId === 'photo') return '◎';
-  return '◆';
+  return '✦';
 }
 
 function moodHint(moodId: MoodId) {
@@ -307,11 +306,10 @@ function ticketSerial(
   return `DTR-${timeCode}-${moodCode}`;
 }
 
-function getFilmRollCapacity(minutes: number) {
-  if (minutes <= 15) return 6;
-  if (minutes <= 30) return 8;
-  if (minutes <= 60) return 12;
-  return 16;
+function getFilmRollCapacity(_minutes: number) {
+  // Every DETOUR keeps one small roll. Camera-first Side Quests plus the
+  // arrival frame are designed to fit inside these six intentional photos.
+  return 6;
 }
 
 function parseMinutes(value: string | null) {
@@ -499,6 +497,7 @@ export default function HomeScreen() {
   const [selectedPassportId, setSelectedPassportId] =
     useState<string | null>(null);
   const [passportPhotoIndex, setPassportPhotoIndex] = useState(0);
+  const [passportZoomUri, setPassportZoomUri] = useState<string | null>(null);
 
   const [playtestSessions, setPlaytestSessions] =
     useState<PlaytestSession[]>([]);
@@ -557,6 +556,7 @@ export default function HomeScreen() {
   const stageRef = useRef<Stage>('boot');
   const prewarmRef = useRef<DetourPrewarm | null>(null);
   const prewarmInFlightRef = useRef(false);
+  const shareTicketRef = useRef<any>(null);
 
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenY = useRef(new Animated.Value(0)).current;
@@ -3038,21 +3038,32 @@ export default function HomeScreen() {
 
   async function shareJourney(entry: PassportEntry) {
     const message = [
-      `DETOUR · ${entry.city}`,
-      `${formatPassportDate(entry.completedAt)} · ${entry.minutes} 分鐘`,
+      'DETOUR JOURNEY TICKET',
       entry.sceneName ? `終點：${entry.sceneName}` : null,
-      `${entry.photoCount ?? 0} 張照片 · ${entry.discoveries} 個任務`,
+      `${formatPassportDate(entry.completedAt)} · ${entry.minutes} 分鐘`,
     ]
       .filter(Boolean)
       .join('\n');
 
-    const firstPhoto = entry.photos?.[0]?.uri;
+    try {
+      const ticketUri = await captureRef(shareTicketRef, {
+        format: 'jpg',
+        quality: 0.94,
+        result: 'tmpfile',
+      });
 
-    await Share.share({
-      title: '分享這趟 DETOUR',
-      message,
-      ...(firstPhoto ? { url: firstPhoto } : {}),
-    });
+      await Share.share({
+        title: '分享這趟 DETOUR',
+        message,
+        url: ticketUri,
+      });
+    } catch {
+      // Sharing should still work even if a device cannot capture the card.
+      await Share.share({
+        title: '分享這趟 DETOUR',
+        message,
+      });
+    }
   }
 
   async function openCamera(source: CameraSource) {
@@ -4226,14 +4237,14 @@ export default function HomeScreen() {
               <Text style={styles.v35MoodBrand}>DETOUR</Text>
               <View style={styles.v35TimePill}><Text style={styles.v35TimePillIcon}>◷</Text><Text style={styles.v35TimePillText}>{selectedTime} MIN</Text></View>
             </View>
-            <Text style={styles.v35MoodTitle}>今天想要哪種心情？</Text>
+            <Text style={styles.v35MoodTitle}>這次想怎麼晃？</Text>
             <View style={styles.v35UnderlineMood} />
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v35MoodScroll}>
               <View style={styles.v35MoodGrid}>
                 {MOODS.map((item) => {
                   const active = selectedMood === item.id;
                   return (
-                    <Pressable key={item.id} onPress={() => chooseMood(item.id)} style={({ pressed }) => [styles.v35MoodCard, active && styles.v35MoodCardActive, pressed && styles.v35Pressed]}>
+                    <Pressable key={item.id} onPress={() => chooseMood(item.id)} style={({ pressed }) => [styles.v35MoodCard, item.id === 'surprise' && styles.v38MoodWide, active && styles.v35MoodCardActive, pressed && styles.v35Pressed]}>
                       <View style={styles.v35MoodArt}>
                         <Text style={[styles.v35MoodSymbol, active && styles.v35MoodSymbolActive]}>{moodSymbol(item.id)}</Text>
                         <View style={[styles.v35MoodAccent, active && styles.v35MoodAccentActive]} />
@@ -5306,7 +5317,29 @@ export default function HomeScreen() {
               {selectedPassportEntry.photos &&
               selectedPassportEntry.photos.length > 0 ? (
                 <View style={styles.v35ReviewPhotoSection}>
-                  <Image source={{ uri: selectedPassportEntry.photos[Math.min(passportPhotoIndex, selectedPassportEntry.photos.length - 1)].uri }} style={styles.v35ReviewHeroPhoto} resizeMode="cover" />
+                  <Pressable
+                    accessibilityLabel="放大檢視照片"
+                    onPress={() =>
+                      setPassportZoomUri(
+                        selectedPassportEntry.photos![
+                          Math.min(
+                            passportPhotoIndex,
+                            selectedPassportEntry.photos!.length - 1
+                          )
+                        ].uri
+                      )
+                    }
+                    style={({ pressed }) => [pressed && styles.v38PhotoPressed]}
+                  >
+                    <Image
+                      source={{ uri: selectedPassportEntry.photos[Math.min(passportPhotoIndex, selectedPassportEntry.photos.length - 1)].uri }}
+                      style={styles.v35ReviewHeroPhoto}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.v38ZoomBadge}>
+                      <Text style={styles.v38ZoomBadgeText}>點一下放大</Text>
+                    </View>
+                  </Pressable>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.v35ReviewThumbStrip}>
                     {selectedPassportEntry.photos.map((photo, index) => (<Pressable key={photo.id} onPress={() => setPassportPhotoIndex(index)}><Image source={{ uri: photo.uri }} style={[styles.v35ReviewThumb, index === passportPhotoIndex && styles.v35ReviewThumbActive]} resizeMode="cover" /></Pressable>))}
                   </ScrollView>
@@ -5496,8 +5529,74 @@ export default function HomeScreen() {
                   </Text>
                 )}
               </View>
+              <View style={styles.v38ShareSection}>
+                <Text style={styles.v38SharePreviewLabel}>分享預覽</Text>
+                <View
+                  ref={shareTicketRef}
+                  collapsable={false}
+                  style={styles.v38ShareTicket}
+                >
+                  <View style={styles.v38ShareSignal} />
+                  <View style={styles.v38ShareTicketHead}>
+                    <View>
+                      <Text style={styles.v38ShareBrand}>DETOUR</Text>
+                      <Text style={styles.v38ShareMicro}>JOURNEY TICKET</Text>
+                    </View>
+                    <Text style={styles.v38ShareSerial}>
+                      {String(selectedPassportEntry.id).slice(-8).toUpperCase()}
+                    </Text>
+                  </View>
+
+                  <View style={styles.v38ShareDash} />
+
+                  <Text style={styles.v38ShareDestinationLabel}>DESTINATION</Text>
+                  <Text style={styles.v38ShareDestination} numberOfLines={2}>
+                    {selectedPassportEntry.sceneName ?? selectedPassportEntry.city ?? 'DETOUR'}
+                  </Text>
+
+                  {selectedPassportEntry.photos?.[0]?.uri ? (
+                    <Image
+                      source={{ uri: selectedPassportEntry.photos[0].uri }}
+                      style={styles.v38SharePhoto}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.v38ShareNoPhoto}>
+                      <Text style={styles.v38ShareNoPhotoMark}>● ───────── ⚑</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.v38ShareRouteRow}>
+                    <View style={styles.v38ShareRouteStart} />
+                    <View style={styles.v38ShareRouteLine} />
+                    <Text style={styles.v38ShareRouteFlag}>⚑</Text>
+                  </View>
+
+                  <View style={styles.v38ShareFacts}>
+                    <View style={styles.v38ShareFact}>
+                      <Text style={styles.v38ShareFactLabel}>TIME</Text>
+                      <Text style={styles.v38ShareFactValue}>{selectedPassportEntry.minutes} MIN</Text>
+                    </View>
+                    <View style={styles.v38ShareFact}>
+                      <Text style={styles.v38ShareFactLabel}>MOOD</Text>
+                      <Text style={styles.v38ShareFactValue}>{selectedPassportEntry.moodLabel}</Text>
+                    </View>
+                    <View style={styles.v38ShareFact}>
+                      <Text style={styles.v38ShareFactLabel}>DATE</Text>
+                      <Text style={styles.v38ShareFactValue}>{formatPassportDate(selectedPassportEntry.completedAt)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.v38ShareDash} />
+                  <View style={styles.v38ShareFoot}>
+                    <Text style={styles.v38ShareFootText}>KEEP THIS DETOUR</Text>
+                    <Text style={styles.v38ShareFootText}>{selectedPassportEntry.discoveries} QUESTS</Text>
+                  </View>
+                </View>
+              </View>
+
               <Pressable onPress={() => shareJourney(selectedPassportEntry)} style={({ pressed }) => [styles.v35ReviewShare, pressed && styles.v35TicketButtonPressed]}>
-                <Text style={styles.v35ReviewShareIcon}>↥</Text><Text style={styles.v35ReviewShareText}>分享這趟旅程</Text>
+                <Text style={styles.v35ReviewShareIcon}>↥</Text><Text style={styles.v35ReviewShareText}>分享車票</Text>
               </Pressable>
 
             </ScrollView>
@@ -5505,6 +5604,43 @@ export default function HomeScreen() {
         )}
 
       </Animated.View>
+
+      <Modal
+        visible={Boolean(passportZoomUri)}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setPassportZoomUri(null)}
+      >
+        <View style={styles.v38ZoomScreen}>
+          <StatusBar barStyle="light-content" />
+          <ScrollView
+            style={styles.v38ZoomScroll}
+            contentContainerStyle={styles.v38ZoomContent}
+            minimumZoomScale={1}
+            maximumZoomScale={4}
+            bouncesZoom
+            centerContent
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {passportZoomUri && (
+              <Image
+                source={{ uri: passportZoomUri }}
+                style={styles.v38ZoomImage}
+                resizeMode="contain"
+              />
+            )}
+          </ScrollView>
+          <Pressable
+            onPress={() => setPassportZoomUri(null)}
+            style={styles.v38ZoomClose}
+            hitSlop={12}
+          >
+            <Text style={styles.v38ZoomCloseText}>×</Text>
+          </Pressable>
+          <Text style={styles.v38ZoomHint}>雙指縮放</Text>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -10754,5 +10890,220 @@ const styles = StyleSheet.create({
   v35ReviewShare: { marginTop: 26, minHeight: 66, backgroundColor: SIGNAL, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14 },
   v35ReviewShareIcon: { fontSize: 28, color: BONE },
   v35ReviewShareText: { fontSize: 21, fontWeight: '900', color: BONE },
+
+
+  // v0.38 — five clearer moods; surprise gets the last full-width beat.
+  v38MoodWide: {
+    width: '100%',
+    minHeight: 126,
+  },
+
+  v38PhotoPressed: {
+    opacity: 0.82,
+  },
+  v38ZoomBadge: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: 'rgba(17,17,15,0.78)',
+  },
+  v38ZoomBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: BONE,
+  },
+  v38ZoomScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  v38ZoomScroll: {
+    flex: 1,
+  },
+  v38ZoomContent: {
+    flexGrow: 1,
+    minHeight: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  v38ZoomImage: {
+    width: '100%',
+    height: '100%',
+    minHeight: 620,
+  },
+  v38ZoomClose: {
+    position: 'absolute',
+    top: 58,
+    left: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(17,17,15,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  v38ZoomCloseText: {
+    fontSize: 30,
+    lineHeight: 32,
+    color: BONE,
+  },
+  v38ZoomHint: {
+    position: 'absolute',
+    bottom: 36,
+    alignSelf: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(241,239,231,0.78)',
+  },
+
+  v38ShareSection: {
+    marginTop: 34,
+  },
+  v38SharePreviewLabel: {
+    marginBottom: 12,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    color: MUTED,
+  },
+  v38ShareTicket: {
+    width: '100%',
+    minHeight: 570,
+    padding: 24,
+    backgroundColor: '#FAF7EE',
+    borderWidth: 1,
+    borderColor: '#CFC8B8',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  v38ShareSignal: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    height: 10,
+    backgroundColor: SIGNAL,
+  },
+  v38ShareTicketHead: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  v38ShareBrand: {
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: INK,
+  },
+  v38ShareMicro: {
+    marginTop: 3,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 2.2,
+    color: SIGNAL,
+  },
+  v38ShareSerial: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: MUTED,
+  },
+  v38ShareDash: {
+    marginVertical: 18,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#BEB7A8',
+  },
+  v38ShareDestinationLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: MUTED,
+  },
+  v38ShareDestination: {
+    marginTop: 8,
+    fontSize: 34,
+    lineHeight: 39,
+    fontWeight: '800',
+    letterSpacing: -1.4,
+    color: INK,
+  },
+  v38SharePhoto: {
+    marginTop: 18,
+    width: '100%',
+    height: 205,
+    borderRadius: 4,
+    backgroundColor: SOFT,
+  },
+  v38ShareNoPhoto: {
+    marginTop: 18,
+    height: 205,
+    backgroundColor: SOFT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  v38ShareNoPhotoMark: {
+    fontSize: 20,
+    color: SIGNAL,
+  },
+  v38ShareRouteRow: {
+    marginTop: 20,
+    height: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  v38ShareRouteStart: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: SIGNAL,
+  },
+  v38ShareRouteLine: {
+    flex: 1,
+    height: 3,
+    marginLeft: 5,
+    backgroundColor: SIGNAL,
+  },
+  v38ShareRouteFlag: {
+    marginLeft: 6,
+    fontSize: 25,
+    color: SIGNAL,
+  },
+  v38ShareFacts: {
+    marginTop: 18,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  v38ShareFact: {
+    flex: 1,
+  },
+  v38ShareFactLabel: {
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: MUTED,
+  },
+  v38ShareFactValue: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    color: INK,
+  },
+  v38ShareFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  v38ShareFootText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: MUTED,
+  },
 
 });

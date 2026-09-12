@@ -149,6 +149,18 @@ const VAGUE_PHRASES = [
   '留意周圍',
 ];
 
+const NON_CAMERA_ARRIVAL_PHRASES = [
+  '說出',
+  '描述',
+  '三個詞',
+  '寫下',
+  '猜',
+  '聽',
+  '聲音',
+  '呼吸',
+  '記住',
+];
+
 async function loadRecentAIMissions(): Promise<RecentMission[]> {
   try {
     const raw =
@@ -717,6 +729,22 @@ function missionPlanPassesQualityGate(
       (mission) =>
         mission.photo
     ).length > 1
+  ) {
+    return false;
+  }
+
+  if (!result.arrivalMission.photo) {
+    return false;
+  }
+
+  const arrivalCombined =
+    `${result.arrivalMission.title} ${result.arrivalMission.instruction} ${result.arrivalMission.completion}`
+      .toLowerCase();
+
+  if (
+    NON_CAMERA_ARRIVAL_PHRASES.some((phrase) =>
+      arrivalCombined.includes(phrase)
+    )
   ) {
     return false;
   }

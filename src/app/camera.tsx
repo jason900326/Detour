@@ -57,10 +57,11 @@ function getParam(value: string | string[] | undefined, fallback = '') {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function clampZoom(value: number) { return Math.min(1, Math.max(0, value)); }
+const MAX_DIGITAL_ZOOM = 0.48;
+function clampZoom(value: number) { return Math.min(MAX_DIGITAL_ZOOM, Math.max(0, value)); }
 function touchDistance(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return 0; const [a,b] = touches; return Math.hypot(a.pageX-b.pageX, a.pageY-b.pageY); }
-function lensLabel(lens: string) { if (lens.includes('UltraWide')) return '0.5×'; if (lens.includes('WideAngle')) return '1×'; if (lens.includes('Telephoto')) return '望遠'; return '鏡頭'; }
-function lensPriority(lens: string) { if (lens.includes('UltraWide')) return 0; if (lens.includes('WideAngle')) return 1; if (lens.includes('Telephoto')) return 2; return 9; }
+function lensLabel(lens: string) { const key = lens.toLowerCase(); if (key.includes('ultrawide')) return '0.5×'; if (key.includes('wideangle')) return '1×'; if (key.includes('telephoto')) return '望遠'; return '鏡頭'; }
+function lensPriority(lens: string) { const key = lens.toLowerCase(); if (key.includes('ultrawide')) return 0; if (key.includes('wideangle')) return 1; if (key.includes('telephoto')) return 2; return 9; }
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -170,20 +171,46 @@ export default function CameraScreen() {
   }
 
   async function refreshAvailableLenses() {
-    if (Platform.OS !== 'ios' || facing !== 'back' || !cameraRef.current) { setAvailableLenses([]); setSelectedLens(undefined); return; }
+    // Expo Camera's native default is the 1× wide camera. Keep that default
+    // unless the device explicitly reports a physical lens we can identify.
+    setZoom(0);
+
+    if (Platform.OS !== 'ios' || facing !== 'back' || !cameraRef.current) {
+      setAvailableLenses([]);
+      setSelectedLens(undefined);
+      return;
+    }
+
     try {
       const lenses = (await cameraRef.current.getAvailableLensesAsync()) as string[];
-      const physical = lenses.filter((lens) => lens.includes('UltraWide') || lens.includes('WideAngle') || lens.includes('Telephoto')).sort((a,b) => lensPriority(a)-lensPriority(b));
-      const normalized = Array.from(new Set(physical)); setAvailableLenses(normalized);
-      const wide = normalized.find((lens) => lens.includes('WideAngle'));
-      setSelectedLens((current) => current && normalized.includes(current) ? current : wide ?? normalized[0] ?? undefined);
-    } catch { setAvailableLenses([]); setSelectedLens(undefined); }
+      const physical = lenses
+        .filter((lens) => {
+          const key = lens.toLowerCase();
+          return key.includes('ultrawide') || key.includes('wideangle') || key.includes('telephoto');
+        })
+        .sort((a, b) => lensPriority(a) - lensPriority(b));
+      const normalized = Array.from(new Set(physical));
+      setAvailableLenses(normalized);
+
+      const mainWide = normalized.find((lens) => {
+        const key = lens.toLowerCase();
+        return key.includes('wideangle') && !key.includes('ultrawide');
+      });
+
+      // Never fall back to the first reported physical lens: some iPhones
+      // report tele/ultra-wide first. Undefined safely uses Expo's 1× default.
+      setSelectedLens(mainWide);
+    } catch {
+      setAvailableLenses([]);
+      setSelectedLens(undefined);
+      setZoom(0);
+    }
   }
   function cycleFlash() { setFlashMode((current) => current === 'off' ? 'auto' : current === 'auto' ? 'on' : 'off'); void Haptics.selectionAsync(); }
   function switchFacing() { setFacing((current) => current === 'back' ? 'front' : 'back'); setZoom(0); setSelectedLens(undefined); setAvailableLenses([]); setFlashMode('off'); void Haptics.selectionAsync(); }
   function chooseLens(lens: string) { setSelectedLens(lens); setZoom(0); void Haptics.selectionAsync(); }
   function handlePinchStart(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return; const distance = touchDistance(touches); if (distance <= 0) return; pinchStartDistanceRef.current = distance; pinchStartZoomRef.current = zoom; pinchActiveRef.current = true; }
-  function handlePinchMove(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2 || !pinchActiveRef.current || pinchStartDistanceRef.current <= 0) return; const distance = touchDistance(touches); if (distance <= 0) return; const ratio = distance / pinchStartDistanceRef.current; const delta = Math.log2(Math.max(0.35, ratio)) * 0.18; setZoom(clampZoom(pinchStartZoomRef.current + delta)); }
+  function handlePinchMove(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2 || !pinchActiveRef.current || pinchStartDistanceRef.current <= 0) return; const distance = touchDistance(touches); if (distance <= 0) return; const ratio = distance / pinchStartDistanceRef.current; const delta = Math.log2(Math.max(0.35, ratio)) * 0.24; setZoom(clampZoom(pinchStartZoomRef.current + delta)); }
   function handlePinchEnd() { pinchActiveRef.current = false; pinchStartDistanceRef.current = 0; }
 
   async function takePhoto() {
@@ -299,7 +326,15 @@ export default function CameraScreen() {
   }
 
   return (
-    <View style={styles.cameraScreen}>
+    <View
+      style={styles.cameraScreen}
+      onTouchStart={(event) => handlePinchStart(event.nativeEvent.touches)}
+      onTouchMove={(event) => handlePinchMove(event.nativeEvent.touches)}
+      onTouchEnd={(event) => {
+        if (event.nativeEvent.touches.length < 2) handlePinchEnd();
+      }}
+      onTouchCancel={handlePinchEnd}
+    >
       <StatusBar barStyle="light-content" />
 
       <CameraView
@@ -311,10 +346,9 @@ export default function CameraScreen() {
         selectedLens={Platform.OS === 'ios' && facing === 'back' ? selectedLens : undefined}
         autofocus="on"
         responsiveOrientationWhenOrientationLocked
-        onCameraReady={() => { setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
+        onCameraReady={() => { setZoom(0); setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
         onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
       />
-      <View style={styles.pinchSurface} onTouchStart={(event) => handlePinchStart(event.nativeEvent.touches)} onTouchMove={(event) => handlePinchMove(event.nativeEvent.touches)} onTouchEnd={(event) => { if (event.nativeEvent.touches.length < 2) handlePinchEnd(); }} onTouchCancel={handlePinchEnd} />
 
       <View style={styles.cameraOverlay} pointerEvents="box-none">
         <View style={styles.cameraTop}>
