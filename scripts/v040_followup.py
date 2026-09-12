@@ -25,6 +25,9 @@ text = text.replace(
 
 path.write_text(text)
 
+foundation = Path('PRODUCT_FOUNDATION.md')
+foundation.write_text(foundation.read_text().rstrip() + '\n')
+
 if 'activeCameraMission' in text:
     raise SystemExit('activeCameraMission still present')
 if "stage === 'camera'" in text:
