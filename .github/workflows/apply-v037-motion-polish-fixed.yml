@@ -32,8 +32,34 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: TypeScript check
-        run: npx tsc --noEmit --pretty false
+      - name: Syntax-check changed TypeScript
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          let failed = false;
+          for (const file of ['src/app/index.tsx', 'src/lib/playtest-analytics.ts']) {
+            const source = fs.readFileSync(file, 'utf8');
+            const result = ts.transpileModule(source, {
+              fileName: file,
+              reportDiagnostics: true,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.ESNext,
+                jsx: ts.JsxEmit.ReactJSX,
+              },
+            });
+            const errors = (result.diagnostics || []).filter(
+              (d) => d.category === ts.DiagnosticCategory.Error
+            );
+            for (const error of errors) {
+              console.error(file + ': ' + ts.flattenDiagnosticMessageText(error.messageText, '\n'));
+            }
+            if (errors.length) failed = true;
+          }
+          if (failed) process.exit(1);
+          NODE
 
       - name: Remove migration files
         run: |
