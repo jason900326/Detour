@@ -6,6 +6,7 @@ on:
       - chatgpt/v041-ux-flow
     paths:
       - 'scripts/v041_ux_flow.py'
+      - 'scripts/v041_patch_migration.py'
       - '.github/workflows/v041-ux-flow.yml'
 
 permissions:
@@ -28,6 +29,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Patch migration
+        run: python3 scripts/v041_patch_migration.py
 
       - name: Apply v0.41 migration
         run: python3 scripts/v041_ux_flow.py
@@ -81,6 +85,7 @@ jobs:
       - name: Remove one-time migration files
         run: |
           rm -f scripts/v041_ux_flow.py
+          rm -f scripts/v041_patch_migration.py
           rm -f .github/workflows/v041-ux-flow.yml
 
       - name: Commit convergence
