@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/v041_ux_flow.py'
       - 'scripts/v041_patch_migration.py'
+      - 'scripts/v041_patch_invariant.py'
       - '.github/workflows/v041-ux-flow.yml'
 
 permissions:
@@ -31,7 +32,9 @@ jobs:
         run: npm ci
 
       - name: Patch migration
-        run: python3 scripts/v041_patch_migration.py
+        run: |
+          python3 scripts/v041_patch_migration.py
+          python3 scripts/v041_patch_invariant.py
 
       - name: Apply v0.41 migration
         run: python3 scripts/v041_ux_flow.py
@@ -86,6 +89,7 @@ jobs:
         run: |
           rm -f scripts/v041_ux_flow.py
           rm -f scripts/v041_patch_migration.py
+          rm -f scripts/v041_patch_invariant.py
           rm -f .github/workflows/v041-ux-flow.yml
 
       - name: Commit convergence
