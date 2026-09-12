@@ -136,6 +136,15 @@ type SessionSceneFailure = {
   createdAt: string;
 };
 
+type DetourPrewarm = {
+  point: GeoPoint;
+  context: LightContext;
+  candidatesByMood: Partial<Record<MoodId, SceneCandidate[]>>;
+  rankedIdsByMood: Partial<Record<MoodId, string[]>>;
+  aiUsedByMood: Partial<Record<MoodId, boolean>>;
+  createdAt: number;
+};
+
 type CameraSource = 'side' | 'arrival' | 'free';
 
 type CameraRouteResult = {
@@ -546,6 +555,8 @@ export default function HomeScreen() {
   const sideMissionIndexRef = useRef(0);
   const traveledMetersRef = useRef(0);
   const stageRef = useRef<Stage>('boot');
+  const prewarmRef = useRef<DetourPrewarm | null>(null);
+  const prewarmInFlightRef = useRef(false);
 
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenY = useRef(new Animated.Value(0)).current;
@@ -763,6 +774,16 @@ export default function HomeScreen() {
   useEffect(() => {
     traveledMetersRef.current = traveledMeters;
   }, [traveledMeters]);
+
+  useEffect(() => {
+    if (stage !== 'time' && stage !== 'mood') return;
+
+    const timer = setTimeout(() => {
+      void prewarmDetour();
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [stage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -2125,7 +2146,10 @@ export default function HomeScreen() {
             route.coordinates
           );
 
-        if (offRouteDistance > 45) {
+        const gpsAccuracy = newLocation.coords.accuracy ?? 0;
+        const offRouteThreshold = Math.max(45, Math.min(70, gpsAccuracy + 30));
+
+        if (offRouteDistance > offRouteThreshold) {
           offRouteCountRef.current += 1;
         } else {
           offRouteCountRef.current = 0;
@@ -2149,361 +2173,401 @@ export default function HomeScreen() {
     );
   }
 
+  async function prewarmDetour() {
+    const cached = prewarmRef.current;
+
+    if (cached && Date.now() - cached.createdAt < 5 * 60 * 1000) {
+      return;
+    }
+
+    if (prewarmInFlightRef.current) return;
+    prewarmInFlightRef.current = true;
+
+    try {
+      let permission = await Location.getForegroundPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        permission = await Location.requestForegroundPermissionsAsync();
+      }
+
+      if (permission.status !== 'granted') return;
+
+      let location = await Location.getLastKnownPositionAsync({
+        maxAge: 3 * 60 * 1000,
+        requiredAccuracy: 120,
+      });
+
+      if (!location) {
+        location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
+
+      const point: GeoPoint = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      const context = getLightContext(point, new Date());
+      const visitedSceneIds = passport
+        .map((entry) => entry.sceneId)
+        .filter((value): value is string => typeof value === 'string');
+      const sceneFeedback = await loadSceneFeedback();
+      const moodIds = MOODS.map((item) => item.id);
+
+      const candidateEntries = await Promise.all(
+        moodIds.map(async (moodId) => {
+          try {
+            const candidates = await findSceneCandidates({
+              start: point,
+              moodId,
+              context,
+              minutes: 60,
+              excludeSceneIds: visitedSceneIds,
+              feedback: sceneFeedback,
+              distanceScale: paceDistanceScale,
+            });
+            return [moodId, candidates] as const;
+          } catch {
+            return [moodId, [] as SceneCandidate[]] as const;
+          }
+        })
+      );
+
+      const candidatesByMood: Partial<Record<MoodId, SceneCandidate[]>> = {};
+      const rankedIdsByMood: Partial<Record<MoodId, string[]>> = {};
+      const aiUsedByMood: Partial<Record<MoodId, boolean>> = {};
+
+      for (const [moodId, candidates] of candidateEntries) {
+        candidatesByMood[moodId] = candidates;
+        rankedIdsByMood[moodId] = candidates.map((candidate) => candidate.id);
+        aiUsedByMood[moodId] = false;
+      }
+
+      const createdAt = Date.now();
+      prewarmRef.current = {
+        point,
+        context,
+        candidatesByMood,
+        rankedIdsByMood,
+        aiUsedByMood,
+        createdAt,
+      };
+
+      // Taste ranking continues in the background. Ticket issuance never waits
+      // for these calls; local scoring remains a valid fallback.
+      if (isAIEngineConfigured()) {
+        void Promise.all(
+          candidateEntries.map(async ([moodId, candidates]) => {
+            if (candidates.length === 0) return;
+
+            try {
+              const ranking = await rankSceneCandidatesWithAI({
+                candidates,
+                moodId,
+                context,
+                minutes: selectedMinutes || 15,
+              });
+
+              const current = prewarmRef.current;
+              if (!current || current.createdAt !== createdAt) return;
+
+              current.rankedIdsByMood[moodId] = ranking.candidates.map(
+                (candidate) => candidate.id
+              );
+              current.aiUsedByMood[moodId] = ranking.usedAI;
+            } catch {
+              // Local ranking is already stored.
+            }
+          })
+        );
+      }
+    } catch {
+      // Prewarming is an optimization. A normal ticket build remains available.
+    } finally {
+      prewarmInFlightRef.current = false;
+    }
+  }
+
+  function applyCachedRanking(
+    candidates: SceneCandidate[],
+    rankedIds: string[] | undefined
+  ) {
+    if (!rankedIds?.length) return candidates;
+
+    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const ranked = rankedIds
+      .map((id) => byId.get(id))
+      .filter((candidate): candidate is SceneCandidate => Boolean(candidate));
+    const used = new Set(ranked.map((candidate) => candidate.id));
+
+    return [
+      ...ranked,
+      ...candidates.filter((candidate) => !used.has(candidate.id)),
+    ];
+  }
+
   async function prepareDetourTicket() {
     stopLocationWatcher();
+    const ticketStartedAt = Date.now();
 
-    const permission =
-      await Location.requestForegroundPermissionsAsync();
+    let permission = await Location.getForegroundPermissionsAsync();
 
     if (permission.status !== 'granted') {
-      const testSessionId =
-        playtestSessionIdRef.current;
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
+
+    if (permission.status !== 'granted') {
+      const testSessionId = playtestSessionIdRef.current;
 
       if (testSessionId) {
         setPlaytestSessions(
-          await updatePlaytestSession(
-            testSessionId,
-            {
-              status: 'ticket-failed',
-              failureReason:
-                'location-permission',
-            }
-          )
+          await updatePlaytestSession(testSessionId, {
+            status: 'ticket-failed',
+            failureReason: 'location-permission',
+          })
         );
       }
 
       transitionTo('mood');
-
       Alert.alert(
         '需要定位才能印出這張票',
-        'DETOUR 會在印車票時用你現在的位置選 Scene、確認步行路線，並判斷 DAY / TWILIGHT / NIGHT。'
+        'DETOUR 會用你現在的位置選 Scene、確認步行路線，並判斷白天或夜間情境。'
       );
-
       return;
     }
 
     try {
-      advanceTicketProgress(
-        0.12,
-        '正在取得現在位置…'
-      );
+      const finalMood: MoodId = selectedMood ?? 'wander';
+      const minutes = selectedMinutes || 15;
+      const cached =
+        prewarmRef.current &&
+        Date.now() - prewarmRef.current.createdAt < 5 * 60 * 1000
+          ? prewarmRef.current
+          : null;
 
-      const location =
-        await Location.getCurrentPositionAsync({
+      let startPoint: GeoPoint;
+      let context: LightContext;
+      let rankedCandidates: SceneCandidate[];
+      let rankingUsedAI = false;
+
+      const cachedCandidates = cached?.candidatesByMood[finalMood] ?? [];
+
+      if (cached && cachedCandidates.length > 0) {
+        startPoint = cached.point;
+        context = cached.context;
+        rankedCandidates = applyCachedRanking(
+          cachedCandidates,
+          cached.rankedIdsByMood[finalMood]
+        );
+        rankingUsedAI = cached.aiUsedByMood[finalMood] ?? false;
+
+        advanceTicketProgress(
+          0.58,
+          `附近已先準備好。正在確認 ${rankedCandidates.length} 個候選的步行路線…`
+        );
+      } else {
+        advanceTicketProgress(0.12, '正在取得現在位置…');
+
+        const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
 
-      const startPoint: GeoPoint = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
+        startPoint = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        };
+        context = getLightContext(startPoint, new Date());
 
-      advanceTicketProgress(
-        0.24,
-        '位置確認。正在找附近 Scene…'
-      );
+        advanceTicketProgress(0.24, '位置確認。正在找附近的小發現…');
 
-      const context = getLightContext(
-        startPoint,
-        new Date()
-      );
-
-      const finalMood: MoodId =
-        selectedMood ?? 'wander';
-
-      const minutes =
-        selectedMinutes || 15;
-
-      const visitedSceneIds = passport
-        .map((entry) => entry.sceneId)
-        .filter(
-          (value): value is string =>
-            typeof value === 'string'
-        );
-
-      const sceneFeedback =
-        await loadSceneFeedback();
-
-      const sceneCandidates =
-        await findSceneCandidates({
+        const visitedSceneIds = passport
+          .map((entry) => entry.sceneId)
+          .filter((value): value is string => typeof value === 'string');
+        const sceneFeedback = await loadSceneFeedback();
+        const sceneCandidates = await findSceneCandidates({
           start: startPoint,
           moodId: finalMood,
           context,
           minutes,
-          excludeSceneIds:
-            visitedSceneIds,
-          feedback:
-            sceneFeedback,
-          distanceScale:
-            paceDistanceScale,
+          excludeSceneIds: visitedSceneIds,
+          feedback: sceneFeedback,
+          distanceScale: paceDistanceScale,
         });
 
-      if (
-        sceneCandidates.length === 0
-      ) {
-        throw new Error(
-          finalMood === 'food'
-            ? '附近暫時找不到適合「吃點東西」的真實食物 Scene。'
-            : '附近暫時沒有找到適合現在情境的 Scene。'
-        );
-      }
-
-      if (isAIEngineConfigured()) {
-        advanceTicketProgress(
-          0.48,
-          `找到 ${sceneCandidates.length} 個候選。AI 正在挑終點…`
-        );
-      } else {
-        advanceTicketProgress(
-          0.48,
-          `找到 ${sceneCandidates.length} 個候選。正在確認步行路線…`
-        );
-      }
-
-      const aiRanking =
-        await rankSceneCandidatesWithAI({
-          candidates:
-            sceneCandidates,
-          moodId:
-            finalMood,
-          context,
-          minutes,
-        });
-
-      setLastAIResult(
-        aiRanking.usedAI
-          ? 'ai'
-          : 'fallback'
-      );
-
-      const routed =
-        await resolveRoutedScene({
-          start: startPoint,
-          candidates:
-            aiRanking.candidates,
-          minutes,
-          distanceScale:
-            paceDistanceScale,
-        });
-
-      advanceTicketProgress(
-        0.78,
-        `步行路線確認：${Math.round(
-          routed.route.distanceMeters
-        )}m。正在安排任務…`
-      );
-
-      const nextPlan =
-        buildJourneyPlan({
-          minutes,
-          moodId: finalMood,
-          context,
-          color: selectedColor,
-        });
-
-      const fallbackArrivalMission =
-        buildSceneArrivalMission({
-          scene: routed.scene,
-          moodId: finalMood,
-          context,
-        });
-
-      if (isAIEngineConfigured()) {
-        advanceTicketProgress(
-          0.82,
-          '路線確認。AI 正在安排這趟任務…'
-        );
-      }
-
-      const aiJourney =
-        await generateJourneyWithAI({
-          scene: routed.scene,
-          moodId: finalMood,
-          context,
-          minutes,
-          sideMissionCount:
-            nextPlan.sideMissions.length,
-          missionMilestones:
-            nextPlan.profile.milestones,
-          routeDistanceMeters:
-            routed.route.distanceMeters,
-          routeDurationSeconds:
-            routed.route.durationSeconds,
-        });
-
-      if (aiJourney) {
-        nextPlan.sideMissions =
-          aiJourney.sideMissions;
-
-        nextPlan.arrivalMission =
-          aiJourney.arrivalMission;
-
-        setLastAIResult('ai');
-      } else {
-        nextPlan.arrivalMission =
-          fallbackArrivalMission;
+        if (sceneCandidates.length === 0) {
+          throw new Error(
+            finalMood === 'food'
+              ? '附近暫時找不到適合「吃點東西」的真實食物 Scene。'
+              : '附近暫時沒有找到適合現在情境的 Scene。'
+          );
+        }
 
         if (isAIEngineConfigured()) {
-          setLastAIResult(
-            'fallback'
+          advanceTicketProgress(
+            0.46,
+            `找到 ${sceneCandidates.length} 個候選。正在做最後挑選…`
           );
+
+          const aiRanking = await rankSceneCandidatesWithAI({
+            candidates: sceneCandidates,
+            moodId: finalMood,
+            context,
+            minutes,
+          });
+          rankedCandidates = aiRanking.candidates;
+          rankingUsedAI = aiRanking.usedAI;
+        } else {
+          rankedCandidates = sceneCandidates;
         }
       }
 
-      const nextNavigationRoute =
-        buildNavigationRouteFromPolyline({
-          coordinates:
-            routed.route.coordinates,
-          totalDistanceMeters:
-            routed.route.distanceMeters,
-          durationSeconds:
-            routed.route.durationSeconds,
-          sideMissionCount:
-            nextPlan.sideMissions.length,
-        });
+      if (rankedCandidates.length === 0) {
+        throw new Error('附近暫時沒有可用的 Scene。');
+      }
+
+      setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
+
+      const routed = await resolveRoutedScene({
+        start: startPoint,
+        candidates: rankedCandidates,
+        minutes,
+        distanceScale: paceDistanceScale,
+      });
 
       advanceTicketProgress(
-        0.92,
-        '主線與任務已鎖定。正在完成車票…'
+        0.82,
+        `步行主線 ${Math.round(routed.route.distanceMeters)}m 已確認。正在出票…`
       );
 
-      if (
-        nextNavigationRoute.beats.length <
-        2
-      ) {
+      const nextPlan = buildJourneyPlan({
+        minutes,
+        moodId: finalMood,
+        context,
+        color: selectedColor,
+      });
+      nextPlan.arrivalMission = buildSceneArrivalMission({
+        scene: routed.scene,
+        moodId: finalMood,
+        context,
+      });
+
+      // Side Quests are intentionally deterministic during field testing.
+      // They must be instantly available and easy to compare across runs.
+      const nextNavigationRoute = buildNavigationRouteFromPolyline({
+        coordinates: routed.route.coordinates,
+        totalDistanceMeters: routed.route.distanceMeters,
+        durationSeconds: routed.route.durationSeconds,
+        sideMissionCount: nextPlan.sideMissions.length,
+      });
+
+      if (nextNavigationRoute.beats.length < 2) {
         throw new Error(
           '這個 Scene 太近或路線資料不足，暫時無法組成一趟 DETOUR。'
         );
       }
 
-      // Everything below is what the ticket promises.
-      // By the time READY appears, the route really is locked.
-      setLatitude(
-        startPoint.latitude
-      );
-      setLongitude(
-        startPoint.longitude
-      );
-      setDetourStart(
-        startPoint
-      );
-
-      setSelectedScene(
-        routed.scene
-      );
-      selectedSceneRef.current =
-        routed.scene;
-
-      setWalkingRoute(
-        routed.route
-      );
-
+      setLatitude(startPoint.latitude);
+      setLongitude(startPoint.longitude);
+      setDetourStart(startPoint);
+      setSelectedScene(routed.scene);
+      selectedSceneRef.current = routed.scene;
+      setWalkingRoute(routed.route);
       setPlan(nextPlan);
-      planRef.current =
-        nextPlan;
-
-      setNavigationRoute(
-        nextNavigationRoute
-      );
-      navigationRouteRef.current =
-        nextNavigationRoute;
-
+      planRef.current = nextPlan;
+      setNavigationRoute(nextNavigationRoute);
+      navigationRouteRef.current = nextNavigationRoute;
       setNavigationBeatIndex(0);
       navigationBeatIndexRef.current = 0;
 
       const firstBeatDistance =
-        nextNavigationRoute.beats[0]
-          ?.segmentDistanceMeters ?? 0;
-
-      setBeatRemainingMeters(
-        firstBeatDistance
-      );
-      beatRemainingMetersRef.current =
-        firstBeatDistance;
-
+        nextNavigationRoute.beats[0]?.segmentDistanceMeters ?? 0;
+      setBeatRemainingMeters(firstBeatDistance);
+      beatRemainingMetersRef.current = firstBeatDistance;
       setShowNextBeatMap(false);
-
       setSideMissionIndex(0);
       sideMissionIndexRef.current = 0;
-
       setTraveledMeters(0);
       traveledMetersRef.current = 0;
-
       setLightContext(context);
-
       setPhotos([]);
       setActiveTrace([]);
-
       setRerouteCount(0);
       rerouteCountRef.current = 0;
-
       setRerouteFailed(false);
       offRouteCountRef.current = 0;
-      rerouteInFlightRef.current =
-        false;
-
+      rerouteInFlightRef.current = false;
       setSceneFailures([]);
       sceneFailuresRef.current = [];
+      lastTracePointRef.current = null;
 
-      lastTracePointRef.current =
-        null;
+      advanceTicketProgress(1, '車票完成');
 
-      advanceTicketProgress(
-        1,
-        'ROUTE LOCKED'
-      );
-
-      const testSessionId =
-        playtestSessionIdRef.current;
-
+      const testSessionId = playtestSessionIdRef.current;
       if (testSessionId) {
-        setPlaytestSessions(
-          await updatePlaytestSession(
-            testSessionId,
-            {
-              status: 'ready',
-              lightContext: context,
-              sceneKind:
-                routed.scene.kind,
-              plannedDistanceMeters:
-                routed.route.distanceMeters,
-              plannedDurationSeconds:
-                routed.route.durationSeconds,
-              sideMissionsTotal:
-                nextPlan.sideMissions.length,
-            }
-          )
-        );
+        void updatePlaytestSession(testSessionId, {
+          status: 'ready',
+          lightContext: context,
+          sceneKind: routed.scene.kind,
+          plannedDistanceMeters: routed.route.distanceMeters,
+          plannedDurationSeconds: routed.route.durationSeconds,
+          sideMissionsTotal: nextPlan.sideMissions.length,
+        }).then(setPlaytestSessions);
       }
 
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success
       );
 
+      console.log(
+        `[DETOUR TIMING] ticket ready in ${Date.now() - ticketStartedAt}ms`
+      );
       transitionTo('ready');
+
+      // Arrival copy may get an AI polish later, but never blocks the ticket.
+      if (isAIEngineConfigured()) {
+        void generateJourneyWithAI({
+          scene: routed.scene,
+          moodId: finalMood,
+          context,
+          minutes,
+          sideMissionCount: 0,
+          missionMilestones: [],
+          routeDistanceMeters: routed.route.distanceMeters,
+          routeDurationSeconds: routed.route.durationSeconds,
+        })
+          .then((aiJourney) => {
+            if (!aiJourney?.arrivalMission) return;
+            if (selectedSceneRef.current?.id !== routed.scene.id) return;
+
+            setPlan((current) => {
+              if (!current) return current;
+              const updated = {
+                ...current,
+                arrivalMission: aiJourney.arrivalMission,
+              };
+              planRef.current = updated;
+              return updated;
+            });
+            setLastAIResult('ai');
+          })
+          .catch(() => undefined);
+      }
     } catch (error) {
       stopLocationWatcher();
-
       transitionTo('mood');
 
       const message =
         error instanceof Error
           ? error.message
           : '請確認網路和定位服務後再試一次。';
-
-      const testSessionId =
-        playtestSessionIdRef.current;
+      const testSessionId = playtestSessionIdRef.current;
 
       if (testSessionId) {
         setPlaytestSessions(
-          await updatePlaytestSession(
-            testSessionId,
-            {
-              status: 'ticket-failed',
-              failureReason:
-                message.slice(0, 120),
-            }
-          )
+          await updatePlaytestSession(testSessionId, {
+            status: 'ticket-failed',
+            failureReason: message.slice(0, 120),
+          })
         );
       }
 
@@ -3871,9 +3935,9 @@ export default function HomeScreen() {
                   LOCATION
                 </Text>
                 <Text style={styles.settingsPrivacyBody}>
-                  DETOUR 不會在開 App 時先要求定位。
-                  只有你按下「開始繞路」後，才會用目前位置找 Scene、
-                  算步行路線與推進導航。
+                  DETOUR 會在首頁先用目前位置準備附近候選，
+                  讓你選完時間和心情後不用從零開始等。
+                  旅程中的 GPS 軌跡仍只留在手機。
                 </Text>
               </View>
             </ScrollView>
@@ -10367,8 +10431,8 @@ const styles = StyleSheet.create({
   v35MoodTitle: { marginTop: 55, fontSize: 42, lineHeight: 48, fontWeight: '900', letterSpacing: -2.2, color: INK, textAlign: 'center' },
   v35UnderlineMood: { alignSelf: 'flex-end', marginRight: 43, marginTop: 2, width: 114, height: 6, borderRadius: 4, backgroundColor: SIGNAL, transform: [{ rotate: '-4deg' }] },
   v35MoodScroll: { paddingTop: 34, paddingBottom: 18 },
-  v35MoodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  v35MoodCard: { width: '48.6%', minHeight: 148, borderWidth: 1, borderColor: '#D6D0C5', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  v35MoodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
+  v35MoodCard: { width: '48%', minHeight: 148, borderWidth: 1, borderColor: '#D6D0C5', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   v35MoodCardActive: { borderWidth: 2, borderColor: SIGNAL, backgroundColor: '#F8EFE6' },
   v35MoodArt: { width: 90, height: 72, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   v35MoodSymbol: { fontSize: 54, lineHeight: 60, fontWeight: '900', color: INK },

@@ -14,6 +14,7 @@ export type SceneKind =
   | 'mural'
   | 'street-art'
   | 'artwork'
+  | 'statue'
   | 'historic'
   | 'market'
   | 'food'
@@ -65,6 +66,10 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
+
+const OVERPASS_CACHE_TTL = 10 * 60 * 1000;
+const overpassCache = new Map<string, { expiresAt: number; elements: OverpassElement[] }>();
+const overpassInFlight = new Map<string, Promise<OverpassElement[]>>();
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
@@ -128,6 +133,10 @@ function classifyScene(
 
   if (tags.tourism === 'artwork') {
     const artworkType = tags.artwork_type ?? '';
+
+    if (['statue', 'sculpture', 'bust'].includes(artworkType)) {
+      return { kind: 'statue', label: '雕像' };
+    }
 
     if (artworkType === 'mural') {
       return { kind: 'mural', label: '壁畫' };
@@ -209,6 +218,13 @@ function classifyScene(
   }
 
   if (
+    tags.historic === 'memorial' &&
+    ['statue', 'sculpture', 'bust'].includes(tags.memorial ?? '')
+  ) {
+    return { kind: 'statue', label: '紀念雕像' };
+  }
+
+  if (
     tags.historic &&
     !['memorial', 'wayside_shrine'].includes(tags.historic)
   ) {
@@ -244,6 +260,7 @@ function qualityScoreForScene(
     mural: 42,
     'street-art': 42,
     artwork: 32,
+    statue: 48,
     'public-bookcase': 30,
     market: 24,
     food: 22,
@@ -310,7 +327,7 @@ function destinationTier(
 
   // Visual objects can stand on their own even without a formal name.
   if (
-    ['mural', 'street-art', 'artwork'].includes(kind)
+    ['mural', 'street-art', 'artwork', 'statue'].includes(kind)
   ) {
     return qualityScore >= 30
       ? 'primary'
@@ -366,6 +383,8 @@ function generatedName(
       return '一件街頭作品';
     case 'artwork':
       return '一件公共藝術';
+    case 'statue':
+      return '一座沒有名字的雕像';
     case 'historic':
       return '一個舊城市痕跡';
     case 'market':
@@ -406,6 +425,7 @@ function contextAllows(
     if (
       [
         'historic',
+        'statue',
         'viewpoint',
         'steps',
         'footbridge',
@@ -593,6 +613,7 @@ function baseScore(kind: SceneKind, moodId: MoodId) {
     mural: 132,
     'street-art': 130,
     artwork: 118,
+    statue: 138,
     historic: 92,
     market: 102,
     food: 96,
@@ -633,6 +654,7 @@ function baseScore(kind: SceneKind, moodId: MoodId) {
         'mural',
         'street-art',
         'artwork',
+        'statue',
         'steps',
         'footbridge',
         'fountain',
@@ -650,30 +672,27 @@ function baseScore(kind: SceneKind, moodId: MoodId) {
   return score;
 }
 
+function journeyTargetDistance(minutes: number) {
+  const safeMinutes = Math.max(5, Math.min(60, Math.round(minutes / 5) * 5));
+
+  if (safeMinutes <= 5) return 220;
+  if (safeMinutes <= 10) return 420;
+  if (safeMinutes <= 15) return 680;
+  if (safeMinutes <= 30) return Math.round(680 + (safeMinutes - 15) * 28);
+  if (safeMinutes <= 45) return Math.round(1100 + (safeMinutes - 30) * 22);
+  return Math.round(1430 + (safeMinutes - 45) * 18);
+}
+
 function distanceProfile(
   minutes: number,
   distanceScale = 1
 ) {
-  let profile: {
-    ideal: number;
-    max: number;
-  };
+  const routeTarget = journeyTargetDistance(minutes) * distanceScale;
 
-  if (minutes <= 15) {
-    profile = { ideal: 220, max: 390 };
-  } else if (minutes <= 30) {
-    profile = { ideal: 280, max: 470 };
-  } else if (minutes <= 60) {
-    profile = { ideal: 340, max: 550 };
-  } else {
-    profile = { ideal: 400, max: 630 };
-  }
-
+  // OSM candidate distance is straight-line; walking route is normally longer.
   return {
-    ideal:
-      profile.ideal * distanceScale,
-    max:
-      profile.max * distanceScale,
+    ideal: routeTarget * 0.74,
+    max: routeTarget * 1.15,
   };
 }
 
@@ -707,8 +726,8 @@ function buildQuery(
   // artwork/parks/steps that will be rejected by the food gate anyway.
   const radius =
     moodId === 'food'
-      ? 700
-      : 900;
+      ? 1400
+      : 1800;
 
   const around =
     `(around:${radius},${start.latitude},${start.longitude})`;
@@ -738,6 +757,7 @@ out center 100;
   nwr${around}["amenity"="arts_centre"]["name"];
   nwr${around}["leisure"~"park|garden"]["name"];
   nwr${around}["historic"]["name"];
+  nwr${around}["historic"="memorial"]["memorial"~"statue|sculpture|bust"];
   nwr${around}["natural"="tree"]["heritage"];
   way${around}["highway"="steps"];
   way${around}["highway"~"footway|pedestrian|path"]["bridge"="yes"];
@@ -830,6 +850,38 @@ async function fetchOverpass(query: string) {
   );
 }
 
+
+async function fetchOverpassCached(query: string) {
+  const cached = overpassCache.get(query);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.elements;
+  }
+
+  const inFlight = overpassInFlight.get(query);
+  if (inFlight) return inFlight;
+
+  const request = fetchOverpass(query)
+    .then((elements) => {
+      overpassCache.set(query, {
+        expiresAt: Date.now() + OVERPASS_CACHE_TTL,
+        elements,
+      });
+      return elements;
+    })
+    .finally(() => {
+      overpassInFlight.delete(query);
+    });
+
+  overpassInFlight.set(query, request);
+  return request;
+}
+
+export function clearSceneDiscoveryCache() {
+  overpassCache.clear();
+  overpassInFlight.clear();
+}
+
 export async function findSceneCandidates(args: {
   start: GeoPoint;
   moodId: MoodId;
@@ -840,7 +892,7 @@ export async function findSceneCandidates(args: {
   feedback?: SceneFeedbackRecord[];
   distanceScale?: number;
 }) {
-  const elements = await fetchOverpass(
+  const elements = await fetchOverpassCached(
     buildQuery(args.start, args.moodId)
   );
 
@@ -1068,13 +1120,13 @@ export function buildSceneArrivalMission(args: {
   if (moodId === 'weird') {
     return {
       id: `scene-${scene.id}-weird`,
-      code: 'ARRIVAL · ODD DETAIL',
-      title: '找它最不像自己的地方。',
+      code: 'ARRIVAL · COLOR HIT',
+      title: '找最搶眼的一個顏色。',
       instruction:
-        '只看公共可見範圍。找一個和這個 Scene 格格不入的細節，先猜它為什麼在這裡。',
-      completion: '猜出一個理由，就完成。照片可拍可不拍。',
-      photo: false,
-      portable: true,
+        '只看公共可見範圍。不要分析意義，直接選第一眼最搶眼的顏色。',
+      completion: '把那個顏色和 Scene 的一部分拍進同一張照片。',
+      photo: true,
+      portable: false,
     };
   }
 
@@ -1086,6 +1138,19 @@ export function buildSceneArrivalMission(args: {
       instruction:
         '找作品裡最小但最搶眼的一塊顏色，讓它和旁邊真實街景同時留在畫面裡。',
       completion: '拍一張只有這兩個重點的照片。',
+      photo: true,
+      portable: false,
+    };
+  }
+
+  if (scene.kind === 'statue') {
+    return {
+      id: `scene-${scene.id}-statue`,
+      code: 'ARRIVAL · STATUE DETAIL',
+      title: '只拍一個明確細節。',
+      instruction:
+        '找手上拿的東西、衣服紋路、底座文字或姿勢裡最清楚的一個細節。不要拍整尊。',
+      completion: '把那個細節拍下來。',
       photo: true,
       portable: false,
     };

@@ -37,26 +37,18 @@ async function throttleRouter() {
   const elapsed = Date.now() - lastRoutingRequestAt;
   const waitFor = Math.max(0, 1100 - elapsed);
 
-  if (waitFor > 0) {
-    await wait(waitFor);
-  }
-
+  if (waitFor > 0) await wait(waitFor);
   lastRoutingRequestAt = Date.now();
 }
 
-async function fetchWithTimeout(
-  url: string,
-  timeoutMs: number
-) {
+async function fetchWithTimeout(url: string, timeoutMs: number) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, {
       signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
     });
   } finally {
     clearTimeout(timer);
@@ -77,43 +69,46 @@ export async function fetchWalkingRoute(
   const url =
     `${FOOT_ROUTER}/${coordinates}` +
     '?overview=full&geometries=geojson&steps=true&alternatives=false';
-
   const response = await fetchWithTimeout(url, 12000);
 
-  if (!response.ok) {
-    throw new Error(`Walking router ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Walking router ${response.status}`);
 
   const data = (await response.json()) as OsrmResponse;
   const route = data.routes?.[0];
 
-  if (
-    data.code !== 'Ok' ||
-    !route ||
-    !route.geometry?.coordinates?.length
-  ) {
+  if (data.code !== 'Ok' || !route || !route.geometry?.coordinates?.length) {
     throw new Error('No walking route');
   }
 
-  const points = route.geometry.coordinates.map(
-    ([longitude, latitude]) => ({
+  return {
+    coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({
       latitude,
       longitude,
-    })
-  );
-
-  return {
-    coordinates: points,
+    })),
     distanceMeters: route.distance,
     durationSeconds: route.duration,
   };
 }
 
-function routeDistanceLimit(minutes: number) {
-  if (minutes <= 15) return 430;
-  if (minutes <= 30) return 540;
-  if (minutes <= 60) return 670;
-  return 790;
+function targetDistance(minutes: number) {
+  const safeMinutes = Math.max(5, Math.min(60, Math.round(minutes / 5) * 5));
+
+  if (safeMinutes <= 5) return 220;
+  if (safeMinutes <= 10) return 420;
+  if (safeMinutes <= 15) return 680;
+  if (safeMinutes <= 30) return Math.round(680 + (safeMinutes - 15) * 28);
+  if (safeMinutes <= 45) return Math.round(1100 + (safeMinutes - 30) * 22);
+  return Math.round(1430 + (safeMinutes - 45) * 18);
+}
+
+function routeDistanceProfile(minutes: number, distanceScale = 1) {
+  const target = targetDistance(minutes) * distanceScale;
+
+  return {
+    target,
+    min: Math.max(120, target * 0.68),
+    max: target * 1.28,
+  };
 }
 
 export async function resolveRoutedScene(args: {
@@ -123,53 +118,52 @@ export async function resolveRoutedScene(args: {
   maxDistanceMeters?: number;
   distanceScale?: number;
 }): Promise<RoutedScene> {
-  const maxDistance =
-    args.maxDistanceMeters ??
-    routeDistanceLimit(args.minutes) *
-      (args.distanceScale ?? 1);
-  // A strict top-5 made sparse neighborhoods fail too easily when one
-  // candidate snapped badly to the pedestrian network. Try a few more
-  // candidates while keeping requests sequential and throttled.
-  const shortlist = args.candidates.slice(0, 8);
+  const profile = routeDistanceProfile(
+    args.minutes,
+    args.distanceScale ?? 1
+  );
+  const maxDistance = args.maxDistanceMeters ?? profile.max;
+  const straightTarget = profile.target * 0.74;
 
-  let shortestFallback: RoutedScene | null = null;
+  // AI/editorial rank chooses taste. For the final route check, distance fit
+  // gets priority inside that shortlist so a 20-minute request cannot end in
+  // a 2-minute walk simply because that candidate was ranked first.
+  const shortlist = args.candidates
+    .slice(0, 14)
+    .sort(
+      (a, b) =>
+        Math.abs(a.straightDistanceMeters - straightTarget) -
+        Math.abs(b.straightDistanceMeters - straightTarget)
+    )
+    .slice(0, 8);
+
+  let bestFallback: RoutedScene | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
 
   for (const scene of shortlist) {
     try {
-      const route = await fetchWalkingRoute(
-        args.start,
-        scene.point
-      );
+      const route = await fetchWalkingRoute(args.start, scene.point);
+      const delta = Math.abs(route.distanceMeters - profile.target);
 
-      if (
-        !shortestFallback ||
-        route.distanceMeters <
-          shortestFallback.route.distanceMeters
-      ) {
-        shortestFallback = { scene, route };
+      if (route.distanceMeters <= maxDistance * 1.08 && delta < bestDelta) {
+        bestFallback = { scene, route };
+        bestDelta = delta;
       }
 
       if (
-        route.distanceMeters >= 45 &&
+        route.distanceMeters >= profile.min &&
         route.distanceMeters <= maxDistance
       ) {
         return { scene, route };
       }
     } catch {
-      // Try the next scene. Public prototype router can occasionally miss.
+      // Try the next Scene. Public routing can occasionally miss a snap.
     }
   }
 
-  if (
-    shortestFallback &&
-    shortestFallback.route.distanceMeters <= maxDistance * 1.08
-  ) {
-    return shortestFallback;
-  }
+  if (bestFallback) return bestFallback;
 
   throw new Error(
-    `附近有 Scene，但目前找不到 ${Math.round(
-      maxDistance
-    )} 公尺內適合步行抵達的主線。`
+    `附近有 Scene，但目前找不到符合 ${args.minutes} 分鐘節奏的步行主線。`
   );
 }
