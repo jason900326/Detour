@@ -161,7 +161,7 @@ function classifyScene(
     ['restaurant', 'fast_food', 'cafe', 'food_court', 'ice_cream'].includes(
       tags.amenity ?? ''
     ) ||
-    ['bakery', 'confectionery', 'deli', 'pastry'].includes(
+    ['bakery', 'confectionery', 'deli', 'pastry', 'beverages', 'coffee', 'tea'].includes(
       tags.shop ?? ''
     )
   ) {
@@ -673,14 +673,15 @@ function baseScore(kind: SceneKind, moodId: MoodId) {
 }
 
 function journeyTargetDistance(minutes: number) {
-  const safeMinutes = Math.max(5, Math.min(60, Math.round(minutes / 5) * 5));
+  const safeMinutes = Math.max(5, Math.min(90, Math.round(minutes / 5) * 5));
 
   if (safeMinutes <= 5) return 220;
   if (safeMinutes <= 10) return 420;
   if (safeMinutes <= 15) return 680;
   if (safeMinutes <= 30) return Math.round(680 + (safeMinutes - 15) * 28);
   if (safeMinutes <= 45) return Math.round(1100 + (safeMinutes - 30) * 22);
-  return Math.round(1430 + (safeMinutes - 45) * 18);
+  if (safeMinutes <= 60) return Math.round(1430 + (safeMinutes - 45) * 18);
+  return Math.round(1700 + (safeMinutes - 60) * (400 / 30));
 }
 
 function distanceProfile(
@@ -726,7 +727,7 @@ function buildQuery(
   // artwork/parks/steps that will be rejected by the food gate anyway.
   const radius =
     moodId === 'food'
-      ? 1400
+      ? 1700
       : 1800;
 
   const around =
@@ -738,7 +739,7 @@ function buildQuery(
 (
   nwr${around}["amenity"="marketplace"]["name"];
   nwr${around}["amenity"~"restaurant|fast_food|cafe|food_court|ice_cream"]["name"];
-  nwr${around}["shop"~"bakery|confectionery|deli|pastry"]["name"];
+  nwr${around}["shop"~"bakery|confectionery|deli|pastry|beverages|coffee|tea"]["name"];
 );
 out center 100;
 `;

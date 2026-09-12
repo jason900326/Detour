@@ -218,20 +218,17 @@ const LINE = '#C9C5B8';
 const SIGNAL = '#FF5A36';
 const SOFT = '#E5E1D6';
 
-const TIME_MIN = 5;
-const TIME_MAX = 60;
-const TIME_STEP = 5;
-const TIME_STEPS = Array.from(
-  { length: (TIME_MAX - TIME_MIN) / TIME_STEP + 1 },
-  (_, index) => TIME_MIN + index * TIME_STEP
-);
+const TIME_STEPS = [15, 30, 45, 60, 90] as const;
+const TIME_MIN = TIME_STEPS[0];
+const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
 
 const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
-  { id: 'wander', label: '隨便走走', code: 'WANDER' },
-  { id: 'food', label: '吃點東西', code: 'FOOD' },
-  { id: 'quiet', label: '想安靜一下', code: 'QUIET' },
-  { id: 'weird', label: '奇怪一點', code: 'WEIRD' },
-  { id: 'surprise', label: '隨機帶我走', code: 'SURPRISE' },
+  { id: 'wander', label: '隨便走', code: 'WANDER' },
+  { id: 'food', label: '吃東西', code: 'FOOD' },
+  { id: 'quiet', label: '想安靜', code: 'QUIET' },
+  { id: 'weird', label: '這是哪', code: 'WEIRD' },
+  { id: 'color', label: '色色的', code: 'COLOR' },
+  { id: 'surprise', label: '命運', code: 'SURPRISE' },
 ];
 
 const FREE_CAMERA_MISSION: Mission = {
@@ -265,6 +262,7 @@ function moodSymbol(moodId: MoodId) {
   if (moodId === 'food') return '♨';
   if (moodId === 'quiet') return '☾';
   if (moodId === 'weird') return '?';
+  if (moodId === 'color') return '◉';
   return '✦';
 }
 
@@ -285,11 +283,47 @@ function moodHint(moodId: MoodId) {
     return '去找平常會錯過的小東西。';
   }
 
-  if (moodId === 'photo') {
-    return '一路保留值得拍下來的畫面。';
+  if (moodId === 'color') {
+    return '整趟只追同一個顏色。';
   }
 
   return '今天的方向完全交給 DETOUR。';
+}
+
+function isDrinkLikeFoodCandidate(scene: SceneCandidate) {
+  const amenity = scene.tags.amenity ?? '';
+  const shop = scene.tags.shop ?? '';
+  const cuisine = (scene.tags.cuisine ?? '').toLowerCase();
+
+  return (
+    amenity === 'cafe' ||
+    ['beverages', 'coffee', 'tea'].includes(shop) ||
+    /(bubble_tea|tea|coffee|juice|smoothie)/.test(cuisine)
+  );
+}
+
+function isMealFoodCandidate(scene: SceneCandidate) {
+  return ['restaurant', 'fast_food', 'food_court'].includes(
+    scene.tags.amenity ?? ''
+  );
+}
+
+function applyFoodDestinationWeight(candidates: SceneCandidate[]) {
+  // Product rule: when both groups are healthy enough, Food mode chooses a
+  // drink-like destination about 80% of the time and a meal about 20%.
+  const preferDrink = Math.random() < 0.8;
+  const preferred = candidates.filter((scene) =>
+    preferDrink ? isDrinkLikeFoodCandidate(scene) : isMealFoodCandidate(scene)
+  );
+
+  // Keep route quality/safety first. If there are too few candidates in the
+  // rolled category, fall back to the full qualified pool.
+  if (preferred.length >= 3) return preferred;
+
+  return [
+    ...preferred,
+    ...candidates.filter((scene) => !preferred.includes(scene)),
+  ];
 }
 
 function ticketSerial(
@@ -582,13 +616,33 @@ export default function HomeScreen() {
   const rollCapacity = getFilmRollCapacity(selectedMinutes || 15);
   const previewProfile = getJourneyProfile(selectedMinutes || 15);
 
+  const timeIndexFromRatio = (ratio: number) =>
+    Math.max(
+      0,
+      Math.min(
+        TIME_STEPS.length - 1,
+        Math.round(Math.max(0, Math.min(1, ratio)) * (TIME_STEPS.length - 1))
+      )
+    );
+
   const snapMinutesFromRatio = (ratio: number) =>
-    TIME_MIN +
-    Math.round(
-      (Math.max(0, Math.min(1, ratio)) * (TIME_MAX - TIME_MIN)) /
-        TIME_STEP
-    ) *
-      TIME_STEP;
+    TIME_STEPS[timeIndexFromRatio(ratio)];
+
+  const ratioForMinutes = (minutes: number) => {
+    const exactIndex = TIME_STEPS.findIndex((value) => value === minutes);
+    const nearestIndex =
+      exactIndex >= 0
+        ? exactIndex
+        : TIME_STEPS.reduce(
+            (best, value, index) =>
+              Math.abs(value - minutes) < Math.abs(TIME_STEPS[best] - minutes)
+                ? index
+                : best,
+            0
+          );
+
+    return nearestIndex / (TIME_STEPS.length - 1);
+  };
 
   const pulseMinute = () => {
     minutePulse.stopAnimation();
@@ -616,8 +670,7 @@ export default function HomeScreen() {
 
   const finishSliderRatio = (ratio: number) => {
     const nextMinutes = snapMinutesFromRatio(ratio);
-    const snappedRatio =
-      (nextMinutes - TIME_MIN) / (TIME_MAX - TIME_MIN);
+    const snappedRatio = ratioForMinutes(nextMinutes);
 
     timeSliderDisplayRef.current = nextMinutes;
     setSliderDisplayMinutes(nextMinutes);
@@ -842,8 +895,7 @@ export default function HomeScreen() {
       TIME_MIN,
       Math.min(TIME_MAX, selectedMinutes || 15)
     );
-    const nextRatio =
-      (nextMinutes - TIME_MIN) / (TIME_MAX - TIME_MIN);
+    const nextRatio = ratioForMinutes(nextMinutes);
 
     timeSliderDisplayRef.current = nextMinutes;
     setSliderDisplayMinutes(nextMinutes);
@@ -1487,7 +1539,13 @@ export default function HomeScreen() {
   async function chooseMood(moodId: MoodId) {
     await Haptics.selectionAsync();
     setSelectedMood(moodId);
-    setSelectedColor(null);
+
+    // Color Walk draws once per Detour session. Switching away and back keeps
+    // the same draw, so there is no hidden reroll interaction.
+    if (moodId === 'color' && !selectedColor) {
+      const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      setSelectedColor(color);
+    }
   }
 
   async function continueFromMood() {
@@ -1900,15 +1958,17 @@ export default function HomeScreen() {
         );
 
       const aiRanking =
-        await rankSceneCandidatesWithAI({
-          candidates,
-          moodId:
-            recoveryMood,
-          context:
-            recoveryContext,
-          minutes:
-            recoveryMinutes,
-        });
+        recoveryMood === 'food' || recoveryMood === 'color'
+          ? { candidates, usedAI: false }
+          : await rankSceneCandidatesWithAI({
+              candidates,
+              moodId:
+                recoveryMood,
+              context:
+                recoveryContext,
+              minutes:
+                recoveryMinutes,
+            });
 
       const routed =
         await resolveRoutedScene({
@@ -1922,29 +1982,33 @@ export default function HomeScreen() {
         });
 
       const fallbackArrival =
-        buildSceneArrivalMission({
-          scene: routed.scene,
-          moodId:
-            recoveryMood,
-          context:
-            recoveryContext,
-        });
+        recoveryMood === 'color'
+          ? currentPlan.arrivalMission
+          : buildSceneArrivalMission({
+              scene: routed.scene,
+              moodId:
+                recoveryMood,
+              context:
+                recoveryContext,
+            });
 
       const aiRecovery =
-        await generateJourneyWithAI({
-          scene: routed.scene,
-          moodId:
-            recoveryMood,
-          context:
-            recoveryContext,
-          minutes:
-            recoveryMinutes,
-          sideMissionCount: 0,
-          routeDistanceMeters:
-            routed.route.distanceMeters,
-          routeDurationSeconds:
-            routed.route.durationSeconds,
-        });
+        recoveryMood === 'color'
+          ? null
+          : await generateJourneyWithAI({
+              scene: routed.scene,
+              moodId:
+                recoveryMood,
+              context:
+                recoveryContext,
+              minutes:
+                recoveryMinutes,
+              sideMissionCount: 0,
+              routeDistanceMeters:
+                routed.route.distanceMeters,
+              routeDurationSeconds:
+                routed.route.durationSeconds,
+            });
 
       const nextArrivalMission =
         aiRecovery?.arrivalMission ??
@@ -2365,7 +2429,11 @@ export default function HomeScreen() {
       if (isAIEngineConfigured()) {
         void Promise.all(
           candidateEntries.map(async ([moodId, candidates]) => {
-            if (candidates.length === 0) return;
+            if (
+              candidates.length === 0 ||
+              moodId === 'food' ||
+              moodId === 'color'
+            ) return;
 
             try {
               const ranking = await rankSceneCandidatesWithAI({
@@ -2504,12 +2572,16 @@ export default function HomeScreen() {
         if (sceneCandidates.length === 0) {
           throw new Error(
             finalMood === 'food'
-              ? '附近暫時找不到適合「吃點東西」的真實食物 Scene。'
+              ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
               : '附近暫時沒有找到適合現在情境的 Scene。'
           );
         }
 
-        if (isAIEngineConfigured()) {
+        if (
+          isAIEngineConfigured() &&
+          finalMood !== 'food' &&
+          finalMood !== 'color'
+        ) {
           advanceTicketProgress(
             0.46,
             `找到 ${sceneCandidates.length} 個候選。正在做最後挑選…`
@@ -2532,6 +2604,11 @@ export default function HomeScreen() {
         throw new Error('附近暫時沒有可用的 Scene。');
       }
 
+      if (finalMood === 'food') {
+        rankedCandidates = applyFoodDestinationWeight(rankedCandidates);
+        rankingUsedAI = false;
+      }
+
       setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
 
       const routed = await resolveRoutedScene({
@@ -2552,11 +2629,13 @@ export default function HomeScreen() {
         context,
         color: selectedColor,
       });
-      nextPlan.arrivalMission = buildSceneArrivalMission({
-        scene: routed.scene,
-        moodId: finalMood,
-        context,
-      });
+      if (finalMood !== 'color') {
+        nextPlan.arrivalMission = buildSceneArrivalMission({
+          scene: routed.scene,
+          moodId: finalMood,
+          context,
+        });
+      }
 
       // Side Quests are intentionally deterministic during field testing.
       // They must be instantly available and easy to compare across runs.
@@ -2631,7 +2710,8 @@ export default function HomeScreen() {
       transitionTo('ready');
 
       // Arrival copy may get an AI polish later, but never blocks the ticket.
-      if (isAIEngineConfigured()) {
+      // Color Walk intentionally has no arrival task to rewrite.
+      if (isAIEngineConfigured() && finalMood !== 'color') {
         void generateJourneyWithAI({
           scene: routed.scene,
           moodId: finalMood,
@@ -3067,11 +3147,23 @@ export default function HomeScreen() {
   }
 
   async function openCamera(source: CameraSource) {
+    const colorWalkCameraMission: Mission =
+      selectedMood === 'color' && selectedColor
+        ? {
+            ...FREE_CAMERA_MISSION,
+            id: `color-walk-${selectedColor.id}`,
+            code: `COLOR · ${selectedColor.code}`,
+            title: `拍下${selectedColor.label}。`,
+            instruction: `看到${selectedColor.label}就拍；其他時間跟著導航走。`,
+            completion: `這張照片留下今天的${selectedColor.label}。`,
+          }
+        : FREE_CAMERA_MISSION;
+
     const missionForCamera: Mission | null =
       source === 'arrival'
         ? plan?.arrivalMission ?? null
         : source === 'free'
-          ? FREE_CAMERA_MISSION
+          ? colorWalkCameraMission
           : currentMission;
 
     if (!missionForCamera) return;
@@ -3242,7 +3334,7 @@ export default function HomeScreen() {
 
     const finalMood = mood ?? {
       id: 'wander' as MoodId,
-      label: '隨便走走',
+      label: '隨便走',
       code: 'WANDER',
     };
 
@@ -4175,13 +4267,12 @@ export default function HomeScreen() {
                   },
                 ]}
               />
-              {TIME_STEPS.map((minute) => {
-                const progress = (minute - TIME_MIN) / (TIME_MAX - TIME_MIN);
-                const showLabel = [5, 15, 30, 45, 60].includes(minute);
+              {TIME_STEPS.map((minute, index) => {
+                const progress = index / (TIME_STEPS.length - 1);
                 return (
                   <View key={minute} pointerEvents="none" style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}>
                     <View style={[styles.v35Tick, minute <= sliderDisplayMinutes && styles.v35TickActive]} />
-                    {showLabel && <Text style={styles.v35TickLabel}>{minute}</Text>}
+                    <Text style={styles.v35TickLabel}>{minute}</Text>
                   </View>
                 );
               })}
@@ -4244,7 +4335,7 @@ export default function HomeScreen() {
                 {MOODS.map((item) => {
                   const active = selectedMood === item.id;
                   return (
-                    <Pressable key={item.id} onPress={() => chooseMood(item.id)} style={({ pressed }) => [styles.v35MoodCard, item.id === 'surprise' && styles.v38MoodWide, active && styles.v35MoodCardActive, pressed && styles.v35Pressed]}>
+                    <Pressable key={item.id} onPress={() => chooseMood(item.id)} style={({ pressed }) => [styles.v35MoodCard, active && styles.v35MoodCardActive, pressed && styles.v35Pressed]}>
                       <View style={styles.v35MoodArt}>
                         <Text style={[styles.v35MoodSymbol, active && styles.v35MoodSymbolActive]}>{moodSymbol(item.id)}</Text>
                       </View>
@@ -4331,7 +4422,7 @@ export default function HomeScreen() {
                 <View style={styles.v35PrintFacts}>
                   <View><Text style={styles.v35PrintLabel}>旅程時間</Text><Text style={styles.v35PrintMinute}>{selectedTime}<Text style={styles.v35PrintMinuteUnit}> 分鐘</Text></Text></View>
                   <View style={styles.v35PrintDivider} />
-                  <View style={styles.v35PrintMoodBlock}><Text style={styles.v35PrintLabel}>此趟心情</Text><Text style={styles.v35PrintMood}>{mood?.label ?? '—'}</Text></View>
+                  <View style={styles.v35PrintMoodBlock}><Text style={styles.v35PrintLabel}>此趟心情</Text><Text style={styles.v35PrintMood}>{mood?.label ?? '—'}{selectedMood === 'color' && selectedColor ? ` · ${selectedColor.label}` : ''}</Text></View>
                 </View>
                 <View style={styles.v35PrintDash} /><Text style={styles.v35PrintDestination}>目的地　● ???</Text>
                 <View style={styles.v35PrintBarcode}>{[2,1,3,1,2,4,1,3,2,1,4,2,1,3,2,1,4,1].map((w,i)=>(<View key={i} style={[styles.v35PrintBar,{width:w}]} />))}</View>
@@ -4374,7 +4465,9 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.ticketReadySubtitle}>
-                Scene、步行主線和任務都已鎖定。終點繼續保密。
+                {selectedMood === 'color' && selectedColor
+                  ? `這趟找${selectedColor.label}。看到就拍，其他時間跟著導航走。終點繼續保密。`
+                  : 'Scene、步行主線和任務都已鎖定。終點繼續保密。'}
               </Text>
             </View>
 
@@ -4419,7 +4512,7 @@ export default function HomeScreen() {
                     MOOD
                   </Text>
                   <Text style={styles.detourTicketReadyValue}>
-                    {mood?.label ?? '—'}
+                    {mood?.label ?? '—'}{selectedMood === 'color' && selectedColor ? ` · ${selectedColor.label}` : ''}
                   </Text>
                 </View>
 
@@ -4440,18 +4533,37 @@ export default function HomeScreen() {
               </Text>
 
               <View style={styles.detourTicketHighlights}>
-                <Text style={styles.detourTicketHighlight}>
-                  • 1 條隱藏主線
-                </Text>
-                <Text style={styles.detourTicketHighlight}>
-                  • {previewProfile.sideMissionCount} 個支線任務
-                </Text>
-                <Text style={styles.detourTicketHighlight}>
-                  • 1 個抵達任務
-                </Text>
-                <Text style={styles.detourTicketHighlight}>
-                  • 終點先保密
-                </Text>
+                {selectedMood === 'color' && selectedColor ? (
+                  <>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 這趟找{selectedColor.label}
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 看到就拿起相機
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 其他時間跟著導航走
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 終點先保密
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 1 條隱藏主線
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • {previewProfile.sideMissionCount} 個尋找
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 1 個抵達發現
+                    </Text>
+                    <Text style={styles.detourTicketHighlight}>
+                      • 終點先保密
+                    </Text>
+                  </>
+                )}
               </View>
 
               <View style={styles.detourTicketDash} />
@@ -4542,6 +4654,12 @@ export default function HomeScreen() {
                   <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35Compass, pressed && styles.v35JourneyPressed]}><View style={styles.v35CompassTicks} /><View style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}><Text style={styles.v35CompassArrow}>↑</Text></View></Pressable>
                   <Text style={styles.v35JourneyDistance}>{Math.round(nextBeatMeters)}<Text style={styles.v35JourneyDistanceUnit}> m</Text></Text>
                   <Text style={styles.v35JourneyInstruction}>{currentNavigationBeat.instruction || '先走這一段。'}</Text>
+                  {selectedMood === 'color' && selectedColor && (
+                    <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 999 }}>
+                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedColor.hex }} />
+                      <Text style={{ color: BONE, fontSize: 15, fontWeight: '800' }}>今天找{selectedColor.label} · 看到就拍</Text>
+                    </View>
+                  )}
                   {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
                 </View>
               )}

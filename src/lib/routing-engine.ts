@@ -91,14 +91,18 @@ export async function fetchWalkingRoute(
 }
 
 function targetDistance(minutes: number) {
-  const safeMinutes = Math.max(5, Math.min(60, Math.round(minutes / 5) * 5));
+  const safeMinutes = Math.max(5, Math.min(90, Math.round(minutes / 5) * 5));
 
   if (safeMinutes <= 5) return 220;
   if (safeMinutes <= 10) return 420;
   if (safeMinutes <= 15) return 680;
   if (safeMinutes <= 30) return Math.round(680 + (safeMinutes - 15) * 28);
   if (safeMinutes <= 45) return Math.round(1100 + (safeMinutes - 30) * 22);
-  return Math.round(1430 + (safeMinutes - 45) * 18);
+  if (safeMinutes <= 60) return Math.round(1430 + (safeMinutes - 45) * 18);
+
+  // Long Detours reserve more of the time budget for finding and taking
+  // photos instead of stretching the destination proportionally farther.
+  return Math.round(1700 + (safeMinutes - 60) * (400 / 30));
 }
 
 function routeDistanceProfile(minutes: number, distanceScale = 1) {

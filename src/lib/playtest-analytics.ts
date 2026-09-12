@@ -10,7 +10,7 @@ const SUPABASE_PUBLISHABLE_KEY =
   'sb_publishable_qhZ09r25etnEi-0dURQCYw_EStro0t_';
 
 export const DETOUR_PLAYTEST_VERSION =
-  '0.38.0';
+  '0.39.0';
 
 export type PlaytestStatus =
   | 'ticket-failed'

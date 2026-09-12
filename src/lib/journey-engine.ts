@@ -8,7 +8,7 @@ export type MoodId =
   | 'food'
   | 'quiet'
   | 'weird'
-  | 'photo'
+  | 'color'
   | 'surprise';
 
 export type LightContext = 'day' | 'twilight' | 'night';
@@ -167,16 +167,43 @@ export function getContextMeta(context: LightContext) {
 }
 
 export function getJourneyProfile(minutes: number): JourneyProfile {
-  const safeMinutes = clamp(Math.round(minutes / 5) * 5, 5, 60);
+  // Public UI only offers 15 / 30 / 45 / 60 / 90. Keep 5–10 support
+  // internally so short recovery legs can still be resolved safely.
+  const safeMinutes = clamp(Math.round(minutes / 5) * 5, 5, 90);
   let targetDistanceMeters: number;
   let sideMissionCount: number;
-  if (safeMinutes <= 5) { targetDistanceMeters = 220; sideMissionCount = 1; }
-  else if (safeMinutes <= 10) { targetDistanceMeters = 420; sideMissionCount = 2; }
-  else if (safeMinutes <= 15) { targetDistanceMeters = 680; sideMissionCount = 3; }
-  else if (safeMinutes <= 30) { targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28); sideMissionCount = 4; }
-  else if (safeMinutes <= 45) { targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22); sideMissionCount = 5; }
-  else { targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18); sideMissionCount = 5; }
-  const milestones = Array.from({ length: sideMissionCount }, (_, index) => Number((((index + 1) / (sideMissionCount + 1)) * 0.9).toFixed(2)));
+
+  if (safeMinutes <= 5) {
+    targetDistanceMeters = 220;
+    sideMissionCount = 1;
+  } else if (safeMinutes <= 10) {
+    targetDistanceMeters = 420;
+    sideMissionCount = 2;
+  } else if (safeMinutes <= 15) {
+    targetDistanceMeters = 680;
+    sideMissionCount = 3;
+  } else if (safeMinutes <= 30) {
+    targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28);
+    sideMissionCount = 4;
+  } else if (safeMinutes <= 45) {
+    targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22);
+    sideMissionCount = 5;
+  } else if (safeMinutes <= 60) {
+    targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18);
+    sideMissionCount = 5;
+  } else {
+    // 90 minutes is intentionally not 1.5× the 60-minute distance. The
+    // extra time is budget for looking, photographing and city friction.
+    targetDistanceMeters = Math.round(1700 + (safeMinutes - 60) * (400 / 30));
+    sideMissionCount = 5;
+  }
+
+  const milestones = Array.from(
+    { length: sideMissionCount },
+    (_, index) =>
+      Number((((index + 1) / (sideMissionCount + 1)) * 0.9).toFixed(2))
+  );
+
   return { minutes: safeMinutes, targetDistanceMeters, sideMissionCount, milestones };
 }
 
@@ -606,11 +633,11 @@ function cameraFirstSideMissions(context: LightContext): Mission[] {
 
   return withIds('camera-first', [
     {
-      code: 'RED HIT',
+      code: 'ONE SCOOTER',
       family: 'visual',
-      title: '拍一個紅色。',
-      instruction: `${nightNote} 不用找漂亮的；沿主線看到一個清楚的紅色物件就拍。`,
-      completion: '照片裡有一個明確的紅色物件。',
+      title: '拍一台機車。',
+      instruction: `${nightNote} 停在路邊或沿路經過的都可以；不要走進車道。`,
+      completion: '照片裡有一台清楚的機車。',
       photo: true,
       portable: true,
     },
@@ -642,11 +669,11 @@ function cameraFirstSideMissions(context: LightContext): Mission[] {
       portable: true,
     },
     {
-      code: 'BLUE HIT',
+      code: 'ONE BICYCLE',
       family: 'contrast',
-      title: '拍一個藍色。',
-      instruction: `${nightNote} 只選一個明顯的藍色物件，不用安排構圖。`,
-      completion: '照片裡有一個明確的藍色物件。',
+      title: '拍一台腳踏車。',
+      instruction: `${nightNote} 路邊停著的、共享單車或正在遠處經過的都可以；不要追人。`,
+      completion: '照片裡有一台腳踏車。',
       photo: true,
       portable: true,
     },
@@ -696,11 +723,11 @@ function cameraFirstSideMissions(context: LightContext): Mission[] {
       portable: true,
     },
     {
-      code: 'WHITE HIT',
+      code: 'ONE SIGN',
       family: 'visual',
-      title: '拍一個白色。',
-      instruction: `${nightNote} 找一個清楚的白色物件，第一個合格的就拍。`,
-      completion: '照片裡有一個明確的白色物件。',
+      title: '拍一個路邊標示。',
+      instruction: `${nightNote} 路牌、告示、店家標示或公共標誌都可以；第一個看得懂的就拍。`,
+      completion: '照片裡有一個清楚可辨的標示。',
       photo: true,
       portable: true,
     },
@@ -907,6 +934,20 @@ function arrivalMission(args: {
   color?: ColorChoice | null;
 }): Mission {
 
+  if (args.moodId === 'color') {
+    return {
+      id: 'arrival-color',
+      code: 'ARRIVAL',
+      title: '到了。',
+      instruction: args.color
+        ? `這趟一路找的是${args.color.label}。看到就拍，沒看到也不用回頭。`
+        : '這趟的顏色散步到這裡結束。',
+      completion: '抵達終點就完成這趟 DETOUR。',
+      photo: false,
+      portable: true,
+    };
+  }
+
   if (args.moodId === 'quiet') {
     return {
       id: 'arrival-quiet',
@@ -966,10 +1007,13 @@ export function buildJourneyPlan(args: {
   // v0.38 mission rule: mood changes the destination taste, not the
   // basic Side Quest grammar. Every Side Quest is a quick, concrete camera
   // prompt so the user naturally returns with a small visual record.
-  const unique = selectVariedMissions(
-    cameraFirstSideMissions(args.context),
-    profile.sideMissionCount
-  );
+  const unique =
+    args.moodId === 'color'
+      ? []
+      : selectVariedMissions(
+          cameraFirstSideMissions(args.context),
+          profile.sideMissionCount
+        );
 
   return {
     context: args.context,
