@@ -8,6 +8,7 @@ export type MoodId =
   | 'food'
   | 'quiet'
   | 'weird'
+  | 'photo'
   | 'surprise';
 
 export type LightContext = 'day' | 'twilight' | 'night';
@@ -166,39 +167,17 @@ export function getContextMeta(context: LightContext) {
 }
 
 export function getJourneyProfile(minutes: number): JourneyProfile {
-  if (minutes <= 15) {
-    return {
-      minutes: 15,
-      targetDistanceMeters: 220,
-      sideMissionCount: 3,
-      milestones: [0.15, 0.4, 0.67],
-    };
-  }
-
-  if (minutes <= 30) {
-    return {
-      minutes: 30,
-      targetDistanceMeters: 320,
-      sideMissionCount: 4,
-      milestones: [0.16, 0.36, 0.58, 0.8],
-    };
-  }
-
-  if (minutes <= 60) {
-    return {
-      minutes: 60,
-      targetDistanceMeters: 450,
-      sideMissionCount: 6,
-      milestones: [0.12, 0.27, 0.42, 0.57, 0.72, 0.87],
-    };
-  }
-
-  return {
-    minutes: 90,
-    targetDistanceMeters: 600,
-    sideMissionCount: 8,
-    milestones: [0.1, 0.22, 0.34, 0.46, 0.58, 0.7, 0.82, 0.92],
-  };
+  const safeMinutes = clamp(Math.round(minutes / 5) * 5, 5, 60);
+  let targetDistanceMeters: number;
+  let sideMissionCount: number;
+  if (safeMinutes <= 5) { targetDistanceMeters = 220; sideMissionCount = 1; }
+  else if (safeMinutes <= 10) { targetDistanceMeters = 420; sideMissionCount = 2; }
+  else if (safeMinutes <= 15) { targetDistanceMeters = 680; sideMissionCount = 3; }
+  else if (safeMinutes <= 30) { targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28); sideMissionCount = 4; }
+  else if (safeMinutes <= 45) { targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22); sideMissionCount = 5; }
+  else { targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18); sideMissionCount = 6; }
+  const milestones = Array.from({ length: sideMissionCount }, (_, index) => Number((((index + 1) / (sideMissionCount + 1)) * 0.9).toFixed(2)));
+  return { minutes: safeMinutes, targetDistanceMeters, sideMissionCount, milestones };
 }
 
 function withIds(prefix: string, missions: Omit<Mission, 'id'>[]): Mission[] {

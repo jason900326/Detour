@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -9,7 +10,12 @@ import {
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import {
+  CameraView,
+  useCameraPermissions,
+  type CameraType,
+  type FlashMode,
+} from 'expo-camera';
 import { Directory, File, Paths } from 'expo-file-system';
 import {
   Album,
@@ -51,6 +57,10 @@ function getParam(value: string | string[] | undefined, fallback = '') {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function clampZoom(value: number) { return Math.min(1, Math.max(0, value)); }
+function touchDistance(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return 0; const [a,b] = touches; return Math.hypot(a.pageX-b.pageX, a.pageY-b.pageY); }
+function lensLabel(lens: string) { if (lens.includes('UltraWide')) return '0.5×'; if (lens.includes('WideAngle')) return '1×'; if (lens.includes('Telephoto')) return '望遠'; return '鏡頭'; }
+function lensPriority(lens: string) { if (lens.includes('UltraWide')) return 0; if (lens.includes('WideAngle')) return 1; if (lens.includes('Telephoto')) return 2; return 9; }
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -65,6 +75,14 @@ export default function CameraScreen() {
   const [librarySaveState, setLibrarySaveState] = useState<
     'idle' | 'saved' | 'passport-only'
   >('idle');
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [flashMode, setFlashMode] = useState<FlashMode>('off');
+  const [zoom, setZoom] = useState(0);
+  const [availableLenses, setAvailableLenses] = useState<string[]>([]);
+  const [selectedLens, setSelectedLens] = useState<string | undefined>(undefined);
+  const pinchStartDistanceRef = useRef(0);
+  const pinchStartZoomRef = useRef(0);
+  const pinchActiveRef = useRef(false);
 
   const requestId = getParam(params.requestId);
   const source = getParam(params.source, 'free') as CameraSource;
@@ -150,6 +168,23 @@ export default function CameraScreen() {
       return false;
     }
   }
+
+  async function refreshAvailableLenses() {
+    if (Platform.OS !== 'ios' || facing !== 'back' || !cameraRef.current) { setAvailableLenses([]); setSelectedLens(undefined); return; }
+    try {
+      const lenses = (await cameraRef.current.getAvailableLensesAsync()) as string[];
+      const physical = lenses.filter((lens) => lens.includes('UltraWide') || lens.includes('WideAngle') || lens.includes('Telephoto')).sort((a,b) => lensPriority(a)-lensPriority(b));
+      const normalized = Array.from(new Set(physical)); setAvailableLenses(normalized);
+      const wide = normalized.find((lens) => lens.includes('WideAngle'));
+      setSelectedLens((current) => current && normalized.includes(current) ? current : wide ?? normalized[0] ?? undefined);
+    } catch { setAvailableLenses([]); setSelectedLens(undefined); }
+  }
+  function cycleFlash() { setFlashMode((current) => current === 'off' ? 'auto' : current === 'auto' ? 'on' : 'off'); void Haptics.selectionAsync(); }
+  function switchFacing() { setFacing((current) => current === 'back' ? 'front' : 'back'); setZoom(0); setSelectedLens(undefined); setAvailableLenses([]); setFlashMode('off'); void Haptics.selectionAsync(); }
+  function chooseLens(lens: string) { setSelectedLens(lens); setZoom(0); void Haptics.selectionAsync(); }
+  function handlePinchStart(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return; const distance = touchDistance(touches); if (distance <= 0) return; pinchStartDistanceRef.current = distance; pinchStartZoomRef.current = zoom; pinchActiveRef.current = true; }
+  function handlePinchMove(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2 || !pinchActiveRef.current || pinchStartDistanceRef.current <= 0) return; const distance = touchDistance(touches); if (distance <= 0) return; const ratio = distance / pinchStartDistanceRef.current; const delta = Math.log2(Math.max(0.35, ratio)) * 0.18; setZoom(clampZoom(pinchStartZoomRef.current + delta)); }
+  function handlePinchEnd() { pinchActiveRef.current = false; pinchStartDistanceRef.current = 0; }
 
   async function takePhoto() {
     if (!cameraReady || !cameraRef.current || takingPhoto) return;
@@ -270,32 +305,21 @@ export default function CameraScreen() {
       <CameraView
         ref={cameraRef}
         style={styles.cameraView}
-        facing="back"
-        onCameraReady={() => {
-          setCameraReady(true);
-          setMountError(null);
-        }}
-        onMountError={(event) => {
-          setCameraReady(false);
-          setMountError(event.message);
-        }}
+        facing={facing}
+        flash={facing === 'back' ? flashMode : 'off'}
+        zoom={zoom}
+        selectedLens={Platform.OS === 'ios' && facing === 'back' ? selectedLens : undefined}
+        autofocus="on"
+        responsiveOrientationWhenOrientationLocked
+        onCameraReady={() => { setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
+        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
       />
+      <View style={styles.pinchSurface} onTouchStart={(event) => handlePinchStart(event.nativeEvent.touches)} onTouchMove={(event) => handlePinchMove(event.nativeEvent.touches)} onTouchEnd={(event) => { if (event.nativeEvent.touches.length < 2) handlePinchEnd(); }} onTouchCancel={handlePinchEnd} />
 
       <View style={styles.cameraOverlay} pointerEvents="box-none">
         <View style={styles.cameraTop}>
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.closeButton}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-
-          <View style={styles.rollChip}>
-            <Text style={styles.rollChipLabel}>
-              DETOUR / ROLL {String(rollNumber).padStart(2, '0')}
-            </Text>
-            <Text style={styles.rollChipCount}>{rollDisplay}</Text>
-          </View>
+          <View style={styles.cameraTopLeft}><Pressable onPress={() => router.back()} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable><View style={styles.rollChip}><Text style={styles.rollChipLabel}>ROLL {String(rollNumber).padStart(2, '0')}</Text><Text style={styles.rollChipCount}>{rollDisplay}</Text></View></View>
+          <View style={styles.cameraTopActions}>{facing === 'back' && <Pressable onPress={cycleFlash} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>{flashMode === 'off' ? '閃光 關' : flashMode === 'auto' ? '閃光 自動' : '閃光 開'}</Text></Pressable>}<Pressable onPress={switchFacing} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>切換</Text></Pressable></View>
         </View>
 
         <View style={styles.promptCard}>
@@ -321,7 +345,10 @@ export default function CameraScreen() {
           </Text>
         </View>
 
-        <View style={styles.cameraBottom}>
+        <View style={styles.cameraControlZone}>
+          {facing === 'back' && availableLenses.length > 1 && <View style={styles.lensRow}>{availableLenses.map((lens) => { const active = selectedLens === lens; return <Pressable key={lens} onPress={() => chooseLens(lens)} style={[styles.lensButton, active && styles.lensButtonActive]}><Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{lensLabel(lens)}</Text></Pressable>; })}</View>}
+          <Text style={styles.zoomHint}>雙指縮放</Text>
+          <View style={styles.cameraBottom}>
           <View style={styles.statusColumn}>
             <Text style={styles.statusText}>
               {mountError
@@ -357,6 +384,7 @@ export default function CameraScreen() {
                 : `+${nextExposure - rollCapacity}`}
             </Text>
             <Text style={styles.exposureLabel}>NEXT FRAME</Text>
+          </View>
           </View>
         </View>
       </View>
@@ -466,6 +494,7 @@ const styles = StyleSheet.create({
   cameraView: {
     flex: 1,
   },
+  pinchSurface: { ...StyleSheet.absoluteFillObject },
 
   cameraOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -475,11 +504,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-  cameraTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  cameraTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  cameraTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  cameraTopActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cameraUtilityButton: { minHeight: 42, paddingHorizontal: 12, borderRadius: 21, backgroundColor: 'rgba(17,17,15,0.78)', alignItems: 'center', justifyContent: 'center' },
+  cameraUtilityText: { fontSize: 10, fontWeight: '700', color: BONE },
 
   closeButton: {
     width: 48,
@@ -544,11 +573,14 @@ const styles = StyleSheet.create({
     color: MUTED,
   },
 
-  cameraBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  cameraControlZone: { gap: 11 },
+  lensRow: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 24, backgroundColor: 'rgba(17,17,15,0.62)' },
+  lensButton: { minWidth: 46, height: 38, paddingHorizontal: 10, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  lensButtonActive: { backgroundColor: BONE },
+  lensButtonText: { fontSize: 11, fontWeight: '700', color: BONE },
+  lensButtonTextActive: { color: INK },
+  zoomHint: { alignSelf: 'center', fontSize: 9, fontWeight: '600', color: 'rgba(241,239,231,0.72)' },
+  cameraBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   statusColumn: {
     width: 108,
