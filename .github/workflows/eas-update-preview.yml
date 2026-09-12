@@ -1,0 +1,57 @@
+name: Publish DETOUR preview update
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "README*"
+      - "docs/**"
+      - "backend/**"
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: EAS Update → preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check Expo token
+        id: expo_token
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "EXPO_TOKEN is not configured yet; skipping EAS Update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup EAS
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        if: steps.expo_token.outputs.skip != 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Publish preview update
+        if: steps.expo_token.outputs.skip != 'true'
+        shell: bash
+        run: eas update --channel preview --message "GitHub main ${GITHUB_SHA::7}" --non-interactive
