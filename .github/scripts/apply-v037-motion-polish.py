@@ -1,0 +1,462 @@
+from pathlib import Path
+
+p = Path('src/app/index.tsx')
+s = p.read_text()
+
+
+def replace_once(old: str, new: str, label: str):
+    global s
+    if old not in s:
+        raise SystemExit(f'missing patch target: {label}')
+    s = s.replace(old, new, 1)
+
+
+replace_once(
+    """  const [selectedTime, setSelectedTime] = useState<string | null>('15');
+  const [timeSliderWidth, setTimeSliderWidth] = useState(1);
+  const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);""",
+    """  const [selectedTime, setSelectedTime] = useState<string | null>('15');
+  const [sliderDisplayMinutes, setSliderDisplayMinutes] = useState(15);
+  const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);""",
+    'slider state',
+)
+
+replace_once(
+    """  const screenOpacity = useRef(new Animated.Value(1)).current;
+  const screenY = useRef(new Animated.Value(0)).current;
+  const routeProgress = useRef(new Animated.Value(0)).current;
+""",
+    """  const screenOpacity = useRef(new Animated.Value(1)).current;
+  const screenY = useRef(new Animated.Value(0)).current;
+  const routeProgress = useRef(new Animated.Value(0)).current;
+  const timeSliderProgress = useRef(
+    new Animated.Value((15 - TIME_MIN) / (TIME_MAX - TIME_MIN))
+  ).current;
+  const timeSliderWidthRef = useRef(1);
+  const timeSliderStartProgressRef = useRef(
+    (15 - TIME_MIN) / (TIME_MAX - TIME_MIN)
+  );
+  const timeSliderDisplayRef = useRef(15);
+  const minutePulse = useRef(new Animated.Value(1)).current;
+  const homeEntrance = useRef(new Animated.Value(0)).current;
+  const homeRouteMotion = useRef(new Animated.Value(0)).current;
+""",
+    'motion refs',
+)
+
+old_slider = """  const timeProgress =
+    (Math.max(TIME_MIN, selectedMinutes || 15) - TIME_MIN) /
+    (TIME_MAX - TIME_MIN);
+
+  const timeSliderResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          const x = event.nativeEvent.locationX;
+          const ratio = Math.max(0, Math.min(1, x / timeSliderWidth));
+          const nextMinutes =
+            TIME_MIN +
+            Math.round((ratio * (TIME_MAX - TIME_MIN)) / TIME_STEP) * TIME_STEP;
+          const value = String(nextMinutes);
+          if (value !== selectedTime) {
+            setSelectedTime(value);
+            void Haptics.selectionAsync();
+          }
+        },
+        onPanResponderMove: (event) => {
+          const x = event.nativeEvent.locationX;
+          const ratio = Math.max(0, Math.min(1, x / timeSliderWidth));
+          const nextMinutes =
+            TIME_MIN +
+            Math.round((ratio * (TIME_MAX - TIME_MIN)) / TIME_STEP) * TIME_STEP;
+          const value = String(nextMinutes);
+          if (value !== selectedTime) {
+            setSelectedTime(value);
+            void Haptics.selectionAsync();
+          }
+        },
+      }),
+    [timeSliderWidth, selectedTime]
+  );
+"""
+
+new_slider = """  const snapMinutesFromRatio = (ratio: number) =>
+    TIME_MIN +
+    Math.round(
+      (Math.max(0, Math.min(1, ratio)) * (TIME_MAX - TIME_MIN)) /
+        TIME_STEP
+    ) *
+      TIME_STEP;
+
+  const pulseMinute = () => {
+    minutePulse.stopAnimation();
+    minutePulse.setValue(0.965);
+    Animated.spring(minutePulse, {
+      toValue: 1,
+      speed: 28,
+      bounciness: 7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const previewSliderRatio = (ratio: number, haptic = true) => {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    timeSliderProgress.setValue(clamped);
+    const nextMinutes = snapMinutesFromRatio(clamped);
+
+    if (nextMinutes !== timeSliderDisplayRef.current) {
+      timeSliderDisplayRef.current = nextMinutes;
+      setSliderDisplayMinutes(nextMinutes);
+      pulseMinute();
+      if (haptic) void Haptics.selectionAsync();
+    }
+  };
+
+  const finishSliderRatio = (ratio: number) => {
+    const nextMinutes = snapMinutesFromRatio(ratio);
+    const snappedRatio =
+      (nextMinutes - TIME_MIN) / (TIME_MAX - TIME_MIN);
+
+    timeSliderDisplayRef.current = nextMinutes;
+    setSliderDisplayMinutes(nextMinutes);
+    setSelectedTime(String(nextMinutes));
+
+    timeSliderProgress.stopAnimation();
+    Animated.spring(timeSliderProgress, {
+      toValue: snappedRatio,
+      speed: 24,
+      bounciness: 5,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const timeSliderResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (event) => {
+          const width = Math.max(1, timeSliderWidthRef.current);
+          const ratio = Math.max(
+            0,
+            Math.min(1, event.nativeEvent.locationX / width)
+          );
+          timeSliderStartProgressRef.current = ratio;
+          timeSliderProgress.stopAnimation();
+          previewSliderRatio(ratio);
+        },
+        onPanResponderMove: (_event, gestureState) => {
+          const width = Math.max(1, timeSliderWidthRef.current);
+          const ratio =
+            timeSliderStartProgressRef.current + gestureState.dx / width;
+          previewSliderRatio(ratio);
+        },
+        onPanResponderRelease: (_event, gestureState) => {
+          const width = Math.max(1, timeSliderWidthRef.current);
+          const ratio =
+            timeSliderStartProgressRef.current + gestureState.dx / width;
+          finishSliderRatio(ratio);
+        },
+        onPanResponderTerminate: (_event, gestureState) => {
+          const width = Math.max(1, timeSliderWidthRef.current);
+          const ratio =
+            timeSliderStartProgressRef.current + gestureState.dx / width;
+          finishSliderRatio(ratio);
+        },
+      }),
+    [timeSliderProgress]
+  );
+"""
+replace_once(old_slider, new_slider, 'slider responder')
+
+effect_anchor = """  useEffect(() => {
+    traveledMetersRef.current = traveledMeters;
+  }, [traveledMeters]);
+
+"""
+effect_new = effect_anchor + """  useEffect(() => {
+    const nextMinutes = Math.max(
+      TIME_MIN,
+      Math.min(TIME_MAX, selectedMinutes || 15)
+    );
+    const nextRatio =
+      (nextMinutes - TIME_MIN) / (TIME_MAX - TIME_MIN);
+
+    timeSliderDisplayRef.current = nextMinutes;
+    setSliderDisplayMinutes(nextMinutes);
+
+    Animated.spring(timeSliderProgress, {
+      toValue: nextRatio,
+      speed: 24,
+      bounciness: 4,
+      useNativeDriver: false,
+    }).start();
+  }, [selectedMinutes]);
+
+  useEffect(() => {
+    if (stage !== 'time') return;
+
+    homeEntrance.setValue(0);
+    homeRouteMotion.setValue(0);
+
+    Animated.timing(homeEntrance, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    const routeLoop = Animated.loop(
+      Animated.timing(homeRouteMotion, {
+        toValue: 1,
+        duration: 4600,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    routeLoop.start();
+    return () => routeLoop.stop();
+  }, [stage]);
+
+"""
+replace_once(effect_anchor, effect_new, 'motion effects')
+
+old_route = """            <View style={styles.v35RouteSketch}>
+              <View style={[styles.v35CityBlock, { left: '4%', height: 46 }]} />
+              <View style={[styles.v35CityBlock, { left: '10%', height: 29, width: 18 }]} />
+              <View style={[styles.v35RouteDash, { left: '9%', top: 74, width: 90, transform: [{ rotate: '-22deg' }] }]} />
+              <View style={[styles.v35RouteDash, { left: '28%', top: 93, width: 110, transform: [{ rotate: '16deg' }] }]} />
+              <View style={[styles.v35RouteDash, { left: '53%', top: 68, width: 105, transform: [{ rotate: '-34deg' }] }]} />
+              <View style={[styles.v35RouteDash, { right: '6%', top: 91, width: 95, transform: [{ rotate: '22deg' }] }]} />
+              <View style={[styles.v35MapPin, { left: '7%', top: 72 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { left: '38%', top: 103 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { left: '58%', top: 34 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { right: '7%', top: 91 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={styles.v35SketchBench}><View style={styles.v35BenchSeat} /><View style={styles.v35BenchLeg} /><View style={[styles.v35BenchLeg, styles.v35BenchLegRight]} /></View>
+              <View style={styles.v35SketchFlag}><View style={styles.v35FlagPole} /><View style={styles.v35FlagCloth} /></View>
+            </View>
+"""
+new_route = """            <Animated.View
+              style={[
+                styles.v35RouteSketch,
+                {
+                  opacity: homeEntrance,
+                  transform: [
+                    {
+                      translateY: homeEntrance.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [10, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={[styles.v35CityBlock, { left: '4%', height: 46 }]} />
+              <View style={[styles.v35CityBlock, { left: '10%', height: 29, width: 18 }]} />
+
+              <View style={[styles.v35RouteDash, { left: '9%', top: 91, width: 108, transform: [{ rotate: '11deg' }] }]} />
+              <View style={[styles.v35RouteDash, { left: '35%', top: 80, width: 116, transform: [{ rotate: '-37deg' }] }]} />
+              <View style={[styles.v35RouteDash, { left: '59%', top: 67, width: 110, transform: [{ rotate: '24deg' }] }]} />
+
+              <View style={[styles.v35MapPin, { left: '7%', top: 80 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { left: '35%', top: 103 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { left: '59%', top: 37 }]}><View style={styles.v35MapPinCore} /></View>
+              <View style={[styles.v35MapPin, { right: '7%', top: 86 }]}><View style={styles.v35MapPinCore} /></View>
+
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.v36TravelerDot,
+                  {
+                    transform: [
+                      {
+                        translateX: homeRouteMotion.interpolate({
+                          inputRange: [0, 0.34, 0.64, 1],
+                          outputRange: [0, 102, 194, 290],
+                        }),
+                      },
+                      {
+                        translateY: homeRouteMotion.interpolate({
+                          inputRange: [0, 0.34, 0.64, 1],
+                          outputRange: [0, 24, -42, 7],
+                        }),
+                      },
+                      {
+                        scale: homeRouteMotion.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0.85, 1.08, 0.85],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <View style={styles.v36TravelerDotCore} />
+              </Animated.View>
+
+              <View style={styles.v35SketchBench}><View style={styles.v35BenchSeat} /><View style={styles.v35BenchLeg} /><View style={[styles.v35BenchLeg, styles.v35BenchLegRight]} /></View>
+              <View style={styles.v35SketchFlag}><View style={styles.v35FlagPole} /><View style={styles.v35FlagCloth} /></View>
+            </Animated.View>
+"""
+replace_once(old_route, new_route, 'home route graphic')
+
+old_slider_jsx = """            <View style={styles.v35MinuteReadout}>
+              <Text style={styles.v35MinuteNumber}>{selectedMinutes || 15}</Text>
+              <Text style={styles.v35MinuteUnit}>MIN</Text>
+            </View>
+            <View
+              style={styles.v35SliderWrap}
+              onLayout={(event) => setTimeSliderWidth(Math.max(1, event.nativeEvent.layout.width))}
+              {...timeSliderResponder.panHandlers}
+            >
+              <View style={styles.v35SliderRail} />
+              <View style={[styles.v35SliderFill, { width: `${timeProgress * 100}%` }]} />
+              {TIME_STEPS.map((minute) => {
+                const progress = (minute - TIME_MIN) / (TIME_MAX - TIME_MIN);
+                const showLabel = [5, 15, 30, 45, 60].includes(minute);
+                return (
+                  <View key={minute} pointerEvents="none" style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}>
+                    <View style={[styles.v35Tick, minute <= (selectedMinutes || 15) && styles.v35TickActive]} />
+                    {showLabel && <Text style={styles.v35TickLabel}>{minute}</Text>}
+                  </View>
+                );
+              })}
+              <View style={[styles.v35SliderThumb, { left: `${timeProgress * 100}%` }]}><View style={styles.v35SliderThumbCore} /></View>
+            </View>
+            <Pressable onPress={continueFromTime} style={({ pressed }) => [styles.v35TicketButton, pressed && styles.v35TicketButtonPressed]}>
+              <View style={styles.v35TicketNotchLeft} />
+              <View style={styles.v35TicketNotchRight} />
+              <Text style={styles.v35TicketArrow}>→</Text>
+              <Text style={styles.v35TicketText}>開始 {selectedMinutes || 15} 分鐘的旅程</Text>
+              <View style={styles.v35TicketDivider} />
+              <Text style={styles.v35TicketMark}>▰</Text>
+            </Pressable>
+            <Pressable onPress={() => transitionTo('passport')} style={({ pressed }) => [styles.v35CompletedButton, pressed && styles.v35Pressed]}>
+              <Text style={styles.v35CompletedText}>已完成的旅程</Text>
+              <View style={styles.v35CompletedCount}><Text style={styles.v35CompletedCountText}>{passport.length}</Text></View>
+              <Text style={styles.v35CompletedArrow}>→</Text>
+            </Pressable>
+"""
+new_slider_jsx = """            <Animated.View
+              style={[
+                styles.v35MinuteReadout,
+                { transform: [{ scale: minutePulse }] },
+              ]}
+            >
+              <Text style={styles.v35MinuteNumber}>{sliderDisplayMinutes}</Text>
+              <Text style={styles.v35MinuteUnit}>MIN</Text>
+            </Animated.View>
+            <View
+              style={styles.v35SliderWrap}
+              onLayout={(event) => {
+                timeSliderWidthRef.current = Math.max(
+                  1,
+                  event.nativeEvent.layout.width
+                );
+              }}
+              {...timeSliderResponder.panHandlers}
+            >
+              <View style={styles.v35SliderRail} />
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.v35SliderFill,
+                  {
+                    width: timeSliderProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+              {TIME_STEPS.map((minute) => {
+                const progress = (minute - TIME_MIN) / (TIME_MAX - TIME_MIN);
+                const showLabel = [5, 15, 30, 45, 60].includes(minute);
+                return (
+                  <View key={minute} pointerEvents="none" style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}>
+                    <View style={[styles.v35Tick, minute <= sliderDisplayMinutes && styles.v35TickActive]} />
+                    {showLabel && <Text style={styles.v35TickLabel}>{minute}</Text>}
+                  </View>
+                );
+              })}
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.v35SliderThumb,
+                  {
+                    left: timeSliderProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              >
+                <View style={styles.v35SliderThumbCore} />
+              </Animated.View>
+            </View>
+            <Animated.View
+              style={{
+                opacity: homeEntrance,
+                transform: [
+                  {
+                    translateY: homeEntrance.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [12, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable onPress={continueFromTime} style={({ pressed }) => [styles.v35TicketButton, pressed && styles.v35TicketButtonPressed]}>
+                <View style={styles.v35TicketNotchLeft} />
+                <View style={styles.v35TicketNotchRight} />
+                <Text style={styles.v35TicketArrow}>→</Text>
+                <Text style={styles.v35TicketText}>開始 {sliderDisplayMinutes} 分鐘的旅程</Text>
+                <View style={styles.v35TicketDivider} />
+                <Text style={styles.v35TicketMark}>▰</Text>
+              </Pressable>
+              <Pressable onPress={() => transitionTo('passport')} style={({ pressed }) => [styles.v35CompletedButton, pressed && styles.v35Pressed]}>
+                <Text style={styles.v35CompletedText}>已完成的旅程</Text>
+                <View style={styles.v35CompletedCount}><Text style={styles.v35CompletedCountText}>{passport.length}</Text></View>
+                <Text style={styles.v35CompletedArrow}>→</Text>
+              </Pressable>
+            </Animated.View>
+"""
+replace_once(old_slider_jsx, new_slider_jsx, 'slider jsx')
+
+replace_once(
+    "  v35Pressed: { opacity: 0.72 },",
+    "  v35Pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },",
+    'pressed microinteraction',
+)
+
+replace_once(
+    "  v35RouteDash: { position: 'absolute', height: 3, borderStyle: 'dashed', borderTopWidth: 3, borderTopColor: SIGNAL },",
+    "  v35RouteDash: { position: 'absolute', height: 4, borderRadius: 999, backgroundColor: SIGNAL, opacity: 0.96 },",
+    'route connector style',
+)
+
+replace_once(
+    """  v35MapPin: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
+  v35MapPinCore: { width: 7, height: 7, borderRadius: 4, backgroundColor: BONE },""",
+    """  v35MapPin: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5F1E8', borderWidth: 4, borderColor: SIGNAL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  v35MapPinCore: { width: 6, height: 6, borderRadius: 3, backgroundColor: SIGNAL },
+  v36TravelerDot: { position: 'absolute', left: '7%', top: 84, width: 16, height: 16, borderRadius: 8, backgroundColor: '#F5F1E8', borderWidth: 3, borderColor: SIGNAL, alignItems: 'center', justifyContent: 'center', zIndex: 6, shadowColor: SIGNAL, shadowOpacity: 0.28, shadowRadius: 7, shadowOffset: { width: 0, height: 0 } },
+  v36TravelerDotCore: { width: 5, height: 5, borderRadius: 3, backgroundColor: SIGNAL },""",
+    'route node styles',
+)
+
+p.write_text(s)
+
+analytics = Path('src/lib/playtest-analytics.ts')
+a = analytics.read_text()
+if "'0.35.0'" in a:
+    a = a.replace("export const DETOUR_PLAYTEST_VERSION =\n  '0.35.0';", "export const DETOUR_PLAYTEST_VERSION =\n  '0.37.0';")
+elif "'0.36.0'" in a:
+    a = a.replace("export const DETOUR_PLAYTEST_VERSION =\n  '0.36.0';", "export const DETOUR_PLAYTEST_VERSION =\n  '0.37.0';")
+analytics.write_text(a)
