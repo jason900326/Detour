@@ -115,12 +115,71 @@ function routeDistanceProfile(minutes: number, distanceScale = 1) {
   };
 }
 
+function distanceBetweenPoints(a: GeoPoint, b: GeoPoint) {
+  const radians = Math.PI / 180;
+  const radius = 6371000;
+  const lat1 = a.latitude * radians;
+  const lat2 = b.latitude * radians;
+  const dLat = (b.latitude - a.latitude) * radians;
+  const dLon = (b.longitude - a.longitude) * radians;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function routeOverlapRatio(route: GeoPoint[], avoidRoutes: GeoPoint[][]) {
+  if (route.length < 4 || avoidRoutes.length === 0) return 0;
+
+  // Every Detour from the same starting point naturally shares its first few
+  // metres. Novelty matters after the route has actually left the origin.
+  const startIndex = Math.min(route.length - 1, Math.floor(route.length * 0.18));
+  const usable = route.slice(startIndex);
+  const step = Math.max(1, Math.floor(usable.length / 20));
+  const samples = usable.filter((_, index) => index % step === 0).slice(0, 24);
+  if (samples.length === 0) return 0;
+
+  const historical = avoidRoutes
+    .filter((item) => item.length >= 2)
+    .slice(0, 6)
+    .flatMap((item) => {
+      const historyStep = Math.max(1, Math.floor(item.length / 90));
+      return item.filter((_, index) => index % historyStep === 0);
+    });
+
+  if (historical.length === 0) return 0;
+
+  let overlapping = 0;
+  for (const point of samples) {
+    if (historical.some((oldPoint) => distanceBetweenPoints(point, oldPoint) <= 35)) {
+      overlapping += 1;
+    }
+  }
+
+  return overlapping / samples.length;
+}
+
+function estimatedJourneySeconds(
+  route: WalkingRoute,
+  sideMissionCount: number,
+  minutes: number
+) {
+  // OSRM is optimistic in cities. Add crossings / hesitation, then reserve a
+  // compact amount of time for each camera find and the final reveal.
+  const cityWalking = route.durationSeconds * 1.18;
+  const findAndPhoto = sideMissionCount * 75;
+  const arrival = minutes <= 15 ? 90 : 120;
+  return cityWalking + findAndPhoto + arrival;
+}
+
 export async function resolveRoutedScene(args: {
   start: GeoPoint;
   candidates: SceneCandidate[];
   minutes: number;
   maxDistanceMeters?: number;
   distanceScale?: number;
+  sideMissionCount?: number;
+  avoidRoutes?: GeoPoint[][];
 }): Promise<RoutedScene> {
   const profile = routeDistanceProfile(
     args.minutes,
@@ -128,10 +187,10 @@ export async function resolveRoutedScene(args: {
   );
   const maxDistance = args.maxDistanceMeters ?? profile.max;
   const straightTarget = profile.target * 0.74;
+  const sideMissionCount = args.sideMissionCount ?? 0;
+  const avoidRoutes = args.avoidRoutes ?? [];
+  const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
 
-  // AI/editorial rank chooses taste. For the final route check, distance fit
-  // gets priority inside that shortlist so a 20-minute request cannot end in
-  // a 2-minute walk simply because that candidate was ranked first.
   const shortlist = args.candidates
     .slice(0, 14)
     .sort(
@@ -141,30 +200,50 @@ export async function resolveRoutedScene(args: {
     )
     .slice(0, 8);
 
+  let bestViable: RoutedScene | null = null;
+  let bestViableScore = Number.POSITIVE_INFINITY;
   let bestFallback: RoutedScene | null = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
+  let bestFallbackScore = Number.POSITIVE_INFINITY;
 
   for (const scene of shortlist) {
     try {
       const route = await fetchWalkingRoute(args.start, scene.point);
-      const delta = Math.abs(route.distanceMeters - profile.target);
-
-      if (route.distanceMeters <= maxDistance * 1.08 && delta < bestDelta) {
-        bestFallback = { scene, route };
-        bestDelta = delta;
-      }
+      const overlap = routeOverlapRatio(route.coordinates, avoidRoutes);
+      const estimatedSeconds = estimatedJourneySeconds(
+        route,
+        sideMissionCount,
+        args.minutes
+      );
+      const overtimeSeconds = Math.max(0, estimatedSeconds - timeBudgetSeconds);
+      const distanceDelta = Math.abs(route.distanceMeters - profile.target);
+      const noveltyPenalty = overlap * profile.target * 0.95;
+      const overtimePenalty = overtimeSeconds * 1.4;
+      const score = distanceDelta + noveltyPenalty + overtimePenalty;
 
       if (
-        route.distanceMeters >= profile.min &&
-        route.distanceMeters <= maxDistance
+        route.distanceMeters <= maxDistance * 1.08 &&
+        score < bestFallbackScore
       ) {
-        return { scene, route };
+        bestFallback = { scene, route };
+        bestFallbackScore = score;
+      }
+
+      const distanceFits =
+        route.distanceMeters >= profile.min &&
+        route.distanceMeters <= maxDistance;
+      const timeFits = estimatedSeconds <= timeBudgetSeconds;
+      const noveltyFits = overlap <= 0.62;
+
+      if (distanceFits && timeFits && noveltyFits && score < bestViableScore) {
+        bestViable = { scene, route };
+        bestViableScore = score;
       }
     } catch {
       // Try the next Scene. Public routing can occasionally miss a snap.
     }
   }
 
+  if (bestViable) return bestViable;
   if (bestFallback) return bestFallback;
 
   throw new Error(

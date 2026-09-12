@@ -93,6 +93,7 @@ export default function CameraScreen() {
     Number.parseInt(getParam(params.savedCount, '0'), 10) || 0;
   const rollCapacity =
     Number.parseInt(getParam(params.rollCapacity, '6'), 10) || 6;
+  const atCapacity = savedCount >= rollCapacity;
 
   useEffect(() => {
     if (!permission) return;
@@ -198,7 +199,7 @@ export default function CameraScreen() {
   function handlePinchEnd() { pinchActiveRef.current = false; pinchStartDistanceRef.current = 0; }
 
   async function takePhoto() {
-    if (!cameraReady || !cameraRef.current || takingPhoto) return;
+    if (!cameraReady || !cameraRef.current || takingPhoto || atCapacity) return;
 
     setTakingPhoto(true);
 
@@ -350,21 +351,19 @@ export default function CameraScreen() {
 
         <View style={styles.cameraControlZone}>
           {facing === 'back' && availableLenses.length > 1 && <View style={styles.lensRow}>{availableLenses.map((lens) => { const active = selectedLens === lens; return <Pressable key={lens} onPress={() => chooseLens(lens)} style={[styles.lensButton, active && styles.lensButtonActive]}><Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{lensLabel(lens)}</Text></Pressable>; })}</View>}
-          <Text style={styles.zoomHint}>雙指縮放</Text>
           <View style={styles.cameraBottom}>
             <View style={styles.statusColumn}>
               <Text style={styles.statusText}>
-                {savedCount} / {rollCapacity}
+                {Math.min(savedCount, rollCapacity)} / {rollCapacity}
               </Text>
-              <Text style={styles.exposureLabel}>這趟照片</Text>
             </View>
 
             <Pressable
-              disabled={!cameraReady || takingPhoto}
+              disabled={!cameraReady || takingPhoto || atCapacity}
               onPress={takePhoto}
               style={({ pressed }) => [
                 styles.shutterOuter,
-                (!cameraReady || takingPhoto) && styles.shutterDisabled,
+                (!cameraReady || takingPhoto || atCapacity) && styles.shutterDisabled,
                 pressed && styles.shutterPressed,
               ]}
             >
@@ -374,11 +373,9 @@ export default function CameraScreen() {
             <View style={styles.exposureColumn}>
               {mountError ? (
                 <Text style={styles.errorText}>預覽錯誤</Text>
-              ) : (
-                <Text style={styles.statusText}>
-                  {cameraReady ? '可以拍了' : '正在開啟'}
-                </Text>
-              )}
+              ) : atCapacity ? (
+                <Text style={styles.statusText}>已拍滿</Text>
+              ) : null}
             </View>
           </View>
         </View>

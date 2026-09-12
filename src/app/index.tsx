@@ -4,7 +4,6 @@ import {
   Animated,
   Easing,
   Image,
-  Modal,
   PanResponder,
   Pressable,
   ScrollView,
@@ -17,9 +16,7 @@ import {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Directory, File, Paths } from 'expo-file-system';
-import { Album, Asset, requestPermissionsAsync as requestMediaLibraryPermissionsAsync } from 'expo-media-library';
+import { Directory, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Circle, Polyline } from 'react-native-maps';
@@ -99,8 +96,6 @@ type Stage =
   | 'mission'
   | 'arrival'
   | 'sceneIssue'
-  | 'camera'
-  | 'photoReview'
   | 'developing'
   | 'finish'
   | 'passport'
@@ -513,17 +508,8 @@ export default function HomeScreen() {
     useState<LightContext | null>(null);
 
   const [photos, setPhotos] = useState<SessionPhoto[]>([]);
-  const [cameraSource, setCameraSource] =
-    useState<CameraSource | null>(null);
-  const [capturedPhotoUri, setCapturedPhotoUri] =
-    useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraSessionKey, setCameraSessionKey] = useState(0);
-  const [cameraMountError, setCameraMountError] = useState<string | null>(null);
   const [missionResults, setMissionResults] =
     useState<Record<string, MissionResult>>({});
-  const [cameraPermission, requestCameraPermission] =
-    useCameraPermissions();
 
   const [passport, setPassport] = useState<PassportEntry[]>([]);
   const [passportLoaded, setPassportLoaded] = useState(false);
@@ -532,7 +518,6 @@ export default function HomeScreen() {
   const [selectedPassportId, setSelectedPassportId] =
     useState<string | null>(null);
   const [passportPhotoIndex, setPassportPhotoIndex] = useState(0);
-  const [passportZoomUri, setPassportZoomUri] = useState<string | null>(null);
 
   const [playtestSessions, setPlaytestSessions] =
     useState<PlaytestSession[]>([]);
@@ -569,7 +554,6 @@ export default function HomeScreen() {
     useRef<Location.LocationSubscription | null>(null);
   const headingWatcher =
     useRef<Location.LocationSubscription | null>(null);
-  const cameraRef = useRef<CameraView | null>(null);
   const missionResultsRef = useRef<Record<string, MissionResult>>({});
   const lastTracePointRef = useRef<GeoPoint | null>(null);
   const planRef = useRef<JourneyPlan | null>(null);
@@ -725,13 +709,6 @@ export default function HomeScreen() {
   const currentMission: Mission | null =
     plan?.sideMissions[sideMissionIndex] ?? null;
 
-  const activeCameraMission: Mission | null =
-    cameraSource === 'arrival'
-      ? plan?.arrivalMission ?? null
-      : cameraSource === 'free'
-        ? FREE_CAMERA_MISSION
-        : currentMission;
-
   const currentNavigationBeat =
     navigationRoute?.beats[navigationBeatIndex] ?? null;
 
@@ -787,7 +764,6 @@ export default function HomeScreen() {
     );
 
   const darkStage =
-    stage === 'camera' ||
     stage === 'developing' ||
     stage === 'journey';
 
@@ -1390,6 +1366,15 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             await AsyncStorage.removeItem(PASSPORT_KEY);
+
+            try {
+              const photoDirectory = new Directory(Paths.document, 'detour-photos');
+              if (photoDirectory.exists) photoDirectory.delete();
+            } catch {
+              // Passport metadata is already gone; stale local files should
+              // never make clearing the collection fail.
+            }
+
             setPassport([]);
             await Haptics.notificationAsync(
               Haptics.NotificationFeedbackType.Warning
@@ -1647,13 +1632,9 @@ export default function HomeScreen() {
     setTraveledMeters(0);
     setLightContext(null);
     setPhotos([]);
-    setCameraSource(null);
-    setCapturedPhotoUri(null);
     setLastCompletedEntry(null);
     setSelectedPassportId(null);
     activeCameraRequestRef.current = null;
-    setCameraReady(false);
-    setCameraMountError(null);
     setMissionResults({});
     missionResultsRef.current = {};
     lastTracePointRef.current = null;
@@ -1712,21 +1693,6 @@ export default function HomeScreen() {
       return;
     }
 
-    if (stage === 'camera') {
-      transitionTo(
-        cameraSource === 'arrival'
-          ? 'arrival'
-          : cameraSource === 'free'
-            ? 'journey'
-            : 'mission'
-      );
-      return;
-    }
-
-    if (stage === 'photoReview') {
-      transitionTo('camera', () => setCapturedPhotoUri(null));
-      return;
-    }
 
     if (stage === 'sceneIssue') {
       transitionTo('arrival');
@@ -1963,6 +1929,15 @@ export default function HomeScreen() {
             recoveryMinutes,
           maxDistanceMeters:
             distanceBudget,
+          sideMissionCount: 0,
+          avoidRoutes: [
+            activeTrace,
+            ...passport.slice(0, 5).map((entry) =>
+              entry.route && entry.route.length >= 2
+                ? entry.route
+                : entry.plannedRoute ?? []
+            ),
+          ].filter((route): route is GeoPoint[] => Array.isArray(route) && route.length >= 2),
         });
 
       const fallbackArrival =
@@ -2623,11 +2598,22 @@ export default function HomeScreen() {
 
       setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
 
+      const recentRoutes = passport
+        .slice(0, 6)
+        .map((entry) =>
+          entry.route && entry.route.length >= 2
+            ? entry.route
+            : entry.plannedRoute ?? []
+        )
+        .filter((route): route is GeoPoint[] => Array.isArray(route) && route.length >= 2);
+
       const routed = await resolveRoutedScene({
         start: startPoint,
         candidates: rankedCandidates,
         minutes,
         distanceScale: paceDistanceScale,
+        sideMissionCount: getJourneyProfile(minutes).sideMissionCount,
+        avoidRoutes: recentRoutes,
       });
 
       advanceTicketProgress(
@@ -3158,47 +3144,6 @@ export default function HomeScreen() {
     await completeDetour();
   }
 
-  async function persistPhoto(tempUri: string) {
-    try {
-      const directory = new Directory(Paths.document, 'detour-photos');
-      directory.create({ idempotent: true, intermediates: true });
-
-      const source = new File(tempUri);
-      const destination = new File(
-        directory,
-        `detour-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`
-      );
-
-      await source.copy(destination);
-      return destination.uri;
-    } catch {
-      return tempUri;
-    }
-  }
-
-  async function savePhotoToSystemLibrary(localUri: string) {
-    try {
-      const permission = await requestMediaLibraryPermissionsAsync(true);
-
-      if (permission.status !== 'granted') {
-        return false;
-      }
-
-      const asset = await Asset.create(localUri);
-      const album = await Album.get('DETOUR');
-
-      if (album) {
-        await album.add(asset);
-      } else {
-        await Album.create('DETOUR', [asset]);
-      }
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function openPassportEntry(entry: PassportEntry) {
     setSelectedPassportId(entry.id);
     setPassportPhotoIndex(0);
@@ -3235,7 +3180,47 @@ export default function HomeScreen() {
     }
   }
 
+  function reservedMissionPhotoCount() {
+    if (!plan) return 0;
+
+    const remainingSide = plan.sideMissions
+      .slice(sideMissionIndex)
+      .filter(
+        (mission) =>
+          mission.photo &&
+          missionResultsRef.current[mission.id] !== 'completed' &&
+          missionResultsRef.current[mission.id] !== 'skipped'
+      ).length;
+
+    const arrivalReserved =
+      plan.arrivalMission.photo &&
+      missionResultsRef.current[plan.arrivalMission.id] !== 'completed' &&
+      missionResultsRef.current[plan.arrivalMission.id] !== 'skipped'
+        ? 1
+        : 0;
+
+    return remainingSide + arrivalReserved;
+  }
+
   async function openCamera(source: CameraSource) {
+    if (photos.length >= rollCapacity) {
+      Alert.alert('這趟已經拍滿了', `每趟 DETOUR 最多留下 ${rollCapacity} 張照片。`);
+      return;
+    }
+
+    if (source === 'free') {
+      const reserved = reservedMissionPhotoCount();
+      const freeLimit = Math.max(0, rollCapacity - reserved);
+
+      if (photos.length >= freeLimit) {
+        Alert.alert(
+          '先留幾張給路上的尋找',
+          `剩下 ${reserved} 張底片已保留給還沒完成的拍照尋找。`
+        );
+        return;
+      }
+    }
+
     const colorWalkCameraMission: Mission =
       selectedMood === 'color' && selectedColor
         ? {
@@ -3276,99 +3261,6 @@ export default function HomeScreen() {
         savedCount: String(photos.length),
         rollCapacity: String(rollCapacity),
       },
-    });
-  }
-
-  async function takePhoto() {
-    if (!cameraReady || !cameraRef.current) return;
-
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.82,
-      });
-
-      if (!photo?.uri) return;
-
-      const stableUri = await persistPhoto(photo.uri);
-
-      transitionTo('photoReview', () => {
-        setCapturedPhotoUri(stableUri);
-      });
-    } catch {
-      Alert.alert('拍照失敗', '相機沒有成功留下照片，請再試一次。');
-    }
-  }
-
-  function retakePhoto() {
-    transitionTo('camera', () => {
-      setCapturedPhotoUri(null);
-      setCameraReady(false);
-    });
-  }
-
-  async function keepPhoto() {
-    if (!capturedPhotoUri || !activeCameraMission || !cameraSource) return;
-
-    const savedToLibrary = await savePhotoToSystemLibrary(capturedPhotoUri);
-
-    const newPhoto: SessionPhoto = {
-      id: `${Date.now()}`,
-      uri: capturedPhotoUri,
-      missionCode: activeCameraMission.code,
-      missionTitle: activeCameraMission.title,
-      source: cameraSource === 'free' ? 'free' : 'mission',
-      savedToLibrary,
-    };
-
-    const nextPhotos = [...photos, newPhoto];
-    setPhotos(nextPhotos);
-
-    if (cameraSource !== 'free') {
-      recordMissionResult(activeCameraMission, 'completed');
-    }
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    );
-
-    if (cameraSource === 'free') {
-      transitionTo('journey', () => {
-        setCapturedPhotoUri(null);
-        setCameraSource(null);
-      });
-      return;
-    }
-
-    if (cameraSource === 'arrival') {
-      setCapturedPhotoUri(null);
-      setCameraSource(null);
-      await completeDetour(nextPhotos);
-      return;
-    }
-
-    if (!plan) return;
-
-    const nextIndex = sideMissionIndex + 1;
-    sideMissionIndexRef.current = nextIndex;
-
-    if (
-      nextIndex >= plan.sideMissions.length &&
-      traveledMetersRef.current >= plan.profile.targetDistanceMeters
-    ) {
-      transitionTo('arrival', () => {
-        setSideMissionIndex(nextIndex);
-        setCapturedPhotoUri(null);
-        setCameraSource(null);
-      });
-      return;
-    }
-
-    transitionTo('journey', () => {
-      setSideMissionIndex(nextIndex);
-      setCapturedPhotoUri(null);
-      setCameraSource(null);
     });
   }
 
@@ -3425,7 +3317,6 @@ export default function HomeScreen() {
     };
 
     const route = activeTrace.length >= 2 ? activeTrace : [];
-    const discoveries = (plan?.sideMissions.length ?? 0) + 1;
     const finalPhotos = photoOverride ?? photos;
     const missionHistory: PassportMission[] = plan
       ? [...plan.sideMissions, plan.arrivalMission].map((mission) => ({
@@ -3437,6 +3328,9 @@ export default function HomeScreen() {
           photoRequired: mission.photo,
         }))
       : [];
+    const discoveries = missionHistory.filter(
+      (mission) => mission.result === 'completed'
+    ).length;
 
     const entry: PassportEntry = {
       id: `${Date.now()}`,
@@ -3562,7 +3456,7 @@ export default function HomeScreen() {
         null;
     }
 
-    const nextPassport = [entry, ...passport].slice(0, 50);
+    const nextPassport = [entry, ...passport];
     setLastCompletedEntry(entry);
     await savePassport(nextPassport);
 
@@ -3581,171 +3475,6 @@ export default function HomeScreen() {
         barStyle={chromeDark ? 'light-content' : 'dark-content'}
       />
 
-      <Modal
-        visible={stage === 'camera' && !!activeCameraMission}
-        animationType="none"
-        presentationStyle="fullScreen"
-        onRequestClose={goBack}
-      >
-        {activeCameraMission && (
-          <View style={styles.cameraModalScreen}>
-            <CameraView
-              key={`detour-camera-${cameraSessionKey}`}
-              ref={cameraRef}
-              style={styles.cameraPreview}
-              facing="back"
-              mode="picture"
-              onCameraReady={() => setCameraReady(true)}
-              onMountError={(event) => {
-                setCameraReady(false);
-                setCameraMountError(event.message);
-              }}
-            />
-
-            <View style={styles.cameraOverlay} pointerEvents="box-none">
-              <View style={styles.cameraTop}>
-                <Pressable onPress={goBack} style={styles.cameraClose}>
-                  <Text style={styles.cameraCloseText}>×</Text>
-                </Pressable>
-
-                <View style={styles.cameraMissionChip}>
-                  <Text style={styles.cameraMissionChipText}>
-                    {cameraSource === 'arrival'
-                      ? 'FINAL'
-                      : cameraSource === 'free'
-                        ? 'FREE FRAME'
-                        : 'SIDE QUEST'} ·{' '}
-                    {activeCameraMission.code}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.cameraPrompt}>
-                <Text style={styles.cameraPromptTitle}>
-                  {activeCameraMission.title}
-                </Text>
-                <Text style={styles.cameraPromptRule}>
-                  {cameraSource === 'free'
-                    ? '自由拍攝。留下這張後會回到主線，不會推進任務。'
-                    : activeCameraMission.photo
-                      ? activeCameraMission.completion
-                      : '這張照片是你自己的紀錄；不拍也可以完成任務。'}
-                </Text>
-              </View>
-
-              <View style={styles.cameraBottom}>
-                <View style={styles.cameraStatusColumn}>
-                  <Text style={styles.cameraReadyText}>
-                    {cameraMountError
-                      ? 'PREVIEW ERROR'
-                      : cameraReady
-                        ? 'READY'
-                        : 'CAMERA STARTING'}
-                  </Text>
-
-                  {devMode && cameraReady && (
-                    <Pressable
-                      onPress={() => {
-                        setCameraReady(false);
-                        setCameraMountError(null);
-                        setCameraSessionKey((value) => value + 1);
-                      }}
-                      hitSlop={10}
-                    >
-                      <Text style={styles.cameraRestartText}>
-                        預覽黑畫面？重啟
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-
-                <Pressable
-                  disabled={!cameraReady}
-                  onPress={takePhoto}
-                  style={({ pressed }) => [
-                    styles.shutterOuter,
-                    !cameraReady && styles.shutterDisabled,
-                    pressed && styles.shutterPressed,
-                  ]}
-                >
-                  <View style={styles.shutterInner} />
-                </Pressable>
-
-                <Text style={styles.cameraCount}>{photos.length} SAVED</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </Modal>
-
-      <Modal
-        visible={
-          stage === 'photoReview' &&
-          !!capturedPhotoUri &&
-          !!activeCameraMission
-        }
-        animationType="fade"
-        presentationStyle="fullScreen"
-        onRequestClose={goBack}
-      >
-        {capturedPhotoUri && activeCameraMission && (
-          <View style={styles.reviewScreen}>
-            <Image
-              key={capturedPhotoUri}
-              source={{ uri: capturedPhotoUri }}
-              style={styles.reviewImage}
-              resizeMode="cover"
-              fadeDuration={0}
-              onError={(event) => {
-                Alert.alert(
-                  '照片預覽失敗',
-                  `照片有拍到，但預覽載入失敗：${event.nativeEvent.error}`
-                );
-              }}
-            />
-
-            <View style={styles.reviewShade} />
-
-            <View style={styles.reviewTop}>
-              <Text style={styles.reviewBrand}>DETOUR</Text>
-              <Text style={styles.reviewMeta}>PHOTO CHECK</Text>
-            </View>
-
-            <View style={styles.reviewBottom}>
-              <Text style={styles.reviewMissionCode}>
-                {activeCameraMission.code}
-              </Text>
-              <Text style={styles.reviewTitle}>留下這張？</Text>
-              <Text style={styles.reviewLibraryHint}>
-                留下後會存進 DETOUR Passport，也會加入 iPhone「照片」。
-              </Text>
-
-              <View style={styles.reviewActions}>
-                <Pressable
-                  onPress={retakePhoto}
-                  style={({ pressed }) => [
-                    styles.reviewSecondary,
-                    pressed && styles.reviewPressed,
-                  ]}
-                >
-                  <Text style={styles.reviewSecondaryText}>重拍</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={keepPhoto}
-                  style={({ pressed }) => [
-                    styles.reviewPrimary,
-                    pressed && styles.reviewPressed,
-                  ]}
-                >
-                  <Text style={styles.reviewPrimaryText}>留下這張</Text>
-                  <Text style={styles.reviewPrimaryText}>→</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        )}
-      </Modal>
 
       <Animated.View
         style={[
@@ -4565,31 +4294,19 @@ export default function HomeScreen() {
                 {selectedMood === 'color' && selectedColor ? (
                   <>
                     <Text style={styles.detourTicketHighlight}>
-                      • 這趟找{selectedColor.label}
+                      • 今天找{selectedColor.label}
                     </Text>
                     <Text style={styles.detourTicketHighlight}>
-                      • 看到就拿起相機
-                    </Text>
-                    <Text style={styles.detourTicketHighlight}>
-                      • 其他時間跟著導航走
-                    </Text>
-                    <Text style={styles.detourTicketHighlight}>
-                      • 終點先保密
+                      • 終點保密
                     </Text>
                   </>
                 ) : (
                   <>
                     <Text style={styles.detourTicketHighlight}>
-                      • 1 條隱藏主線
+                      • {previewProfile.sideMissionCount} 個沿路尋找
                     </Text>
                     <Text style={styles.detourTicketHighlight}>
-                      • {previewProfile.sideMissionCount} 個尋找
-                    </Text>
-                    <Text style={styles.detourTicketHighlight}>
-                      • 1 個抵達發現
-                    </Text>
-                    <Text style={styles.detourTicketHighlight}>
-                      • 終點先保密
+                      • 終點保密
                     </Text>
                   </>
                 )}
@@ -4644,9 +4361,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={styles.ticketReadyPrimaryText}>
-                {devMode
-                  ? '使用這張票開始室內主線'
-                  : '使用這張票開始 DETOUR'}
+                {devMode ? '開始室內測試' : '出發'}
               </Text>
 
               <Text style={styles.ticketReadyPrimaryArrow}>
@@ -4712,8 +4427,8 @@ export default function HomeScreen() {
               )}
               {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '新的尋找' : '到終點了'}</Text></View>}
               <View style={styles.v35JourneyBottom}>
+                <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>↗</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>小地圖</Text></Pressable>
                 <Pressable onPress={() => openCamera('free')} style={({ pressed }) => [styles.v35JourneyCamera, pressed && styles.v35JourneyPressed]}><Text style={styles.v35JourneyCameraText}>◎</Text></Pressable>
-                <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>→</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>看下一段路</Text></Pressable>
                 {devMode && <Pressable onPress={simulateWalk} style={styles.v35DevAdvance}><Text style={styles.v35DevAdvanceText}>室內測試 · 模擬前進</Text></Pressable>}
               </View>
             </View>
@@ -5379,7 +5094,7 @@ export default function HomeScreen() {
                   {formatPassportDate(selectedPassportEntry.completedAt)}
                 </Text>
                 <Text style={styles.postcardDetailTitle}>
-                  {selectedPassportEntry.moodCode}
+                  {selectedPassportEntry.moodLabel}
                 </Text>
                 <Text style={styles.postcardDetailMeta}>
                   {selectedPassportEntry.city} · {selectedPassportEntry.minutes} 分鐘 ·{' '}
@@ -5388,14 +5103,14 @@ export default function HomeScreen() {
 
                 {selectedPassportEntry.sceneName && (
                   <Text style={styles.postcardDetailScene}>
-                    DESTINATION · {selectedPassportEntry.sceneName}
+                    終點 · {selectedPassportEntry.sceneName}
                   </Text>
                 )}
               </View>
 
               <View style={styles.postcardFacts}>
                 <View style={styles.postcardFact}>
-                  <Text style={styles.postcardFactLabel}>START</Text>
+                  <Text style={styles.postcardFactLabel}>出發</Text>
                   <Text style={styles.postcardFactValue}>
                     {formatClockTime(
                       selectedPassportEntry.startedAt
@@ -5404,7 +5119,7 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.postcardFact}>
-                  <Text style={styles.postcardFactLabel}>END</Text>
+                  <Text style={styles.postcardFactLabel}>完成</Text>
                   <Text style={styles.postcardFactValue}>
                     {formatClockTime(
                       selectedPassportEntry.completedAt
@@ -5413,10 +5128,10 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.postcardFact}>
-                  <Text style={styles.postcardFactLabel}>ACTUAL</Text>
+                  <Text style={styles.postcardFactLabel}>實際</Text>
                   <Text style={styles.postcardFactValue}>
                     {selectedPassportEntry.actualDurationMinutes
-                      ? `${selectedPassportEntry.actualDurationMinutes} MIN`
+                      ? `${selectedPassportEntry.actualDurationMinutes} 分`
                       : '—'}
                   </Text>
                 </View>
@@ -5425,29 +5140,11 @@ export default function HomeScreen() {
               {selectedPassportEntry.photos &&
               selectedPassportEntry.photos.length > 0 ? (
                 <View style={styles.v35ReviewPhotoSection}>
-                  <Pressable
-                    accessibilityLabel="放大檢視照片"
-                    onPress={() =>
-                      setPassportZoomUri(
-                        selectedPassportEntry.photos![
-                          Math.min(
-                            passportPhotoIndex,
-                            selectedPassportEntry.photos!.length - 1
-                          )
-                        ].uri
-                      )
-                    }
-                    style={({ pressed }) => [pressed && styles.v38PhotoPressed]}
-                  >
-                    <Image
-                      source={{ uri: selectedPassportEntry.photos[Math.min(passportPhotoIndex, selectedPassportEntry.photos.length - 1)].uri }}
-                      style={styles.v35ReviewHeroPhoto}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.v38ZoomBadge}>
-                      <Text style={styles.v38ZoomBadgeText}>點一下放大</Text>
-                    </View>
-                  </Pressable>
+                  <Image
+                    source={{ uri: selectedPassportEntry.photos[Math.min(passportPhotoIndex, selectedPassportEntry.photos.length - 1)].uri }}
+                    style={styles.v35ReviewHeroPhoto}
+                    resizeMode="cover"
+                  />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.v35ReviewThumbStrip}>
                     {selectedPassportEntry.photos.map((photo, index) => (<Pressable key={photo.id} onPress={() => setPassportPhotoIndex(index)}><Image source={{ uri: photo.uri }} style={[styles.v35ReviewThumb, index === passportPhotoIndex && styles.v35ReviewThumbActive]} resizeMode="cover" /></Pressable>))}
                   </ScrollView>
@@ -5461,14 +5158,14 @@ export default function HomeScreen() {
                   <View style={styles.postcardMapSection}>
                     <View style={styles.postcardSectionHeader}>
                       <Text style={styles.postcardSectionLabel}>
-                        ROUTE / TRACE
+                        走過的路
                       </Text>
                       <Text style={styles.postcardSectionMeta}>
                         {(
                           (selectedPassportEntry.plannedRouteDistanceMeters ??
                             selectedPassportEntry.distanceMeters ??
                             0) / 1000
-                        ).toFixed(2)} KM
+                        ).toFixed(2)} 公里
                       </Text>
                     </View>
 
@@ -5476,13 +5173,13 @@ export default function HomeScreen() {
                       <View style={styles.postcardLegendItem}>
                         <View style={styles.postcardLegendPlanned} />
                         <Text style={styles.postcardLegendText}>
-                          PLANNED
+                          原路線
                         </Text>
                       </View>
                       <View style={styles.postcardLegendItem}>
                         <View style={styles.postcardLegendActual} />
                         <Text style={styles.postcardLegendText}>
-                          ACTUAL
+                          實際走過
                         </Text>
                       </View>
                       {selectedPassportEntry.rerouteCount ? (
@@ -5613,7 +5310,7 @@ export default function HomeScreen() {
                       <View style={styles.postcardMissionCopy}>
                         <View style={styles.postcardMissionCodeRow}>
                           <Text style={styles.postcardMissionCode}>
-                            {mission.code}
+                            尋找 {String(index + 1).padStart(2, '0')}
                           </Text>
                           <Text
                             style={[
@@ -5713,42 +5410,6 @@ export default function HomeScreen() {
 
       </Animated.View>
 
-      <Modal
-        visible={Boolean(passportZoomUri)}
-        transparent={false}
-        animationType="fade"
-        onRequestClose={() => setPassportZoomUri(null)}
-      >
-        <View style={styles.v38ZoomScreen}>
-          <StatusBar barStyle="light-content" />
-          <ScrollView
-            style={styles.v38ZoomScroll}
-            contentContainerStyle={styles.v38ZoomContent}
-            minimumZoomScale={1}
-            maximumZoomScale={4}
-            bouncesZoom
-            centerContent
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-          >
-            {passportZoomUri && (
-              <Image
-                source={{ uri: passportZoomUri }}
-                style={styles.v38ZoomImage}
-                resizeMode="contain"
-              />
-            )}
-          </ScrollView>
-          <Pressable
-            onPress={() => setPassportZoomUri(null)}
-            style={styles.v38ZoomClose}
-            hitSlop={12}
-          >
-            <Text style={styles.v38ZoomCloseText}>×</Text>
-          </Pressable>
-          <Text style={styles.v38ZoomHint}>雙指縮放</Text>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -10942,13 +10603,13 @@ const styles = StyleSheet.create({
   v35QuestPulse: { position: 'absolute', left: 24, right: 24, top: 125, minHeight: 44, borderRadius: 22, backgroundColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
   v35QuestPulseText: { fontSize: 13, fontWeight: '900', color: INK },
   v35JourneyBottom: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  v35JourneyCamera: { width: 62, height: 62, borderRadius: 31, borderWidth: 1, borderColor: '#3A3936', alignItems: 'center', justifyContent: 'center' },
+  v35JourneyCamera: { width: 68, height: 68, borderRadius: 34, backgroundColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
   v35JourneyCameraText: { fontSize: 31, color: BONE },
-  v35JourneyPrimary: { flex: 1, minHeight: 68, backgroundColor: SIGNAL, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, position: 'relative' },
-  v35JourneyPrimaryPressed: { opacity: 0.8 },
-  v35JourneyPrimaryArrow: { fontSize: 34, color: BONE },
-  v35JourneyPrimaryDivider: { width: 1, height: 38, marginHorizontal: 18, backgroundColor: 'rgba(255,255,255,0.35)' },
-  v35JourneyPrimaryText: { flex: 1, fontSize: 24, fontWeight: '900', color: BONE, textAlign: 'center' },
+  v35JourneyPrimary: { flex: 1, minHeight: 62, borderWidth: 1, borderColor: '#3A3936', backgroundColor: 'transparent', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, position: 'relative' },
+  v35JourneyPrimaryPressed: { opacity: 0.72 },
+  v35JourneyPrimaryArrow: { fontSize: 20, color: '#A9A59C' },
+  v35JourneyPrimaryDivider: { width: 1, height: 28, marginHorizontal: 13, backgroundColor: '#3A3936' },
+  v35JourneyPrimaryText: { flex: 1, fontSize: 16, fontWeight: '800', color: BONE, textAlign: 'center' },
   v35JourneyPressed: { opacity: 0.75 },
   v35DevAdvance: { position: 'absolute', right: 0, bottom: 76, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#2A2926', borderRadius: 13 },
   v35DevAdvanceText: { fontSize: 9, color: '#A9A59B' },

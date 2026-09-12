@@ -181,23 +181,23 @@ export function getJourneyProfile(minutes: number): JourneyProfile {
     sideMissionCount = 2;
   } else if (safeMinutes <= 15) {
     targetDistanceMeters = 680;
-    sideMissionCount = 3;
+    sideMissionCount = 2;
   } else if (safeMinutes <= 30) {
     targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28);
-    sideMissionCount = 4;
+    sideMissionCount = 3;
   } else if (safeMinutes <= 45) {
     targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22);
-    sideMissionCount = 6;
+    sideMissionCount = 4;
   } else if (safeMinutes <= 60) {
     targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18);
-    sideMissionCount = 7;
+    sideMissionCount = 4;
   } else {
     // 90 minutes is intentionally not 1.5× the 60-minute distance. The
     // extra time is budget for looking, photographing and city friction.
     targetDistanceMeters = Math.round(1700 + (safeMinutes - 60) * (400 / 30));
-    // Keep a live Find present through a long Detour without turning it into
-    // a checklist. Public 90-minute journeys start around ten simple finds.
-    sideMissionCount = Math.min(10, Math.round(7 + (safeMinutes - 60) / 10));
+    // Long Detours deepen the route instead of adding more checklist items.
+    // Four photo finds leave room in the six-frame roll for free/arrival shots.
+    sideMissionCount = 4;
   }
 
   const milestones = Array.from(
