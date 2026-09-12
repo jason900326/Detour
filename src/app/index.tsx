@@ -2611,7 +2611,7 @@ export default function HomeScreen() {
       }
 
       if (rankedCandidates.length === 0) {
-        throw new Error('附近暫時沒有可用的 Scene。');
+        throw new Error('附近暫時沒有適合的終點。');
       }
 
       if (finalMood === 'food') {
@@ -2658,7 +2658,7 @@ export default function HomeScreen() {
 
       if (nextNavigationRoute.beats.length < 2) {
         throw new Error(
-          '這個 Scene 太近或路線資料不足，暫時無法組成一趟 DETOUR。'
+          '這個終點太近或路線資料不足，暫時無法組成一趟 DETOUR。'
         );
       }
 
@@ -2770,7 +2770,7 @@ export default function HomeScreen() {
 
       Alert.alert(
         '這張 DETOUR 車票暫時印不出來',
-        `${message}\n\n車票只有在 Scene 和步行路線都確認成功後才會發行。`
+        `${message}\n\n車票只有在終點和步行路線都確認成功後才會發行。`
       );
     }
   }
@@ -3128,7 +3128,7 @@ export default function HomeScreen() {
 
   async function shareJourney(entry: PassportEntry) {
     const message = [
-      'DETOUR JOURNEY TICKET',
+      'DETOUR 旅程票',
       entry.sceneName ? `終點：${entry.sceneName}` : null,
       `${formatPassportDate(entry.completedAt)} · ${entry.minutes} 分鐘`,
     ]
@@ -3719,18 +3719,14 @@ export default function HomeScreen() {
               {onboardingStep === 0 && (
                 <>
                   <Text style={styles.onboardingEyebrow}>
-                    THE PROMISE
+                    先選時間
                   </Text>
                   <Text style={styles.onboardingTitle}>
                     給我一點時間。{`\n`}
                     剩下的我決定。
                   </Text>
                   <Text style={styles.onboardingBody}>
-                    你只選空檔和現在的心情。DETOUR
-                    會決定方向、Scene，還有路上會發生什麼。
-                  </Text>
-                  <Text style={styles.onboardingNote}>
-                    不是景點清單，也不用先規劃。
+                    你只要選時間，還有這次想怎麼晃。
                   </Text>
                 </>
               )}
@@ -3738,17 +3734,13 @@ export default function HomeScreen() {
               {onboardingStep === 1 && (
                 <>
                   <Text style={styles.onboardingEyebrow}>
-                    HIDDEN DESTINATION
+                    終點先保密
                   </Text>
                   <Text style={styles.onboardingTitle}>
                     終點先藏起來。
                   </Text>
                   <Text style={styles.onboardingBody}>
-                    主線只告訴你下一小段的方向與距離。
-                    真的看不懂時，點箭頭才看那一小段地圖。
-                  </Text>
-                  <Text style={styles.onboardingNote}>
-                    不是要你盲走，只是不把整趟一開始就說完。
+                    照方向走。真的看不懂，再打開那一小段地圖。
                   </Text>
                 </>
               )}
@@ -3756,19 +3748,14 @@ export default function HomeScreen() {
               {onboardingStep === 2 && (
                 <>
                   <Text style={styles.onboardingEyebrow}>
-                    YOU CAN CHANGE IT
+                    不對就換
                   </Text>
                   <Text style={styles.onboardingTitle}>
                     不對，{`\n`}
                     就換掉。
                   </Text>
                   <Text style={styles.onboardingBody}>
-                    店沒開、進不去、到了覺得不值得，都可以換終點。
-                    已完成的任務不會消失。
-                  </Text>
-                  <Text style={styles.onboardingNote}>
-                    定位只在開始 DETOUR 後使用。測試版會匿名回傳完成率、
-                    AI / fallback 與你的簡短評分；不包含 GPS、路線、照片或目的地名稱。
+                    店沒開、進不去、不值得，就換下一個。
                   </Text>
                 </>
               )}
@@ -3809,9 +3796,15 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
 
-              <Text style={styles.settingsBrand}>
-                SETTINGS
-              </Text>
+              <Pressable
+                onLongPress={toggleDevMode}
+                delayLongPress={900}
+                hitSlop={10}
+              >
+                <Text style={styles.settingsBrand}>
+                  設定
+                </Text>
+              </Pressable>
 
               <Text style={styles.settingsMeta}>
                 DETOUR
@@ -3824,7 +3817,7 @@ export default function HomeScreen() {
             >
               <View style={styles.settingsHero}>
                 <Text style={styles.settingsEyebrow}>
-                  WALK YOUR WAY
+                  調整步調
                 </Text>
                 <Text style={styles.settingsTitle}>
                   讓 DETOUR{`\n`}
@@ -3884,9 +3877,6 @@ export default function HomeScreen() {
                       </View>
 
                       <View style={styles.settingsChoiceRight}>
-                        <Text style={styles.settingsChoiceCode}>
-                          {pace.code}
-                        </Text>
                         <Text style={styles.settingsChoiceMark}>
                           {active ? '●' : '○'}
                         </Text>
@@ -3896,6 +3886,7 @@ export default function HomeScreen() {
                 })}
               </View>
 
+              {devMode && (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>
                   PROTOTYPE
@@ -3930,10 +3921,11 @@ export default function HomeScreen() {
                   </Text>
                 </Pressable>
               </View>
+              )}
 
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>
-                  FIRST RUN
+                  開始導覽
                 </Text>
 
                 <Pressable
@@ -3949,7 +3941,7 @@ export default function HomeScreen() {
                       再看一次開始導覽
                     </Text>
                     <Text style={styles.settingsActionNote}>
-                      不會清除 Passport 或偏好。
+                      不會清除旅程收藏或偏好。
                     </Text>
                   </View>
 
@@ -3961,15 +3953,15 @@ export default function HomeScreen() {
 
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>
-                  DATA
+                  旅程資料
                 </Text>
 
                 <View style={styles.settingsDataRow}>
                   <Text style={styles.settingsDataLabel}>
-                    PASSPORT
+                    已完成旅程
                   </Text>
                   <Text style={styles.settingsDataValue}>
-                    {passport.length} DETOURS
+                    {passport.length} 趟
                   </Text>
                 </View>
 
@@ -3982,11 +3974,12 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.settingsDangerText}>
-                    清除測試 Passport
+                    清除已完成旅程
                   </Text>
                 </Pressable>
               </View>
 
+              {devMode && (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>
                   AI ENGINE
@@ -4046,7 +4039,9 @@ export default function HomeScreen() {
                   </Text>
                 </Pressable>
               </View>
+              )}
 
+              {devMode && (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>
                   PLAYTEST DATA
@@ -4149,15 +4144,16 @@ export default function HomeScreen() {
                   </Text>
                 </Pressable>
               </View>
+              )}
 
               <View style={styles.settingsPrivacy}>
                 <Text style={styles.settingsPrivacyTitle}>
-                  LOCATION
+                  定位
                 </Text>
                 <Text style={styles.settingsPrivacyBody}>
                   DETOUR 會在首頁先用目前位置準備附近候選，
                   讓你選完時間和心情後不用從零開始等。
-                  旅程中的 GPS 軌跡仍只留在手機。
+                  旅程中的定位軌跡仍只留在手機。
                 </Text>
               </View>
             </ScrollView>
@@ -4252,7 +4248,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={styles.v35MinuteNumber}>{sliderDisplayMinutes}</Text>
-              <Text style={styles.v35MinuteUnit}>MIN</Text>
+              <Text style={styles.v35MinuteUnit}>分</Text>
             </Animated.View>
             <View
               style={styles.v35SliderWrap}
@@ -4336,7 +4332,7 @@ export default function HomeScreen() {
             <View style={styles.v35MoodTop}>
               <Pressable onPress={goBack} hitSlop={16} style={styles.v35BackButton}><Text style={styles.v35BackArrow}>‹</Text></Pressable>
               <Text style={styles.v35MoodBrand}>DETOUR</Text>
-              <View style={styles.v35TimePill}><Text style={styles.v35TimePillIcon}>◷</Text><Text style={styles.v35TimePillText}>{selectedTime} MIN</Text></View>
+              <View style={styles.v35TimePill}><Text style={styles.v35TimePillIcon}>◷</Text><Text style={styles.v35TimePillText}>{selectedTime} 分</Text></View>
             </View>
             <Text style={styles.v35MoodTitle}>這次想怎麼晃？</Text>
             <View style={styles.v35UnderlineMood} />
@@ -4402,24 +4398,24 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.ticketReadyMeta}>
-                TICKET READY
+                車票好了
               </Text>
             </View>
 
             <View style={styles.ticketReadyHero}>
               <Text style={styles.ticketFlowEyebrow}>
-                YOUR ROUTE IS READY
+                可以出發了
               </Text>
 
               <Text style={styles.ticketReadyTitle}>
-                你的 DETOUR{`\n`}
-                已經開好了。
+                這張 DETOUR{`\n`}
+                可以出發了。
               </Text>
 
               <Text style={styles.ticketReadySubtitle}>
                 {selectedMood === 'color' && selectedColor
                   ? `這趟找${selectedColor.label}。看到就拍，其他時間跟著導航走。終點繼續保密。`
-                  : 'Scene、步行主線和任務都已鎖定。終點繼續保密。'}
+                  : '方向和路上的尋找都準備好了。終點繼續保密。'}
               </Text>
             </View>
 
@@ -4435,7 +4431,7 @@ export default function HomeScreen() {
                     DETOUR
                   </Text>
                   <Text style={styles.detourTicketMicro}>
-                    YOUR ROUTE IS READY
+                    終點保密
                   </Text>
                 </View>
 
@@ -4452,16 +4448,16 @@ export default function HomeScreen() {
               <View style={styles.detourTicketReadyFacts}>
                 <View style={styles.detourTicketReadyFact}>
                   <Text style={styles.detourTicketFactLabel}>
-                    TIME
+                    時間
                   </Text>
                   <Text style={styles.detourTicketReadyValue}>
-                    {selectedTime} MIN
+                    {selectedTime} 分
                   </Text>
                 </View>
 
                 <View style={styles.detourTicketReadyFact}>
                   <Text style={styles.detourTicketFactLabel}>
-                    MOOD
+                    心情
                   </Text>
                   <Text style={styles.detourTicketReadyValue}>
                     {mood?.label ?? '—'}{selectedMood === 'color' && selectedColor ? ` · ${selectedColor.label}` : ''}
@@ -4470,10 +4466,10 @@ export default function HomeScreen() {
 
                 <View style={styles.detourTicketReadyFact}>
                   <Text style={styles.detourTicketFactLabel}>
-                    START
+                    出發
                   </Text>
                   <Text style={styles.detourTicketReadyValue}>
-                    NOW
+                    現在
                   </Text>
                 </View>
               </View>
@@ -4481,7 +4477,7 @@ export default function HomeScreen() {
               <View style={styles.detourTicketDash} />
 
               <Text style={styles.detourTicketHighlightLabel}>
-                HIGHLIGHTS
+                這趟
               </Text>
 
               <View style={styles.detourTicketHighlights}>
@@ -4542,11 +4538,11 @@ export default function HomeScreen() {
 
               <View style={styles.detourTicketReadyFoot}>
                 <Text style={styles.detourTicketFootnote}>
-                  KEEP EXPLORING
+                  去走走
                 </Text>
 
                 <Text style={styles.detourTicketReadyStamp}>
-                  ROUTE LOCKED
+                  路線好了
                 </Text>
               </View>
             </View>
@@ -4572,7 +4568,7 @@ export default function HomeScreen() {
 
             {devMode && (
               <Text style={styles.ticketReadyTestLabel}>
-                INDOOR TEST · 真實 Scene / 真實 Route
+                室內測試 · 真實終點 / 路線
               </Text>
             )}
           </View>
@@ -4606,6 +4602,15 @@ export default function HomeScreen() {
                   <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35Compass, pressed && styles.v35JourneyPressed]}><View style={styles.v35CompassTicks} /><View style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}><Text style={styles.v35CompassArrow}>↑</Text></View></Pressable>
                   <Text style={styles.v35JourneyDistance}>{Math.round(nextBeatMeters)}<Text style={styles.v35JourneyDistanceUnit}> m</Text></Text>
                   <Text style={styles.v35JourneyInstruction}>{currentNavigationBeat.instruction || '先走這一段。'}</Text>
+                  {selectedMood !== 'color' && currentMission && (
+                    <Pressable
+                      onPress={() => openCamera('side')}
+                      style={({ pressed }) => [{ marginTop: 16, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 16 }, pressed && styles.v35JourneyPressed]}
+                    >
+                      <Text numberOfLines={1} style={{ flex: 1, color: BONE, fontSize: 17, fontWeight: '800' }}>{currentMission.title}</Text>
+                      <Text style={{ color: SIGNAL, fontSize: 12, fontWeight: '800' }}>看到就拍</Text>
+                    </Pressable>
+                  )}
                   {selectedMood === 'color' && selectedColor && (
                     <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 999 }}>
                       <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedColor.hex }} />
@@ -4615,10 +4620,10 @@ export default function HomeScreen() {
                   {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
                 </View>
               )}
-              {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '路上任務出現' : '抵達終點'}</Text></View>}
+              {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '還在找這個' : '到終點了'}</Text></View>}
               <View style={styles.v35JourneyBottom}>
                 <Pressable onPress={() => openCamera('free')} style={({ pressed }) => [styles.v35JourneyCamera, pressed && styles.v35JourneyPressed]}><Text style={styles.v35JourneyCameraText}>◎</Text></Pressable>
-                <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>→</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>繼續前進</Text></Pressable>
+                <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>→</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>看下一段路</Text></Pressable>
                 {devMode && <Pressable onPress={simulateWalk} style={styles.v35DevAdvance}><Text style={styles.v35DevAdvanceText}>室內測試 · 模擬前進</Text></Pressable>}
               </View>
             </View>
@@ -4638,7 +4643,7 @@ export default function HomeScreen() {
               <Text style={styles.fieldEventBrand}>DETOUR</Text>
 
               <Text style={styles.fieldEventMeta}>
-                FIELD EVENT
+                尋找
               </Text>
             </View>
 
@@ -4656,7 +4661,7 @@ export default function HomeScreen() {
               <View style={styles.fieldEventRouteLineMuted} />
 
               <Text style={styles.fieldEventRouteLabel}>
-                MAIN QUEST CONTINUES
+                找到就拍，找不到就繼續走
               </Text>
             </View>
 
@@ -4666,7 +4671,7 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.fieldEventEyebrow}>
-                SIDE QUEST · {currentMission.code}
+                路上找這個
               </Text>
 
               <Text style={styles.fieldEventTitle}>
@@ -4677,14 +4682,6 @@ export default function HomeScreen() {
                 {currentMission.instruction}
               </Text>
 
-              <View style={styles.fieldEventRule}>
-                <Text style={styles.fieldEventRuleLabel}>
-                  CLEAR CONDITION
-                </Text>
-                <Text style={styles.fieldEventRuleText}>
-                  {currentMission.completion}
-                </Text>
-              </View>
 
               {plan.context !== 'day' && (
                 <Text style={styles.fieldEventContextNote}>
@@ -4719,7 +4716,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     <Text style={styles.fieldEventSkipText}>
-                      找不到，跳過這個任務
+                      找不到，先跳過
                     </Text>
                   </Pressable>
                 </>
@@ -4734,7 +4731,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     <Text style={styles.fieldEventPrimaryText}>
-                      完成這個 Side Quest
+                      完成
                     </Text>
                     <Text style={styles.fieldEventPrimaryArrow}>
                       →
@@ -4765,7 +4762,7 @@ export default function HomeScreen() {
             <View style={styles.cleanArrivalTop}>
               <Text style={[styles.brand]}>DETOUR</Text>
               <Text style={styles.cleanArrivalMeta}>
-                {selectedScene?.label ?? 'ARRIVAL'}
+                {selectedScene?.label ?? '抵達'}
               </Text>
             </View>
 
@@ -4778,22 +4775,19 @@ export default function HomeScreen() {
               </View>
 
               <Text style={styles.arrivalRevealLabel}>
-                DESTINATION REVEALED
+                終點揭曉
               </Text>
             </View>
 
             <View style={styles.cleanArrivalHero}>
               <Text style={styles.cleanArrivalKicker}>
-                MAIN QUEST · ARRIVAL
+                到了
               </Text>
 
               <Text style={styles.cleanArrivalPlace}>
                 {selectedScene?.name ?? '終點'}
               </Text>
 
-              <Text style={styles.cleanArrivalCode}>
-                {plan.arrivalMission.code}
-              </Text>
 
               <Text style={styles.cleanArrivalMission}>
                 {plan.arrivalMission.title}
@@ -4803,9 +4797,6 @@ export default function HomeScreen() {
                 {plan.arrivalMission.instruction}
               </Text>
 
-              <Text style={styles.cleanArrivalCompletion}>
-                完成：{plan.arrivalMission.completion}
-              </Text>
             </View>
 
             <View style={styles.cleanArrivalBottom}>
@@ -4834,7 +4825,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     <Text style={styles.cleanArrivalSkipText}>
-                      找不到，跳過最後任務
+                      找不到，先完成這趟
                     </Text>
                   </Pressable>
                 </>
@@ -4888,7 +4879,7 @@ export default function HomeScreen() {
               </Pressable>
 
               <Text style={styles.cleanArrivalSource}>
-                Scene + walking route · OpenStreetMap
+                地圖資料：OpenStreetMap
               </Text>
             </View>
           </View>
@@ -4925,7 +4916,7 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.reissueMeta}>
-                ROUTE REISSUE
+                換一條
               </Text>
             </View>
 
@@ -4940,11 +4931,11 @@ export default function HomeScreen() {
                       styles.reissueRouteLabel,
                     ]}
                   >
-                    CURRENT ROUTE
+                    目前路線
                   </Text>
 
                   <Text style={styles.reissueRouteStatus}>
-                    INTERRUPTED
+                    中斷
                   </Text>
                 </View>
 
@@ -4966,7 +4957,7 @@ export default function HomeScreen() {
                       styles.reissueRouteFootText,
                     ]}
                   >
-                    已走過的路和 Side Quest 保留
+                    已走過的路和尋找會保留
                   </Text>
                   <Text style={styles.reissueRouteFootArrow}>→</Text>
                   <Text
@@ -4981,7 +4972,7 @@ export default function HomeScreen() {
 
               <View style={styles.reissueHero}>
                 <Text style={styles.reissueEyebrow}>
-                  THIS ONE DOESN'T WORK
+                  這個終點不行
                 </Text>
 
                 <Text
@@ -4998,7 +4989,7 @@ export default function HomeScreen() {
                     styles.reissueBody,
                   ]}
                 >
-                  告訴 DETOUR 發生什麼事。會從你現在的位置重新找終點，不會重跑已完成的任務。
+                  從你現在的位置換一個終點；已完成的尋找會保留。
                 </Text>
               </View>
 
@@ -5030,7 +5021,7 @@ export default function HomeScreen() {
                     id: 'not-worth-it' as SceneIssueReason,
                     index: '03',
                     title: '到現場覺得不值得',
-                    note: 'Scene 不夠有趣',
+                    note: '這裡不夠有趣',
                     mark: '−',
                   },
                   {
@@ -5109,20 +5100,19 @@ export default function HomeScreen() {
             <View style={styles.developingTop}>
               <Text style={styles.brandLight}>DETOUR</Text>
               <Text style={styles.developingMeta}>
-                ROLL {String(passport.length).padStart(2, '0')}
+                第 {String(passport.length + 1).padStart(2, '0')} 趟
               </Text>
             </View>
 
             <View style={styles.developingHero}>
               <View style={styles.developingDot} />
-              <Text style={styles.developingCode}>DEVELOPING</Text>
+<Text style={styles.developingCode}>正在整理</Text>
               <Text style={styles.developingTitle}>
                 先別看。{`\n`}
                 這趟正在顯影。
               </Text>
               <Text style={styles.developingBody}>
-                {photos.length} FRAME{photos.length === 1 ? '' : 'S'} ·{' '}
-                {contextCode(lightContext)}
+                {photos.length} 張照片
               </Text>
             </View>
 
@@ -5159,7 +5149,7 @@ export default function HomeScreen() {
                 <Text style={styles.backArrow}>←</Text>
               </Pressable>
               <Text style={styles.brand}>已完成的旅程</Text>
-              <Text style={styles.meta}>TAIPEI</Text>
+              <Text style={styles.meta}>收藏</Text>
             </View>
 
             <ScrollView
@@ -5181,19 +5171,19 @@ export default function HomeScreen() {
                   <Text style={styles.passportStatValue}>
                     {String(passport.length).padStart(2, '0')}
                   </Text>
-                  <Text style={styles.passportStatLabel}>DETOURS</Text>
+                  <Text style={styles.passportStatLabel}>趟旅程</Text>
                 </View>
                 <View style={styles.passportStat}>
                   <Text style={styles.passportStatValue}>
                     {(totalDistanceMeters / 1000).toFixed(1)}
                   </Text>
-                  <Text style={styles.passportStatLabel}>KM TRACED</Text>
+                  <Text style={styles.passportStatLabel}>公里</Text>
                 </View>
                 <View style={styles.passportStat}>
                   <Text style={styles.passportStatValue}>
                     {totalDiscoveries}
                   </Text>
-                  <Text style={styles.passportStatLabel}>MISSIONS</Text>
+                  <Text style={styles.passportStatLabel}>個發現</Text>
                 </View>
               </View>
 
@@ -5241,7 +5231,7 @@ export default function HomeScreen() {
               <View style={styles.passportSectionHeader}>
                 <Text style={styles.passportSectionTitle}>旅程紀錄</Text>
                 <Text style={styles.passportSectionMeta}>
-                  {passportLoaded ? 'LOCAL PASSPORT' : 'LOADING'}
+                  {passportLoaded ? '已儲存在手機' : '載入中'}
                 </Text>
               </View>
 
@@ -5273,11 +5263,10 @@ export default function HomeScreen() {
                       </View>
 
                       <Text style={styles.passportCardMode}>
-                        {entry.threadCode ?? entry.moodCode}
+                        {entry.threadLabel ?? entry.moodLabel}
                       </Text>
                       <Text style={styles.passportCardTitle}>
-                        {entry.city} · {entry.minutes} 分鐘 ·{' '}
-                        {entry.contextCode ?? '—'}
+                        {entry.city} · {entry.minutes} 分鐘
                       </Text>
 
                       {entry.sceneName && (
@@ -5288,7 +5277,7 @@ export default function HomeScreen() {
 
                       <View style={styles.passportCardBottom}>
                         <Text style={styles.passportCardMeta}>
-                          {entry.discoveries} 個任務
+                          {entry.discoveries} 個尋找
                         </Text>
                         <Text style={styles.passportCardMeta}>
                           {entry.photoCount ?? 0} 張照片
@@ -5448,7 +5437,7 @@ export default function HomeScreen() {
                       </View>
                       {selectedPassportEntry.rerouteCount ? (
                         <Text style={styles.postcardRerouteMeta}>
-                          {selectedPassportEntry.rerouteCount} REROUTE
+                          換過 {selectedPassportEntry.rerouteCount} 次終點
                         </Text>
                       ) : null}
                     </View>
@@ -5542,22 +5531,22 @@ export default function HomeScreen() {
                 selectedPassportEntry.sceneFailures.length > 0 && (
                   <View style={styles.postcardRecoverySection}>
                     <Text style={styles.postcardSectionLabel}>
-                      RECOVERY
+                      路上換過終點
                     </Text>
 
                     <Text style={styles.postcardRecoveryText}>
                       途中換過{' '}
                       {selectedPassportEntry.sceneFailures.length}{' '}
-                      次終點；已完成的任務都有保留。
+                      次終點；已完成的尋找都有保留。
                     </Text>
                   </View>
                 )}
 
               <View style={styles.postcardMissionSection}>
                 <View style={styles.postcardSectionHeader}>
-                  <Text style={styles.postcardSectionLabel}>WHAT HAPPENED</Text>
+                  <Text style={styles.postcardSectionLabel}>這趟發生的事</Text>
                   <Text style={styles.postcardSectionMeta}>
-                    {selectedPassportEntry.missions?.length ?? 0} MISSIONS
+                    {selectedPassportEntry.missions?.length ?? 0} 個尋找
                   </Text>
                 </View>
 
@@ -5583,7 +5572,7 @@ export default function HomeScreen() {
                                 styles.postcardMissionResultSkipped,
                             ]}
                           >
-                            {mission.result === 'skipped' ? 'SKIPPED' : 'DONE'}
+                            {mission.result === 'skipped' ? '跳過' : '完成'}
                           </Text>
                         </View>
                         <Text style={styles.postcardMissionTitle}>
@@ -5609,7 +5598,7 @@ export default function HomeScreen() {
                   <View style={styles.v38ShareTicketHead}>
                     <View>
                       <Text style={styles.v38ShareBrand}>DETOUR</Text>
-                      <Text style={styles.v38ShareMicro}>JOURNEY TICKET</Text>
+                      <Text style={styles.v38ShareMicro}>旅程票</Text>
                     </View>
                     <Text style={styles.v38ShareSerial}>
                       {String(selectedPassportEntry.id).slice(-8).toUpperCase()}
@@ -5618,7 +5607,7 @@ export default function HomeScreen() {
 
                   <View style={styles.v38ShareDash} />
 
-                  <Text style={styles.v38ShareDestinationLabel}>DESTINATION</Text>
+                  <Text style={styles.v38ShareDestinationLabel}>終點</Text>
                   <Text style={styles.v38ShareDestination} numberOfLines={2}>
                     {selectedPassportEntry.sceneName ?? selectedPassportEntry.city ?? 'DETOUR'}
                   </Text>
@@ -5643,23 +5632,23 @@ export default function HomeScreen() {
 
                   <View style={styles.v38ShareFacts}>
                     <View style={styles.v38ShareFact}>
-                      <Text style={styles.v38ShareFactLabel}>TIME</Text>
-                      <Text style={styles.v38ShareFactValue}>{selectedPassportEntry.minutes} MIN</Text>
+                      <Text style={styles.v38ShareFactLabel}>時間</Text>
+                      <Text style={styles.v38ShareFactValue}>{selectedPassportEntry.minutes} 分</Text>
                     </View>
                     <View style={styles.v38ShareFact}>
-                      <Text style={styles.v38ShareFactLabel}>MOOD</Text>
+                      <Text style={styles.v38ShareFactLabel}>心情</Text>
                       <Text style={styles.v38ShareFactValue}>{selectedPassportEntry.moodLabel}</Text>
                     </View>
                     <View style={styles.v38ShareFact}>
-                      <Text style={styles.v38ShareFactLabel}>DATE</Text>
+                      <Text style={styles.v38ShareFactLabel}>日期</Text>
                       <Text style={styles.v38ShareFactValue}>{formatPassportDate(selectedPassportEntry.completedAt)}</Text>
                     </View>
                   </View>
 
                   <View style={styles.v38ShareDash} />
                   <View style={styles.v38ShareFoot}>
-                    <Text style={styles.v38ShareFootText}>KEEP THIS DETOUR</Text>
-                    <Text style={styles.v38ShareFootText}>{selectedPassportEntry.discoveries} QUESTS</Text>
+                    <Text style={styles.v38ShareFootText}>留著這張 DETOUR</Text>
+                    <Text style={styles.v38ShareFootText}>{selectedPassportEntry.discoveries} 個尋找</Text>
                   </View>
                 </View>
               </View>

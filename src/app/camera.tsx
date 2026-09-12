@@ -87,7 +87,7 @@ export default function CameraScreen() {
 
   const requestId = getParam(params.requestId);
   const source = getParam(params.source, 'free') as CameraSource;
-  const missionCode = getParam(params.missionCode, 'FREE FRAME');
+  const missionCode = getParam(params.missionCode, '自由拍攝');
   const missionTitle = getParam(
     params.missionTitle,
     '留下現在看到的東西。'
@@ -107,8 +107,8 @@ export default function CameraScreen() {
   const nextExposure = savedCount + 1;
   const rollDisplay =
     savedCount <= rollCapacity
-      ? `${savedCount} / ${rollCapacity} EXPOSED`
-      : `${savedCount} EXPOSED · EXTENDED`;
+      ? `${savedCount} / ${rollCapacity} 張`
+      : `${savedCount} 張`;
 
   useEffect(() => {
     if (!permission) return;
@@ -278,7 +278,7 @@ export default function CameraScreen() {
     return (
       <View style={styles.blackScreen}>
         <StatusBar barStyle="light-content" />
-        <Text style={styles.centerMessage}>LOADING CAMERA</Text>
+        <Text style={styles.centerMessage}>正在開啟相機</Text>
       </View>
     );
   }
@@ -288,7 +288,7 @@ export default function CameraScreen() {
       <View style={styles.permissionScreen}>
         <StatusBar barStyle="dark-content" />
 
-        <Text style={styles.permissionBrand}>DETOUR CAMERA</Text>
+        <Text style={styles.permissionBrand}>DETOUR</Text>
 
         <View>
           <Text style={styles.permissionTitle}>
@@ -352,20 +352,19 @@ export default function CameraScreen() {
 
       <View style={styles.cameraOverlay} pointerEvents="box-none">
         <View style={styles.cameraTop}>
-          <View style={styles.cameraTopLeft}><Pressable onPress={() => router.back()} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable><View style={styles.rollChip}><Text style={styles.rollChipLabel}>ROLL {String(rollNumber).padStart(2, '0')}</Text><Text style={styles.rollChipCount}>{rollDisplay}</Text></View></View>
+          <View style={styles.cameraTopLeft}><Pressable onPress={() => router.back()} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable><View style={styles.rollChip}><Text style={styles.rollChipLabel}>這趟照片</Text><Text style={styles.rollChipCount}>{rollDisplay}</Text></View></View>
           <View style={styles.cameraTopActions}>{facing === 'back' && <Pressable onPress={cycleFlash} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>{flashMode === 'off' ? '閃光 關' : flashMode === 'auto' ? '閃光 自動' : '閃光 開'}</Text></Pressable>}<Pressable onPress={switchFacing} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>切換</Text></Pressable></View>
         </View>
 
         <View style={styles.promptCard}>
           <Text style={styles.promptEyebrow}>
             {source === 'arrival'
-              ? 'FINAL FRAME'
+              ? '抵達'
               : source === 'free'
-                ? 'FREE FRAME'
+                ? '自由拍'
                 : photoRequired
-                  ? 'MISSION FRAME'
-                  : 'OPTIONAL FRAME'}{' '}
-            · {missionCode}
+                  ? '尋找'
+                  : '紀錄'}
           </Text>
 
           <Text style={styles.promptTitle}>{missionTitle}</Text>
@@ -386,10 +385,10 @@ export default function CameraScreen() {
           <View style={styles.statusColumn}>
             <Text style={styles.statusText}>
               {mountError
-                ? 'PREVIEW ERROR'
+                ? '預覽錯誤'
                 : cameraReady
-                  ? 'LIVE'
-                  : 'STARTING'}
+                  ? '可以拍了'
+                  : '正在開啟'}
             </Text>
 
             {mountError && (
@@ -417,7 +416,7 @@ export default function CameraScreen() {
                   ).padStart(2, '0')}`
                 : `+${nextExposure - rollCapacity}`}
             </Text>
-            <Text style={styles.exposureLabel}>NEXT FRAME</Text>
+            <Text style={styles.exposureLabel}>下一張</Text>
           </View>
           </View>
         </View>
@@ -427,7 +426,7 @@ export default function CameraScreen() {
         <View style={styles.exposedOverlay} pointerEvents="none">
           <View style={styles.exposedCard}>
             <View style={styles.exposedDot} />
-            <Text style={styles.exposedLabel}>EXPOSED</Text>
+            <Text style={styles.exposedLabel}>拍好了</Text>
             <Text style={styles.exposedCount}>
               {nextExposure <= rollCapacity
                 ? `${String(nextExposure).padStart(2, '0')} / ${String(
@@ -437,10 +436,10 @@ export default function CameraScreen() {
             </Text>
             <Text style={styles.exposedSaveState}>
               {librarySaveState === 'saved'
-                ? 'SAVED TO PHOTOS'
+                ? '已存到照片'
                 : librarySaveState === 'passport-only'
-                  ? 'PASSPORT ONLY'
-                  : 'SAVING'}
+                  ? '只存這趟旅程'
+                  : '儲存中'}
             </Text>
           </View>
         </View>
