@@ -505,6 +505,8 @@ export default function HomeScreen() {
     useState(false);
 
   const [sideMissionIndex, setSideMissionIndex] = useState(0);
+  const [missionRevealedIndex, setMissionRevealedIndex] =
+    useState<number | null>(null);
   const [traveledMeters, setTraveledMeters] = useState(0);
   const [devMode, setDevMode] = useState(false);
   const [lightContext, setLightContext] =
@@ -2682,6 +2684,7 @@ export default function HomeScreen() {
       setShowNextBeatMap(false);
       setSideMissionIndex(0);
       sideMissionIndexRef.current = 0;
+      setMissionRevealedIndex(null);
       setTraveledMeters(0);
       traveledMetersRef.current = 0;
       setLightContext(context);
@@ -2835,6 +2838,7 @@ export default function HomeScreen() {
     await startTraceWatcher();
     await startHeadingWatcher();
 
+    setMissionRevealedIndex(null);
     transitionTo('journey');
   }
 
@@ -2893,16 +2897,50 @@ export default function HomeScreen() {
       return [...trace, beat.point];
     });
 
-    const isSideQuest =
-      beat.missionIndex !== undefined &&
-      beat.missionIndex ===
+    const missionIndexAtBeat =
+      beat.missionIndex;
+    const isMissionReveal =
+      missionIndexAtBeat !== undefined &&
+      missionIndexAtBeat >=
         sideMissionIndexRef.current;
 
     const isFinal =
       beatIndex >=
       route.beats.length - 1;
 
-    if (isSideQuest) {
+    if (
+      isMissionReveal &&
+      missionIndexAtBeat !== undefined
+    ) {
+      const activeIndex =
+        sideMissionIndexRef.current;
+
+      if (missionIndexAtBeat > activeIndex) {
+        const previousMission =
+          planRef.current?.sideMissions[
+            activeIndex
+          ];
+
+        if (
+          previousMission &&
+          !missionResultsRef.current[
+            previousMission.id
+          ]
+        ) {
+          recordMissionResult(
+            previousMission,
+            'skipped'
+          );
+        }
+
+        sideMissionIndexRef.current =
+          missionIndexAtBeat;
+        setSideMissionIndex(
+          missionIndexAtBeat
+        );
+      }
+
+      setMissionRevealedIndex(null);
       setQuestPulse('side');
 
       await Haptics.notificationAsync(
@@ -2910,7 +2948,7 @@ export default function HomeScreen() {
       );
 
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, 620);
+        setTimeout(resolve, 420);
       });
 
       setQuestPulse(null);
@@ -3014,24 +3052,65 @@ export default function HomeScreen() {
     setMissionResults(next);
   }
 
+  async function beginCurrentMissionSearch() {
+    const route = navigationRouteRef.current;
+    if (!route || !currentMission) return;
+
+    await Haptics.selectionAsync();
+
+    const missionIndex =
+      sideMissionIndexRef.current;
+    const beatIndex =
+      navigationBeatIndexRef.current;
+
+    setMissionRevealedIndex(
+      missionIndex
+    );
+
+    transitionTo('journey', () => {
+      if (
+        beatIndex <
+        route.beats.length - 1
+      ) {
+        setBeat(beatIndex + 1);
+      }
+    });
+  }
+
   async function advanceAfterSideMission() {
     if (!plan || !navigationRoute) return;
 
-    const nextMissionIndex = sideMissionIndex + 1;
-    sideMissionIndexRef.current = nextMissionIndex;
+    const nextMissionIndex =
+      sideMissionIndexRef.current + 1;
+    sideMissionIndexRef.current =
+      nextMissionIndex;
+    setMissionRevealedIndex(null);
 
-    const beatIndex = navigationBeatIndexRef.current;
+    const beatIndex =
+      navigationBeatIndexRef.current;
+    const shouldAdvanceBeat =
+      stageRef.current === 'mission';
 
-    if (beatIndex >= navigationRoute.beats.length - 1) {
+    if (
+      beatIndex >=
+      navigationRoute.beats.length - 1
+    ) {
       transitionTo('arrival', () => {
-        setSideMissionIndex(nextMissionIndex);
+        setSideMissionIndex(
+          nextMissionIndex
+        );
       });
       return;
     }
 
     transitionTo('journey', () => {
-      setSideMissionIndex(nextMissionIndex);
-      setBeat(beatIndex + 1);
+      setSideMissionIndex(
+        nextMissionIndex
+      );
+
+      if (shouldAdvanceBeat) {
+        setBeat(beatIndex + 1);
+      }
     });
   }
 
@@ -3194,11 +3273,8 @@ export default function HomeScreen() {
         source,
         missionCode: missionForCamera.code,
         missionTitle: missionForCamera.title,
-        missionCompletion: missionForCamera.completion,
-        photoRequired: missionForCamera.photo ? '1' : '0',
         savedCount: String(photos.length),
         rollCapacity: String(rollCapacity),
-        rollNumber: String(passport.length + 1),
       },
     });
   }
@@ -4412,14 +4488,19 @@ export default function HomeScreen() {
                 可以出發了。
               </Text>
 
-              <Text style={styles.ticketReadySubtitle}>
-                {selectedMood === 'color' && selectedColor
-                  ? `這趟找${selectedColor.label}。看到就拍，其他時間跟著導航走。終點繼續保密。`
-                  : '方向和路上的尋找都準備好了。終點繼續保密。'}
-              </Text>
             </View>
 
             <View style={styles.detourTicketShellReady}>
+              {selectedMood === 'color' && selectedColor && (
+                <View
+                  style={{
+                    height: 8,
+                    marginTop: -1,
+                    marginHorizontal: -1,
+                    backgroundColor: selectedColor.hex,
+                  }}
+                />
+              )}
               <View style={styles.detourTicketPunchLeftTop} />
               <View style={styles.detourTicketPunchRightTop} />
               <View style={styles.detourTicketPunchLeftBottom} />
@@ -4541,7 +4622,14 @@ export default function HomeScreen() {
                   去走走
                 </Text>
 
-                <Text style={styles.detourTicketReadyStamp}>
+                <Text
+                  style={[
+                    styles.detourTicketReadyStamp,
+                    selectedMood === 'color' && selectedColor
+                      ? { color: selectedColor.hex, borderColor: selectedColor.hex }
+                      : null,
+                  ]}
+                >
                   路線好了
                 </Text>
               </View>
@@ -4602,7 +4690,9 @@ export default function HomeScreen() {
                   <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35Compass, pressed && styles.v35JourneyPressed]}><View style={styles.v35CompassTicks} /><View style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}><Text style={styles.v35CompassArrow}>↑</Text></View></Pressable>
                   <Text style={styles.v35JourneyDistance}>{Math.round(nextBeatMeters)}<Text style={styles.v35JourneyDistanceUnit}> m</Text></Text>
                   <Text style={styles.v35JourneyInstruction}>{currentNavigationBeat.instruction || '先走這一段。'}</Text>
-                  {selectedMood !== 'color' && currentMission && (
+                  {selectedMood !== 'color' &&
+                    currentMission &&
+                    missionRevealedIndex === sideMissionIndex && (
                     <Pressable
                       onPress={() => openCamera('side')}
                       style={({ pressed }) => [{ marginTop: 16, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 16 }, pressed && styles.v35JourneyPressed]}
@@ -4612,7 +4702,7 @@ export default function HomeScreen() {
                     </Pressable>
                   )}
                   {selectedMood === 'color' && selectedColor && (
-                    <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 999 }}>
+                    <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
                       <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedColor.hex }} />
                       <Text style={{ color: BONE, fontSize: 15, fontWeight: '800' }}>今天找{selectedColor.label} · 看到就拍</Text>
                     </View>
@@ -4620,7 +4710,7 @@ export default function HomeScreen() {
                   {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
                 </View>
               )}
-              {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '還在找這個' : '到終點了'}</Text></View>}
+              {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '新的尋找' : '到終點了'}</Text></View>}
               <View style={styles.v35JourneyBottom}>
                 <Pressable onPress={() => openCamera('free')} style={({ pressed }) => [styles.v35JourneyCamera, pressed && styles.v35JourneyPressed]}><Text style={styles.v35JourneyCameraText}>◎</Text></Pressable>
                 <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>→</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>看下一段路</Text></Pressable>
@@ -4678,80 +4768,40 @@ export default function HomeScreen() {
                 {currentMission.title}
               </Text>
 
-              <Text style={styles.fieldEventInstruction}>
-                {currentMission.instruction}
-              </Text>
-
-
               {plan.context !== 'day' && (
                 <Text style={styles.fieldEventContextNote}>
-                  {plan.contextNote}
+                  留在有照明、公開可走的位置。
                 </Text>
               )}
             </ScrollView>
 
             <View style={styles.fieldEventBottom}>
-              {currentMission.photo ? (
-                <>
-                  <Pressable
-                    onPress={() => openCamera('side')}
-                    style={({ pressed }) => [
-                      styles.fieldEventPrimary,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.fieldEventPrimaryText}>
-                      拍下來
-                    </Text>
-                    <Text style={styles.fieldEventPrimaryArrow}>
-                      →
-                    </Text>
-                  </Pressable>
+              <Pressable
+                onPress={beginCurrentMissionSearch}
+                style={({ pressed }) => [
+                  styles.fieldEventPrimary,
+                  pressed && styles.pressedLight,
+                ]}
+              >
+                <Text style={styles.fieldEventPrimaryText}>
+                  開始找
+                </Text>
+                <Text style={styles.fieldEventPrimaryArrow}>
+                  →
+                </Text>
+              </Pressable>
 
-                  <Pressable
-                    onPress={skipCurrentRequiredMission}
-                    style={({ pressed }) => [
-                      styles.fieldEventSkip,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.fieldEventSkipText}>
-                      找不到，先跳過
-                    </Text>
-                  </Pressable>
-                </>
-              ) : (
-                <View style={styles.fieldEventActions}>
-                  <Pressable
-                    onPress={completeSideMissionWithoutPhoto}
-                    style={({ pressed }) => [
-                      styles.fieldEventPrimary,
-                      styles.fieldEventPrimaryFlexible,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.fieldEventPrimaryText}>
-                      完成
-                    </Text>
-                    <Text style={styles.fieldEventPrimaryArrow}>
-                      →
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openCamera('side')}
-                    accessibilityLabel="拍一張照片"
-                    style={({ pressed }) => [
-                      styles.fieldEventCamera,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.fieldEventCameraIcon}>
-                      📷
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
+              <Pressable
+                onPress={skipCurrentRequiredMission}
+                style={({ pressed }) => [
+                  styles.fieldEventSkip,
+                  pressed && styles.pressedLight,
+                ]}
+              >
+                <Text style={styles.fieldEventSkipText}>
+                  這個先跳過
+                </Text>
+              </Pressable>
             </View>
 
           </View>

@@ -73,9 +73,6 @@ export default function CameraScreen() {
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
   const [justExposed, setJustExposed] = useState(false);
-  const [librarySaveState, setLibrarySaveState] = useState<
-    'idle' | 'saved' | 'passport-only'
-  >('idle');
   const [facing, setFacing] = useState<CameraType>('back');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [zoom, setZoom] = useState(0);
@@ -92,23 +89,10 @@ export default function CameraScreen() {
     params.missionTitle,
     '留下現在看到的東西。'
   );
-  const missionCompletion = getParam(
-    params.missionCompletion,
-    '拍或不拍都不影響主線。'
-  );
-  const photoRequired = getParam(params.photoRequired, '0') === '1';
   const savedCount =
     Number.parseInt(getParam(params.savedCount, '0'), 10) || 0;
   const rollCapacity =
     Number.parseInt(getParam(params.rollCapacity, '6'), 10) || 6;
-  const rollNumber =
-    Number.parseInt(getParam(params.rollNumber, '1'), 10) || 1;
-
-  const nextExposure = savedCount + 1;
-  const rollDisplay =
-    savedCount <= rollCapacity
-      ? `${savedCount} / ${rollCapacity} 張`
-      : `${savedCount} 張`;
 
   useEffect(() => {
     if (!permission) return;
@@ -232,7 +216,6 @@ export default function CameraScreen() {
       // FILM ROLL: no Photo Check. Pressing the shutter commits the frame.
       const stableUri = await persistPhoto(capture.uri);
       const savedToLibrary = await saveToPhotos(stableUri);
-      setLibrarySaveState(savedToLibrary ? 'saved' : 'passport-only');
 
       const photo: SessionPhoto = {
         id: `${Date.now()}`,
@@ -265,7 +248,6 @@ export default function CameraScreen() {
     } catch {
       setTakingPhoto(false);
       setJustExposed(false);
-      setLibrarySaveState('idle');
 
       Alert.alert(
         '拍照失敗',
@@ -352,29 +334,17 @@ export default function CameraScreen() {
 
       <View style={styles.cameraOverlay} pointerEvents="box-none">
         <View style={styles.cameraTop}>
-          <View style={styles.cameraTopLeft}><Pressable onPress={() => router.back()} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable><View style={styles.rollChip}><Text style={styles.rollChipLabel}>這趟照片</Text><Text style={styles.rollChipCount}>{rollDisplay}</Text></View></View>
+          <View style={styles.cameraTopLeft}><Pressable onPress={() => router.back()} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable></View>
           <View style={styles.cameraTopActions}>{facing === 'back' && <Pressable onPress={cycleFlash} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>{flashMode === 'off' ? '閃光 關' : flashMode === 'auto' ? '閃光 自動' : '閃光 開'}</Text></Pressable>}<Pressable onPress={switchFacing} style={styles.cameraUtilityButton}><Text style={styles.cameraUtilityText}>切換</Text></Pressable></View>
         </View>
 
         <View style={styles.promptCard}>
-          <Text style={styles.promptEyebrow}>
-            {source === 'arrival'
-              ? '抵達'
-              : source === 'free'
-                ? '自由拍'
-                : photoRequired
-                  ? '尋找'
-                  : '紀錄'}
-          </Text>
-
-          <Text style={styles.promptTitle}>{missionTitle}</Text>
-
-          <Text style={styles.promptRule}>
-            {source === 'free'
-              ? '自由拍攝。按下快門就收進這趟底片，不會推進任務。'
-              : photoRequired
-                ? '這格就是完成條件。按下快門後直接回到旅程。'
-                : `${missionCompletion} 這張只是一個額外紀錄。`}
+          <View style={styles.promptDot} />
+          <Text
+            numberOfLines={2}
+            style={styles.promptTitle}
+          >
+            {missionTitle}
           </Text>
         </View>
 
@@ -382,42 +352,34 @@ export default function CameraScreen() {
           {facing === 'back' && availableLenses.length > 1 && <View style={styles.lensRow}>{availableLenses.map((lens) => { const active = selectedLens === lens; return <Pressable key={lens} onPress={() => chooseLens(lens)} style={[styles.lensButton, active && styles.lensButtonActive]}><Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{lensLabel(lens)}</Text></Pressable>; })}</View>}
           <Text style={styles.zoomHint}>雙指縮放</Text>
           <View style={styles.cameraBottom}>
-          <View style={styles.statusColumn}>
-            <Text style={styles.statusText}>
-              {mountError
-                ? '預覽錯誤'
-                : cameraReady
-                  ? '可以拍了'
-                  : '正在開啟'}
-            </Text>
+            <View style={styles.statusColumn}>
+              <Text style={styles.statusText}>
+                {savedCount} / {rollCapacity}
+              </Text>
+              <Text style={styles.exposureLabel}>這趟照片</Text>
+            </View>
 
-            {mountError && (
-              <Text style={styles.errorText}>{mountError}</Text>
-            )}
-          </View>
+            <Pressable
+              disabled={!cameraReady || takingPhoto}
+              onPress={takePhoto}
+              style={({ pressed }) => [
+                styles.shutterOuter,
+                (!cameraReady || takingPhoto) && styles.shutterDisabled,
+                pressed && styles.shutterPressed,
+              ]}
+            >
+              <View style={styles.shutterInner} />
+            </Pressable>
 
-          <Pressable
-            disabled={!cameraReady || takingPhoto}
-            onPress={takePhoto}
-            style={({ pressed }) => [
-              styles.shutterOuter,
-              (!cameraReady || takingPhoto) && styles.shutterDisabled,
-              pressed && styles.shutterPressed,
-            ]}
-          >
-            <View style={styles.shutterInner} />
-          </Pressable>
-
-          <View style={styles.exposureColumn}>
-            <Text style={styles.exposureNext}>
-              {nextExposure <= rollCapacity
-                ? `${String(nextExposure).padStart(2, '0')} / ${String(
-                    rollCapacity
-                  ).padStart(2, '0')}`
-                : `+${nextExposure - rollCapacity}`}
-            </Text>
-            <Text style={styles.exposureLabel}>下一張</Text>
-          </View>
+            <View style={styles.exposureColumn}>
+              {mountError ? (
+                <Text style={styles.errorText}>預覽錯誤</Text>
+              ) : (
+                <Text style={styles.statusText}>
+                  {cameraReady ? '可以拍了' : '正在開啟'}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -427,20 +389,6 @@ export default function CameraScreen() {
           <View style={styles.exposedCard}>
             <View style={styles.exposedDot} />
             <Text style={styles.exposedLabel}>拍好了</Text>
-            <Text style={styles.exposedCount}>
-              {nextExposure <= rollCapacity
-                ? `${String(nextExposure).padStart(2, '0')} / ${String(
-                    rollCapacity
-                  ).padStart(2, '0')}`
-                : `${nextExposure}`}
-            </Text>
-            <Text style={styles.exposedSaveState}>
-              {librarySaveState === 'saved'
-                ? '已存到照片'
-                : librarySaveState === 'passport-only'
-                  ? '只存這趟旅程'
-                  : '儲存中'}
-            </Text>
           </View>
         </View>
       )}
@@ -580,30 +528,30 @@ const styles = StyleSheet.create({
   },
 
   promptCard: {
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(17,17,15,0.8)',
-    padding: 16,
+    alignSelf: 'center',
+    maxWidth: '88%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(17,17,15,0.78)',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 18,
   },
 
-  promptEyebrow: {
-    fontSize: 8,
-    letterSpacing: 1.7,
-    color: SIGNAL,
-    marginBottom: 10,
+  promptDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: SIGNAL,
   },
 
   promptTitle: {
-    fontSize: 19,
-    lineHeight: 25,
+    flexShrink: 1,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '700',
     color: BONE,
-  },
-
-  promptRule: {
-    marginTop: 8,
-    fontSize: 11,
-    lineHeight: 18,
-    color: MUTED,
   },
 
   cameraControlZone: { gap: 11 },
@@ -684,9 +632,9 @@ const styles = StyleSheet.create({
   },
 
   exposedCard: {
-    minWidth: 180,
-    paddingVertical: 24,
-    paddingHorizontal: 28,
+    minWidth: 132,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     backgroundColor: 'rgba(17,17,15,0.92)',
     alignItems: 'center',
   },

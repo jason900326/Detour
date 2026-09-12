@@ -267,15 +267,6 @@ function portableWanderMissions(context: LightContext): Mission[] {
       portable: true,
     },
     {
-      code: 'MOVEMENT',
-      title: '找一個不是你造成的移動。',
-      instruction:
-        '人、車、風吹的葉子、水、影子都可以。不要追它，只要在原本的路上找到。',
-      completion: '看著它連續移動五秒，就完成。',
-      photo: false,
-      portable: true,
-    },
-    {
       code: 'COLOR BREAK',
       title: '找一個最跳出來的顏色。',
       instruction:
