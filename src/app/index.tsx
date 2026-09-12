@@ -60,6 +60,7 @@ import {
 
 import {
   fetchWalkingRoute,
+  prewarmWalkingRoutes,
   resolveRoutedScene,
   type WalkingRoute,
 } from '../lib/routing-engine';
@@ -463,6 +464,7 @@ export default function HomeScreen() {
 
   const [ticketBuildStatus, setTicketBuildStatus] =
     useState('等待開始…');
+  const [ticketBuildError, setTicketBuildError] = useState<string | null>(null);
 
   const [selectedTime, setSelectedTime] = useState<string | null>('15');
   const [sliderDisplayMinutes, setSliderDisplayMinutes] = useState(15);
@@ -580,6 +582,7 @@ export default function HomeScreen() {
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenY = useRef(new Animated.Value(0)).current;
   const routeProgress = useRef(new Animated.Value(0)).current;
+  const printerPulse = useRef(new Animated.Value(0)).current;
   const timeSliderProgress = useRef(
     new Animated.Value(0)
   ).current;
@@ -910,14 +913,14 @@ export default function HomeScreen() {
   }, [stage]);
 
   useEffect(() => {
-    if (stage !== 'time' && stage !== 'mood') return;
+    if (stage !== 'mood' || !selectedMood) return;
 
     const timer = setTimeout(() => {
-      void prewarmDetour();
-    }, 180);
+      void prewarmDetour(selectedMood);
+    }, 80);
 
     return () => clearTimeout(timer);
-  }, [stage]);
+  }, [stage, selectedMood, selectedMinutes]);
 
   useFocusEffect(
     useCallback(() => {
@@ -970,11 +973,20 @@ export default function HomeScreen() {
     if (stage !== 'preparing') return;
 
     routeProgress.setValue(0.04);
-    setTicketBuildStatus(
-      '正在取得現在位置…'
-    );
+    setTicketBuildError(null);
+    setTicketBuildStatus('正在取得現在位置…');
 
-    prepareDetourTicket();
+    printerPulse.setValue(0);
+    const printerLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(printerPulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(printerPulse, { toValue: 0, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    printerLoop.start();
+    void prepareDetourTicket();
+
+    return () => printerLoop.stop();
   }, [stage]);
 
   useEffect(() => {
@@ -1523,6 +1535,7 @@ export default function HomeScreen() {
   async function chooseMood(moodId: MoodId) {
     await Haptics.selectionAsync();
     setSelectedMood(moodId);
+    void prewarmDetour(moodId);
 
     // Color Walk draws once per Detour session. Switching away and back keeps
     // the same draw, so there is no hidden reroll interaction.
@@ -1550,7 +1563,7 @@ export default function HomeScreen() {
     playtestSessionIdRef.current =
       session.id;
 
-    await refreshPlaytestSessions();
+    void refreshPlaytestSessions();
 
     transitionTo('preparing');
   }
@@ -2303,10 +2316,16 @@ export default function HomeScreen() {
     );
   }
 
-  async function prewarmDetour() {
-    const cached = prewarmRef.current;
+  async function prewarmDetour(moodOverride?: MoodId) {
+    const targetMood = moodOverride ?? selectedMood;
+    if (!targetMood) return;
 
-    if (cached && Date.now() - cached.createdAt < 5 * 60 * 1000) {
+    const cached = prewarmRef.current;
+    if (
+      cached &&
+      Date.now() - cached.createdAt < 5 * 60 * 1000 &&
+      (cached.candidatesByMood[targetMood]?.length ?? 0) > 0
+    ) {
       return;
     }
 
@@ -2314,12 +2333,9 @@ export default function HomeScreen() {
     prewarmInFlightRef.current = true;
 
     try {
-      let permission = await Location.getForegroundPermissionsAsync();
-
-      if (permission.status !== 'granted') {
-        permission = await Location.requestForegroundPermissionsAsync();
-      }
-
+      // Do not surprise a first-time user with a permission sheet on Home/Mood.
+      // Prewarm only when permission already exists; ticket issue owns the ask.
+      const permission = await Location.getForegroundPermissionsAsync();
       if (permission.status !== 'granted') return;
 
       let location = await Location.getLastKnownPositionAsync({
@@ -2342,81 +2358,57 @@ export default function HomeScreen() {
         .map((entry) => entry.sceneId)
         .filter((value): value is string => typeof value === 'string');
       const sceneFeedback = await loadSceneFeedback();
-      const moodIds = MOODS.map((item) => item.id);
+      const minutes = selectedMinutes || 15;
 
-      const candidateEntries = await Promise.all(
-        moodIds.map(async (moodId) => {
-          try {
-            const candidates = await findSceneCandidates({
-              start: point,
-              moodId,
-              context,
-              minutes: 60,
-              excludeSceneIds: visitedSceneIds,
-              feedback: sceneFeedback,
-              distanceScale: paceDistanceScale,
-            });
-            return [moodId, candidates] as const;
-          } catch {
-            return [moodId, [] as SceneCandidate[]] as const;
-          }
-        })
-      );
-
-      const candidatesByMood: Partial<Record<MoodId, SceneCandidate[]>> = {};
-      const rankedIdsByMood: Partial<Record<MoodId, string[]>> = {};
-      const aiUsedByMood: Partial<Record<MoodId, boolean>> = {};
-
-      for (const [moodId, candidates] of candidateEntries) {
-        candidatesByMood[moodId] = candidates;
-        rankedIdsByMood[moodId] = candidates.map((candidate) => candidate.id);
-        aiUsedByMood[moodId] = false;
-      }
+      const candidates = await findSceneCandidates({
+        start: point,
+        moodId: targetMood,
+        context,
+        minutes,
+        excludeSceneIds: visitedSceneIds,
+        feedback: sceneFeedback,
+        distanceScale: paceDistanceScale,
+      });
 
       const createdAt = Date.now();
       prewarmRef.current = {
         point,
         context,
-        candidatesByMood,
-        rankedIdsByMood,
-        aiUsedByMood,
+        candidatesByMood: { [targetMood]: candidates },
+        rankedIdsByMood: { [targetMood]: candidates.map((candidate) => candidate.id) },
+        aiUsedByMood: { [targetMood]: false },
         createdAt,
       };
 
-      // Taste ranking continues in the background. Ticket issuance never waits
-      // for these calls; local scoring remains a valid fallback.
-      if (isAIEngineConfigured()) {
-        void Promise.all(
-          candidateEntries.map(async ([moodId, candidates]) => {
-            if (
-              candidates.length === 0 ||
-              moodId === 'food' ||
-              moodId === 'color'
-            ) return;
+      // Warm one or two likely walking legs in the background. fetchWalkingRoute
+      // caches them, so pressing 出發 can often issue immediately.
+      void prewarmWalkingRoutes(point, candidates, 2);
 
-            try {
-              const ranking = await rankSceneCandidatesWithAI({
-                candidates,
-                moodId,
-                context,
-                minutes: selectedMinutes || 15,
-              });
-
-              const current = prewarmRef.current;
-              if (!current || current.createdAt !== createdAt) return;
-
-              current.rankedIdsByMood[moodId] = ranking.candidates.map(
-                (candidate) => candidate.id
-              );
-              current.aiUsedByMood[moodId] = ranking.usedAI;
-            } catch {
-              // Local ranking is already stored.
-            }
+      // Taste ranking is future preference data only; never block this ticket.
+      if (
+        isAIEngineConfigured() &&
+        candidates.length > 0 &&
+        targetMood !== 'food' &&
+        targetMood !== 'color'
+      ) {
+        void rankSceneCandidatesWithAI({
+          candidates,
+          moodId: targetMood,
+          context,
+          minutes,
+        })
+          .then((ranking) => {
+            const current = prewarmRef.current;
+            if (!current || current.createdAt !== createdAt) return;
+            current.rankedIdsByMood[targetMood] = ranking.candidates.map(
+              (candidate) => candidate.id
+            );
+            current.aiUsedByMood[targetMood] = ranking.usedAI;
           })
-        );
+          .catch(() => undefined);
       }
     } catch {
-      // Prewarming is an optimization. A normal ticket build remains available.
+      // Prewarming is an optimization. Ticket issue remains available.
     } finally {
       prewarmInFlightRef.current = false;
     }
@@ -2442,6 +2434,7 @@ export default function HomeScreen() {
 
   async function prepareDetourTicket() {
     stopLocationWatcher();
+    setTicketBuildError(null);
     const ticketStartedAt = Date.now();
 
     let permission = await Location.getForegroundPermissionsAsync();
@@ -2452,7 +2445,6 @@ export default function HomeScreen() {
 
     if (permission.status !== 'granted') {
       const testSessionId = playtestSessionIdRef.current;
-
       if (testSessionId) {
         setPlaytestSessions(
           await updatePlaytestSession(testSessionId, {
@@ -2461,12 +2453,8 @@ export default function HomeScreen() {
           })
         );
       }
-
-      transitionTo('mood');
-      Alert.alert(
-        '需要定位才能印出這張票',
-        'DETOUR 會用你現在的位置選 Scene、確認步行路線，並判斷白天或夜間情境。'
-      );
+      setTicketBuildStatus('需要定位才能繼續');
+      setTicketBuildError('允許定位後再試一次。DETOUR 只會用現在的位置找這趟的終點和步行路線。');
       return;
     }
 
@@ -2564,27 +2552,14 @@ export default function HomeScreen() {
           );
         }
 
-        if (
-          isAIEngineConfigured() &&
-          finalMood !== 'food' &&
-          finalMood !== 'color'
-        ) {
-          advanceTicketProgress(
-            0.46,
-            `找到 ${sceneCandidates.length} 個候選。正在做最後挑選…`
-          );
-
-          const aiRanking = await rankSceneCandidatesWithAI({
-            candidates: sceneCandidates,
-            moodId: finalMood,
-            context,
-            minutes,
-          });
-          rankedCandidates = aiRanking.candidates;
-          rankingUsedAI = aiRanking.usedAI;
-        } else {
-          rankedCandidates = sceneCandidates;
-        }
+        advanceTicketProgress(
+          0.46,
+          `找到 ${sceneCandidates.length} 個候選。正在確認步行路線…`
+        );
+        // Local ranking is already good enough to issue. AI taste ranking is
+        // never allowed to hold the printer hostage.
+        rankedCandidates = sceneCandidates;
+        rankingUsedAI = false;
       }
 
       if (rankedCandidates.length === 0) {
@@ -2740,13 +2715,16 @@ export default function HomeScreen() {
       }
     } catch (error) {
       stopLocationWatcher();
-      transitionTo('mood');
 
       const message =
         error instanceof Error
           ? error.message
           : '請確認網路和定位服務後再試一次。';
       const testSessionId = playtestSessionIdRef.current;
+
+      setTicketBuildStatus('這張票沒有印成功');
+      setTicketBuildError(message);
+      routeProgress.stopAnimation();
 
       if (testSessionId) {
         setPlaytestSessions(
@@ -2757,10 +2735,7 @@ export default function HomeScreen() {
         );
       }
 
-      Alert.alert(
-        '這張 DETOUR 車票暫時印不出來',
-        `${message}\n\n車票只有在終點和步行路線都確認成功後才會發行。`
-      );
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
   }
 
@@ -3026,6 +3001,35 @@ export default function HomeScreen() {
         reachCurrentNavigationBeat();
       }, 100);
     }
+  }
+
+  async function simulateNextBeat() {
+    if (!devMode) return;
+    const route = navigationRouteRef.current;
+    const beat = route?.beats[navigationBeatIndexRef.current];
+    if (!beat) return;
+
+    const previousPoint =
+      latitude !== null && longitude !== null
+        ? { latitude, longitude }
+        : detourStart ?? beat.point;
+    const moved = getDistanceInMeters(
+      previousPoint.latitude,
+      previousPoint.longitude,
+      beat.point.latitude,
+      beat.point.longitude
+    );
+
+    setLatitude(beat.point.latitude);
+    setLongitude(beat.point.longitude);
+    setBeatRemainingMeters(0);
+    beatRemainingMetersRef.current = 0;
+    const nextTraveled = traveledMetersRef.current + moved;
+    traveledMetersRef.current = nextTraveled;
+    setTraveledMeters(nextTraveled);
+    setActiveTrace((trace) => [...trace, beat.point]);
+    await Haptics.selectionAsync();
+    setTimeout(() => void reachCurrentNavigationBeat(), 80);
   }
 
   function recordMissionResult(mission: Mission, result: MissionResult) {
@@ -4167,9 +4171,21 @@ export default function HomeScreen() {
         {stage === 'preparing' && (
           <View style={styles.v35PreparingScreen}>
             <Text style={styles.v35PreparingBrand}>DETOUR</Text>
-            <Text style={styles.v35PreparingTitle}>正在印製車票…</Text><View style={styles.v35PreparingUnderline} />
+            <Text style={styles.v35PreparingTitle}>{ticketBuildError ? '車票卡住了。' : '正在印製車票…'}</Text>
+            <View style={styles.v35PreparingUnderline} />
             <View style={styles.v35Printer}>
-              <View style={styles.v35PrinterTop} /><View style={styles.v35PrinterSlot} />
+              <View style={styles.v35PrinterTop} />
+              <View style={styles.v35PrinterSlot} />
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.v41PrinterScan,
+                  {
+                    opacity: printerPulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
+                    transform: [{ translateX: printerPulse.interpolate({ inputRange: [0, 1], outputRange: [-82, 82] }) }],
+                  },
+                ]}
+              />
               <Animated.View style={[styles.v35PrintingTicket, { transform: [{ translateY: routeProgress.interpolate({ inputRange: [0, 1], outputRange: [-95, 12] }) }] }]}>
                 <View style={styles.v35PrintOrangeBand} /><Text style={styles.v35PrintBrand}>DETOUR</Text><View style={styles.v35PrintDash} />
                 <View style={styles.v35PrintFacts}>
@@ -4181,7 +4197,24 @@ export default function HomeScreen() {
                 <View style={styles.v35PrintBarcode}>{[2,1,3,1,2,4,1,3,2,1,4,2,1,3,2,1,4,1].map((w,i)=>(<View key={i} style={[styles.v35PrintBar,{width:w}]} />))}</View>
               </Animated.View>
             </View>
-            <Text style={styles.v35PreparingStatus}>{ticketBuildStatus}</Text>
+            <Text style={styles.v41PreparingStatus}>{ticketBuildStatus}</Text>
+            {ticketBuildError && (
+              <View style={styles.v41TicketErrorPanel}>
+                <Text style={styles.v41TicketErrorText}>{ticketBuildError}</Text>
+                <Pressable
+                  onPress={() => {
+                    routeProgress.setValue(0.04);
+                    setTicketBuildError(null);
+                    setTicketBuildStatus('再試一次…');
+                    void prepareDetourTicket();
+                  }}
+                  style={({ pressed }) => [styles.v41TicketRetry, pressed && styles.v35Pressed]}
+                >
+                  <Text style={styles.v41TicketRetryText}>再試一次</Text>
+                  <Text style={styles.v41TicketRetryArrow}>→</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         )}
 
@@ -4410,10 +4443,13 @@ export default function HomeScreen() {
                     missionRevealedIndex === sideMissionIndex && (
                     <Pressable
                       onPress={() => openCamera('side')}
-                      style={({ pressed }) => [{ marginTop: 16, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: 'rgba(241,239,231,0.28)', borderRadius: 16 }, pressed && styles.v35JourneyPressed]}
+                      style={({ pressed }) => [styles.v41ActiveFind, pressed && styles.v35JourneyPressed]}
                     >
-                      <Text numberOfLines={1} style={{ flex: 1, color: BONE, fontSize: 17, fontWeight: '800' }}>{currentMission.title}</Text>
-                      <Text style={{ color: SIGNAL, fontSize: 12, fontWeight: '800' }}>看到就拍</Text>
+                      <View style={styles.v41ActiveFindCopy}>
+                        <Text style={styles.v41ActiveFindLabel}>正在找</Text>
+                        <Text numberOfLines={2} style={styles.v41ActiveFindTitle}>{currentMission.title}</Text>
+                      </View>
+                      <Text style={styles.v41ActiveFindAction}>拍照 →</Text>
                     </Pressable>
                   )}
                   {selectedMood === 'color' && selectedColor && (
@@ -4427,98 +4463,47 @@ export default function HomeScreen() {
               )}
               {questPulse && <View pointerEvents="none" style={styles.v35QuestPulse}><Text style={styles.v35QuestPulseText}>{questPulse === 'side' ? '新的尋找' : '到終點了'}</Text></View>}
               <View style={styles.v35JourneyBottom}>
-                <Pressable onPress={() => setShowNextBeatMap(true)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>↗</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>小地圖</Text></Pressable>
+                <Pressable onPress={() => setShowNextBeatMap((value) => !value)} style={({ pressed }) => [styles.v35JourneyPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v35JourneyPrimaryArrow}>{showNextBeatMap ? '↙' : '↗'}</Text><View style={styles.v35JourneyPrimaryDivider} /><Text style={styles.v35JourneyPrimaryText}>{showNextBeatMap ? '收起地圖' : '小地圖'}</Text></Pressable>
                 <Pressable onPress={() => openCamera('free')} style={({ pressed }) => [styles.v35JourneyCamera, pressed && styles.v35JourneyPressed]}><Text style={styles.v35JourneyCameraText}>◎</Text></Pressable>
-                {devMode && <Pressable onPress={simulateWalk} style={styles.v35DevAdvance}><Text style={styles.v35DevAdvanceText}>室內測試 · 模擬前進</Text></Pressable>}
+                {devMode && <Pressable onPress={simulateNextBeat} style={styles.v41DevAdvance}><Text style={styles.v41DevAdvanceText}>室內測試 · 下一段 →</Text></Pressable>}
               </View>
             </View>
           )}
 
         {stage === 'mission' && plan && currentMission && (
-          <View style={styles.fieldEventScreen}>
-            <View style={styles.fieldEventTop}>
-              <Pressable
-                onPress={goBack}
-                hitSlop={16}
-                style={styles.fieldEventBack}
-              >
-                <Text style={styles.fieldEventBackText}>←</Text>
+          <View style={styles.v41MissionScreen}>
+            <View style={styles.v41MissionTop}>
+              <Pressable onPress={goBack} hitSlop={16} style={styles.v41MissionBack}>
+                <Text style={styles.v41MissionBackText}>←</Text>
               </Pressable>
-
-              <Text style={styles.fieldEventBrand}>DETOUR</Text>
-
-              <Text style={styles.fieldEventMeta}>
-                尋找
-              </Text>
+              <Text style={styles.v41MissionBrand}>DETOUR</Text>
+              <View style={styles.v41MissionBadge}><Text style={styles.v41MissionBadgeText}>✦</Text></View>
             </View>
 
-            <View style={styles.fieldEventRouteStrip}>
-              <View style={styles.fieldEventRouteNode}>
-                <View style={styles.fieldEventRouteNodeCore} />
-              </View>
-
-              <View style={styles.fieldEventRouteLine} />
-
-              <View style={styles.fieldEventRouteQuest}>
-                <Text style={styles.fieldEventRouteQuestMark}>✦</Text>
-              </View>
-
-              <View style={styles.fieldEventRouteLineMuted} />
-
-              <Text style={styles.fieldEventRouteLabel}>
-                找到就拍，找不到就繼續走
-              </Text>
+            <View style={styles.v41MissionRoute}>
+              <View style={styles.v41MissionRouteStart}><View style={styles.v41MissionRouteCore} /></View>
+              <View style={styles.v41MissionRouteLine} />
+              <View style={styles.v41MissionRouteQuest}><Text style={styles.v41MissionRouteQuestText}>✦</Text></View>
+              <View style={styles.v41MissionRouteLineMuted} />
             </View>
 
-            <ScrollView
-              style={styles.fieldEventScroll}
-              contentContainerStyle={styles.fieldEventScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.fieldEventEyebrow}>
-                路上找這個
-              </Text>
-
-              <Text style={styles.fieldEventTitle}>
-                {currentMission.title}
-              </Text>
-
+            <View style={styles.v41MissionHero}>
+              <Text style={styles.v41MissionCue}>新的尋找</Text>
+              <Text style={styles.v41MissionTitle}>{currentMission.title}</Text>
               {plan.context !== 'day' && (
-                <Text style={styles.fieldEventContextNote}>
-                  留在有照明、公開可走的位置。
-                </Text>
+                <Text style={styles.v41MissionSafety}>只在有照明、公開可走的位置找。</Text>
               )}
-            </ScrollView>
-
-            <View style={styles.fieldEventBottom}>
-              <Pressable
-                onPress={beginCurrentMissionSearch}
-                style={({ pressed }) => [
-                  styles.fieldEventPrimary,
-                  pressed && styles.pressedLight,
-                ]}
-              >
-                <Text style={styles.fieldEventPrimaryText}>
-                  開始找
-                </Text>
-                <Text style={styles.fieldEventPrimaryArrow}>
-                  →
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={skipCurrentRequiredMission}
-                style={({ pressed }) => [
-                  styles.fieldEventSkip,
-                  pressed && styles.pressedLight,
-                ]}
-              >
-                <Text style={styles.fieldEventSkipText}>
-                  這個先跳過
-                </Text>
-              </Pressable>
             </View>
 
+            <View style={styles.v41MissionBottom}>
+              <Pressable onPress={beginCurrentMissionSearch} style={({ pressed }) => [styles.v41MissionPrimary, pressed && styles.pressedLight]}>
+                <Text style={styles.v41MissionPrimaryText}>開始找</Text>
+                <Text style={styles.v41MissionPrimaryArrow}>→</Text>
+              </Pressable>
+              <Pressable onPress={skipCurrentRequiredMission} style={({ pressed }) => [styles.v41MissionSkip, pressed && styles.pressedLight]}>
+                <Text style={styles.v41MissionSkipText}>先跳過</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -4526,7 +4511,7 @@ export default function HomeScreen() {
           <View style={styles.cleanArrivalScreen}>
             <View style={styles.cleanArrivalTop}>
               <Text style={[styles.brand]}>DETOUR</Text>
-              <Text style={styles.cleanArrivalMeta}>
+              <Text style={[styles.cleanArrivalMeta, styles.v41ReadableMeta]}>
                 {selectedScene?.label ?? '抵達'}
               </Text>
             </View>
@@ -4545,7 +4530,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.cleanArrivalHero}>
-              <Text style={styles.cleanArrivalKicker}>
+              <Text style={[styles.cleanArrivalKicker, styles.v41ReadableKicker]}>
                 到了
               </Text>
 
@@ -4558,7 +4543,7 @@ export default function HomeScreen() {
                 {plan.arrivalMission.title}
               </Text>
 
-              <Text style={styles.cleanArrivalInstruction}>
+              <Text style={[styles.cleanArrivalInstruction, styles.v41ReadableBody]}>
                 {plan.arrivalMission.instruction}
               </Text>
 
@@ -4643,7 +4628,7 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
 
-              <Text style={styles.cleanArrivalSource}>
+              <Text style={[styles.cleanArrivalSource, styles.v41ReadableMeta]}>
                 地圖資料：OpenStreetMap
               </Text>
             </View>
@@ -4871,12 +4856,12 @@ export default function HomeScreen() {
 
             <View style={styles.developingHero}>
               <View style={styles.developingDot} />
-<Text style={styles.developingCode}>正在整理</Text>
+<Text style={[styles.developingCode, styles.v41DevelopingCode]}>正在整理</Text>
               <Text style={styles.developingTitle}>
                 先別看。{`\n`}
                 這趟正在顯影。
               </Text>
-              <Text style={styles.developingBody}>
+              <Text style={[styles.developingBody, styles.v41DevelopingBody]}>
                 {photos.length} 張照片
               </Text>
             </View>
@@ -4908,167 +4893,72 @@ export default function HomeScreen() {
         )}
 
         {stage === 'passport' && (
-          <View style={styles.passportScreen}>
-            <View style={styles.brandRow}>
-              <Pressable onPress={goBack} hitSlop={16} style={styles.backInline}>
-                <Text style={styles.backArrow}>←</Text>
-              </Pressable>
-              <Text style={styles.brand}>已完成的旅程</Text>
-              <Text style={styles.meta}>收藏</Text>
+          <View style={styles.v41PassportScreen}>
+            <View style={styles.v41PassportTop}>
+              <Pressable onPress={goBack} hitSlop={16} style={styles.v41PassportBack}><Text style={styles.v41PassportBackText}>←</Text></Pressable>
+              <Text style={styles.v41PassportHeader}>已完成的旅程</Text>
+              <Text style={styles.v41PassportMeta}>收藏</Text>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.passportScroll}
-            >
-              <View style={styles.passportHero}>
-                <Text style={styles.passportKicker}>
-                  走完的路，才會留在這裡。
-                </Text>
-                <Text style={styles.passportTitle}>
-                  你的城市，{`\n`}
-                  正在慢慢變熟。
-                </Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v41PassportScroll}>
+              <Text style={styles.v41PassportKicker}>你的 DETOUR 收藏</Text>
+              <Text style={styles.v41PassportTitle}>走過的路，{`
+`}一趟一趟留下來。</Text>
+
+              <View style={styles.v41PassportStats}>
+                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{passport.length}</Text><Text style={styles.v41PassportStatLabel}>趟旅程</Text></View>
+                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{(totalDistanceMeters / 1000).toFixed(1)}</Text><Text style={styles.v41PassportStatLabel}>公里</Text></View>
+                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{totalDiscoveries}</Text><Text style={styles.v41PassportStatLabel}>個發現</Text></View>
               </View>
 
-              <View style={styles.passportStats}>
-                <View style={styles.passportStat}>
-                  <Text style={styles.passportStatValue}>
-                    {String(passport.length).padStart(2, '0')}
-                  </Text>
-                  <Text style={styles.passportStatLabel}>趟旅程</Text>
-                </View>
-                <View style={styles.passportStat}>
-                  <Text style={styles.passportStatValue}>
-                    {(totalDistanceMeters / 1000).toFixed(1)}
-                  </Text>
-                  <Text style={styles.passportStatLabel}>公里</Text>
-                </View>
-                <View style={styles.passportStat}>
-                  <Text style={styles.passportStatValue}>
-                    {totalDiscoveries}
-                  </Text>
-                  <Text style={styles.passportStatLabel}>個發現</Text>
-                </View>
-              </View>
-
-              {tracedPassport.length > 0 && (
-                <View style={styles.traceMapShell}>
-                  <MapView
-                    key={`passport-map-${tracedPassport.length}`}
-                    style={styles.traceMap}
-                    initialRegion={passportMapRegion}
-                    showsUserLocation={false}
-                    showsMyLocationButton={false}
-                    showsCompass={false}
-                    pitchEnabled={false}
-                    rotateEnabled={false}
-                  >
-                    {tracedPassport.map((entry) => (
-                      <Polyline
-                        key={`trace-${entry.id}`}
-                        coordinates={entry.route ?? []}
-                        strokeColor={SIGNAL}
-                        strokeWidth={4}
-                      />
-                    ))}
-
-                    {tracedPassport.map((entry) => {
-                      const route = entry.route ?? [];
-                      const end = route[route.length - 1];
-                      if (!end) return null;
-
-                      return (
-                        <Circle
-                          key={`end-${entry.id}`}
-                          center={end}
-                          radius={12}
-                          strokeColor={INK}
-                          strokeWidth={1}
-                          fillColor={SIGNAL}
-                        />
-                      );
-                    })}
-                  </MapView>
-                </View>
-              )}
-
-              <View style={styles.passportSectionHeader}>
-                <Text style={styles.passportSectionTitle}>旅程紀錄</Text>
-                <Text style={styles.passportSectionMeta}>
-                  {passportLoaded ? '已儲存在手機' : '載入中'}
-                </Text>
+              <View style={styles.v41PassportSectionRow}>
+                <Text style={styles.v41PassportSectionTitle}>旅程收藏</Text>
+                <Text style={styles.v41PassportSectionMeta}>{passportLoaded ? '存在這支手機' : '載入中'}</Text>
               </View>
 
               {passport.length === 0 ? (
-                <View style={styles.emptyPassport}>
-                  <Text style={styles.emptyPassportNumber}>00</Text>
-                  <Text style={styles.emptyPassportTitle}>
-                    還沒有任何 DETOUR。
-                  </Text>
+                <View style={styles.v41PassportEmpty}>
+                  <Text style={styles.v41PassportEmptyMark}>○ ─── ⚑</Text>
+                  <Text style={styles.v41PassportEmptyTitle}>第一趟走完後，會留在這裡。</Text>
                 </View>
               ) : (
-                <View style={styles.passportList}>
-                  {passport.map((entry, index) => (
-                    <Pressable
-                      key={entry.id}
-                      onPress={() => openPassportEntry(entry)}
-                      style={({ pressed }) => [
-                        styles.passportCard,
-                        pressed && styles.passportCardPressed,
-                      ]}
-                    >
-                      <View style={styles.passportCardTop}>
-                        <Text style={styles.passportCardNumber}>
-                          {String(passport.length - index).padStart(2, '0')}
-                        </Text>
-                        <Text style={styles.passportCardDate}>
-                          {formatPassportDate(entry.completedAt)}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.passportCardMode}>
-                        {entry.threadLabel ?? entry.moodLabel}
-                      </Text>
-                      <Text style={styles.passportCardTitle}>
-                        {entry.city} · {entry.minutes} 分鐘
-                      </Text>
-
-                      {entry.sceneName && (
-                        <Text style={styles.passportCardScene}>
-                          → {entry.sceneName}
-                        </Text>
-                      )}
-
-                      <View style={styles.passportCardBottom}>
-                        <Text style={styles.passportCardMeta}>
-                          {entry.discoveries} 個尋找
-                        </Text>
-                        <Text style={styles.passportCardMeta}>
-                          {entry.photoCount ?? 0} 張照片
-                        </Text>
-                      </View>
-
-                      <View style={styles.passportOpenRow}>
-                        <Text style={styles.passportOpenText}>打開旅程</Text>
-                        <Text style={styles.passportOpenArrow}>↗</Text>
-                      </View>
-                    </Pressable>
-                  ))}
+                <View style={styles.v41PassportList}>
+                  {passport.map((entry, index) => {
+                    const coverUri = entry.photos?.[0]?.uri;
+                    return (
+                      <Pressable key={entry.id} onPress={() => openPassportEntry(entry)} style={({ pressed }) => [styles.v41PassportCard, pressed && styles.v35Pressed]}>
+                        {coverUri ? (
+                          <Image source={{ uri: coverUri }} style={styles.v41PassportPhoto} resizeMode="cover" />
+                        ) : (
+                          <View style={styles.v41PassportNoPhoto}>
+                            <View style={styles.v41PassportNoPhotoLine} />
+                            <View style={styles.v41PassportNoPhotoDot} />
+                            <Text style={styles.v41PassportNoPhotoText}>{entry.moodLabel}</Text>
+                          </View>
+                        )}
+                        <View style={styles.v41PassportCardBody}>
+                          <View style={styles.v41PassportCardTop}>
+                            <Text style={styles.v41PassportCardNumber}>{String(passport.length - index).padStart(2, '0')}</Text>
+                            <Text style={styles.v41PassportCardDate}>{formatPassportDate(entry.completedAt)}</Text>
+                          </View>
+                          <Text style={styles.v41PassportCardMood}>{entry.moodLabel}</Text>
+                          <Text style={styles.v41PassportCardDestination} numberOfLines={2}>{entry.sceneName ?? `${entry.city}的一趟 DETOUR`}</Text>
+                          <View style={styles.v41PassportCardFacts}>
+                            <Text style={styles.v41PassportCardFact}>{entry.minutes} 分鐘</Text>
+                            <Text style={styles.v41PassportCardFact}>{entry.photoCount ?? 0} 張照片</Text>
+                            <Text style={styles.v41PassportCardFact}>{entry.discoveries} 個發現</Text>
+                          </View>
+                          <View style={styles.v41PassportOpen}><Text style={styles.v41PassportOpenText}>打開這趟</Text><Text style={styles.v41PassportOpenArrow}>→</Text></View>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
 
               {devMode && passport.length > 0 && (
-                <Pressable
-                  onPress={clearPassport}
-                  style={({ pressed }) => [
-                    styles.clearPassportButton,
-                    pressed && styles.pressedLight,
-                  ]}
-                >
-                  <Text style={styles.clearPassportText}>
-                    DEV · 清除測試 Passport
-                  </Text>
+                <Pressable onPress={clearPassport} style={({ pressed }) => [styles.v41PassportClear, pressed && styles.pressedLight]}>
+                  <Text style={styles.v41PassportClearText}>清除測試收藏</Text>
                 </Pressable>
               )}
             </ScrollView>
@@ -10872,5 +10762,93 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     color: MUTED,
   },
+
+
+  v41PrinterScan: { position: 'absolute', top: 38, width: 76, height: 4, borderRadius: 2, backgroundColor: SIGNAL, zIndex: 6 },
+  v41PreparingStatus: { marginTop: 8, paddingHorizontal: 24, fontSize: 16, lineHeight: 23, fontWeight: '800', color: '#5F5A52', textAlign: 'center' },
+  v41TicketErrorPanel: { width: '100%', marginTop: 14, padding: 16, borderWidth: 1, borderColor: '#D3CEC1', backgroundColor: '#FAF7EE' },
+  v41TicketErrorText: { fontSize: 16, lineHeight: 23, fontWeight: '700', color: INK },
+  v41TicketRetry: { minHeight: 58, marginTop: 14, paddingHorizontal: 18, backgroundColor: SIGNAL, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v41TicketRetryText: { fontSize: 20, fontWeight: '900', color: INK },
+  v41TicketRetryArrow: { fontSize: 28, color: INK },
+
+  v41ActiveFind: { marginTop: 18, alignSelf: 'stretch', minHeight: 86, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, paddingVertical: 14, borderWidth: 1, borderColor: 'rgba(241,239,231,0.34)', borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.035)' },
+  v41ActiveFindCopy: { flex: 1 },
+  v41ActiveFindLabel: { fontSize: 14, fontWeight: '900', color: SIGNAL },
+  v41ActiveFindTitle: { marginTop: 4, fontSize: 22, lineHeight: 27, fontWeight: '900', color: BONE },
+  v41ActiveFindAction: { fontSize: 16, fontWeight: '900', color: SIGNAL },
+  v41DevAdvance: { position: 'absolute', right: 0, bottom: 82, minHeight: 44, paddingHorizontal: 15, borderRadius: 22, backgroundColor: '#302F2B', alignItems: 'center', justifyContent: 'center' },
+  v41DevAdvanceText: { fontSize: 14, fontWeight: '800', color: BONE },
+
+  v41MissionScreen: { flex: 1, backgroundColor: '#F5F1E8', paddingTop: 58, paddingHorizontal: 24, paddingBottom: 28 },
+  v41MissionTop: { flexDirection: 'row', alignItems: 'center' },
+  v41MissionBack: { width: 44, height: 44, justifyContent: 'center' },
+  v41MissionBackText: { fontSize: 36, color: INK },
+  v41MissionBrand: { marginLeft: 10, fontSize: 31, fontWeight: '900', letterSpacing: -1.7, color: INK },
+  v41MissionBadge: { marginLeft: 'auto', width: 42, height: 42, borderRadius: 21, backgroundColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
+  v41MissionBadgeText: { fontSize: 22, fontWeight: '900', color: BONE },
+  v41MissionRoute: { height: 82, marginTop: 46, flexDirection: 'row', alignItems: 'center' },
+  v41MissionRouteStart: { width: 28, height: 28, borderRadius: 14, borderWidth: 4, borderColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
+  v41MissionRouteCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: SIGNAL },
+  v41MissionRouteLine: { flex: 0.45, height: 4, backgroundColor: SIGNAL },
+  v41MissionRouteQuest: { width: 56, height: 56, borderRadius: 28, backgroundColor: SIGNAL, alignItems: 'center', justifyContent: 'center' },
+  v41MissionRouteQuestText: { fontSize: 27, color: BONE },
+  v41MissionRouteLineMuted: { flex: 1, height: 2, backgroundColor: '#D1CBC0' },
+  v41MissionHero: { flex: 1, justifyContent: 'center', paddingBottom: 28 },
+  v41MissionCue: { fontSize: 16, fontWeight: '900', color: SIGNAL },
+  v41MissionTitle: { marginTop: 16, maxWidth: 355, fontSize: 52, lineHeight: 60, fontWeight: '900', letterSpacing: -2.9, color: INK },
+  v41MissionSafety: { marginTop: 22, maxWidth: 340, fontSize: 16, lineHeight: 24, fontWeight: '600', color: '#67625A' },
+  v41MissionBottom: { gap: 10 },
+  v41MissionPrimary: { minHeight: 74, backgroundColor: SIGNAL, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v41MissionPrimaryText: { fontSize: 26, fontWeight: '900', color: INK },
+  v41MissionPrimaryArrow: { fontSize: 32, color: INK },
+  v41MissionSkip: { minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  v41MissionSkipText: { fontSize: 16, fontWeight: '700', color: '#77736B' },
+
+  v41PassportScreen: { flex: 1, backgroundColor: '#F5F1E8', paddingTop: 58 },
+  v41PassportTop: { minHeight: 48, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center' },
+  v41PassportBack: { width: 44, height: 44, justifyContent: 'center' },
+  v41PassportBackText: { fontSize: 36, color: INK },
+  v41PassportHeader: { marginLeft: 8, fontSize: 27, fontWeight: '900', letterSpacing: -1.2, color: INK },
+  v41PassportMeta: { marginLeft: 'auto', fontSize: 15, fontWeight: '800', color: MUTED },
+  v41PassportScroll: { paddingHorizontal: 24, paddingTop: 42, paddingBottom: 56 },
+  v41PassportKicker: { fontSize: 16, fontWeight: '900', color: SIGNAL },
+  v41PassportTitle: { marginTop: 12, fontSize: 42, lineHeight: 49, fontWeight: '900', letterSpacing: -2.3, color: INK },
+  v41PassportStats: { marginTop: 34, paddingVertical: 22, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#CFC9BD', flexDirection: 'row' },
+  v41PassportStat: { flex: 1 },
+  v41PassportStatValue: { fontSize: 38, lineHeight: 42, fontWeight: '900', color: INK },
+  v41PassportStatLabel: { marginTop: 5, fontSize: 14, fontWeight: '700', color: MUTED },
+  v41PassportSectionRow: { marginTop: 42, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v41PassportSectionTitle: { fontSize: 21, fontWeight: '900', color: INK },
+  v41PassportSectionMeta: { fontSize: 14, fontWeight: '700', color: MUTED },
+  v41PassportList: { gap: 18 },
+  v41PassportCard: { overflow: 'hidden', borderWidth: 1, borderColor: '#D2CBC0', backgroundColor: '#FAF7EE' },
+  v41PassportPhoto: { width: '100%', height: 220, backgroundColor: SOFT },
+  v41PassportNoPhoto: { width: '100%', height: 190, backgroundColor: '#E6E0D5', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  v41PassportNoPhotoLine: { position: 'absolute', width: 280, height: 4, backgroundColor: SIGNAL, transform: [{ rotate: '-12deg' }] },
+  v41PassportNoPhotoDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 6, borderColor: SIGNAL, backgroundColor: '#E6E0D5' },
+  v41PassportNoPhotoText: { marginTop: 60, fontSize: 23, fontWeight: '900', color: INK },
+  v41PassportCardBody: { padding: 18 },
+  v41PassportCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v41PassportCardNumber: { fontSize: 17, fontWeight: '900', color: SIGNAL },
+  v41PassportCardDate: { fontSize: 14, fontWeight: '700', color: MUTED },
+  v41PassportCardMood: { marginTop: 18, fontSize: 18, fontWeight: '900', color: SIGNAL },
+  v41PassportCardDestination: { marginTop: 7, fontSize: 30, lineHeight: 36, fontWeight: '900', letterSpacing: -1.4, color: INK },
+  v41PassportCardFacts: { marginTop: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  v41PassportCardFact: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, backgroundColor: '#EDE7DC', fontSize: 14, fontWeight: '800', color: INK },
+  v41PassportOpen: { marginTop: 18, minHeight: 54, borderTopWidth: 1, borderColor: '#D2CBC0', paddingTop: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v41PassportOpenText: { fontSize: 17, fontWeight: '900', color: INK },
+  v41PassportOpenArrow: { fontSize: 25, color: SIGNAL },
+  v41PassportEmpty: { minHeight: 220, borderWidth: 1, borderColor: '#D2CBC0', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  v41PassportEmptyMark: { fontSize: 28, color: SIGNAL },
+  v41PassportEmptyTitle: { marginTop: 22, fontSize: 21, lineHeight: 28, fontWeight: '900', color: INK, textAlign: 'center' },
+  v41PassportClear: { marginTop: 30, minHeight: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D2CBC0' },
+  v41PassportClearText: { fontSize: 15, fontWeight: '800', color: SIGNAL },
+
+  v41ReadableMeta: { fontSize: 15, lineHeight: 21 },
+  v41ReadableKicker: { fontSize: 17, lineHeight: 23 },
+  v41ReadableBody: { fontSize: 17, lineHeight: 26 },
+  v41DevelopingCode: { fontSize: 14, lineHeight: 20 },
+  v41DevelopingBody: { fontSize: 16, lineHeight: 23, letterSpacing: 0.4 },
 
 });

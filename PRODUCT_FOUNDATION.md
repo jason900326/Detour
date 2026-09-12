@@ -785,3 +785,14 @@ Detour 真正要建立的習慣是：
 - **導航把手機降級**：方向與距離是主角；小地圖是看不懂時的輔助；相機回到右下角主要行動位。
 - **Passport 是旅行收藏，不是 analytics**：消費者頁面改中文、移除照片放大 CTA、不再只保留 50 趟；清除收藏時同步刪除 App 私有照片檔。
 - **相機只留一套**：正式拍攝只走 `/camera` route；舊的 index Modal / Photo Check 流程移除。
+
+## v0.41 — field UX before Monday
+
+- Ticket issue optimizes perceived speed: local ranking never waits for AI, routing tries at most three candidates, and the first route that clears time / distance / novelty gates wins.
+- Mood selection is the prewarm moment. It may warm Scene and walking-route caches only when location permission already exists; the Home screen must not surprise a first-time user with a permission prompt.
+- A failed ticket stays at the printer and offers retry. Never dump the user back to Mood without explanation.
+- Camera capture is two-step: shutter -> review -> keep/retake. Only “留下這張” consumes one of six frames, saves to DETOUR/Photos, and completes a photo mission.
+- The journey map is a toggle. The same control that opens it must be able to close it.
+- Consumer field UI should be readable while walking: primary instructions are large, secondary copy is at least normal body size, and game feel comes from reveal / pulse / haptics rather than tiny metadata.
+- Completed journeys are a photo-first collection. Aggregate maps are secondary; an empty map rectangle must never dominate the collection home.
+- Indoor test mode advances a full navigation beat in one tap so the end-to-end flow can be tested from home.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Platform,
   Pressable,
   StatusBar,
@@ -72,7 +73,8 @@ export default function CameraScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
-  const [justExposed, setJustExposed] = useState(false);
+  const [pendingCaptureUri, setPendingCaptureUri] = useState<string | null>(null);
+  const [savingPhoto, setSavingPhoto] = useState(false);
   const [facing, setFacing] = useState<CameraType>('back');
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [zoom, setZoom] = useState(0);
@@ -214,8 +216,32 @@ export default function CameraScreen() {
         throw new Error('No photo URI');
       }
 
-      // FILM ROLL: no Photo Check. Pressing the shutter commits the frame.
-      const stableUri = await persistPhoto(capture.uri);
+      // Keep the frame temporary until the user explicitly confirms it.
+      setPendingCaptureUri(capture.uri);
+      setTakingPhoto(false);
+      await Haptics.selectionAsync();
+    } catch {
+      setTakingPhoto(false);
+      Alert.alert(
+        '拍照失敗',
+        '這一格沒有曝光成功。底片沒有被使用，請再拍一次。'
+      );
+    }
+  }
+
+  async function retakePhoto() {
+    if (savingPhoto) return;
+    setPendingCaptureUri(null);
+    setTakingPhoto(false);
+    await Haptics.selectionAsync();
+  }
+
+  async function keepPhoto() {
+    if (!pendingCaptureUri || savingPhoto || atCapacity) return;
+    setSavingPhoto(true);
+
+    try {
+      const stableUri = await persistPhoto(pendingCaptureUri);
       const savedToLibrary = await saveToPhotos(stableUri);
 
       const photo: SessionPhoto = {
@@ -233,27 +259,12 @@ export default function CameraScreen() {
         photo,
       };
 
-      await AsyncStorage.setItem(
-        CAMERA_RESULT_KEY,
-        JSON.stringify(result)
-      );
-
-      setJustExposed(true);
-
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success
-      );
-
-      await delay(380);
+      await AsyncStorage.setItem(CAMERA_RESULT_KEY, JSON.stringify(result));
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {
-      setTakingPhoto(false);
-      setJustExposed(false);
-
-      Alert.alert(
-        '拍照失敗',
-        '這一格沒有曝光成功。底片沒有被使用，請再拍一次。'
-      );
+      setSavingPhoto(false);
+      Alert.alert('照片沒有存好', '這張還留在預覽畫面，可以再試一次。');
     }
   }
 
@@ -303,6 +314,33 @@ export default function CameraScreen() {
           >
             <Text style={styles.cancelPermissionText}>返回</Text>
           </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+
+  if (pendingCaptureUri) {
+    return (
+      <View style={styles.reviewScreen}>
+        <StatusBar barStyle="light-content" />
+        <Image source={{ uri: pendingCaptureUri }} style={styles.reviewImage} resizeMode="contain" />
+        <View style={styles.reviewShade} pointerEvents="none" />
+        <View style={styles.reviewTop}>
+          <Text style={styles.reviewKicker}>剛剛這張</Text>
+          <Text style={styles.reviewTitle} numberOfLines={2}>{missionTitle}</Text>
+        </View>
+        <View style={styles.reviewBottom}>
+          <Text style={styles.reviewCount}>{Math.min(savedCount, rollCapacity)} / {rollCapacity}</Text>
+          <View style={styles.reviewActions}>
+            <Pressable disabled={savingPhoto} onPress={retakePhoto} style={({ pressed }) => [styles.reviewRetake, pressed && styles.reviewPressed]}>
+              <Text style={styles.reviewRetakeText}>重拍</Text>
+            </Pressable>
+            <Pressable disabled={savingPhoto} onPress={keepPhoto} style={({ pressed }) => [styles.reviewKeep, savingPhoto && styles.reviewDisabled, pressed && styles.reviewPressed]}>
+              <Text style={styles.reviewKeepText}>{savingPhoto ? '正在存…' : '留下這張'}</Text>
+              <Text style={styles.reviewKeepArrow}>→</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -381,19 +419,28 @@ export default function CameraScreen() {
         </View>
       </View>
 
-      {justExposed && (
-        <View style={styles.exposedOverlay} pointerEvents="none">
-          <View style={styles.exposedCard}>
-            <View style={styles.exposedDot} />
-            <Text style={styles.exposedLabel}>拍好了</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+
+  reviewScreen: { flex: 1, backgroundColor: '#000' },
+  reviewImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  reviewShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.12)' },
+  reviewTop: { position: 'absolute', top: 58, left: 24, right: 24 },
+  reviewKicker: { fontSize: 16, fontWeight: '800', color: SIGNAL },
+  reviewTitle: { marginTop: 8, fontSize: 28, lineHeight: 34, fontWeight: '900', color: '#FFF' },
+  reviewBottom: { position: 'absolute', left: 24, right: 24, bottom: 34 },
+  reviewCount: { marginBottom: 12, fontSize: 16, fontWeight: '800', color: 'rgba(255,255,255,0.82)' },
+  reviewActions: { flexDirection: 'row', gap: 10 },
+  reviewRetake: { width: 112, minHeight: 68, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.44)', backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },
+  reviewRetakeText: { fontSize: 20, fontWeight: '900', color: '#FFF' },
+  reviewKeep: { flex: 1, minHeight: 68, borderRadius: 18, backgroundColor: SIGNAL, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reviewKeepText: { fontSize: 21, fontWeight: '900', color: INK },
+  reviewKeepArrow: { fontSize: 29, color: INK },
+  reviewPressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
+  reviewDisabled: { opacity: 0.58 },
   blackScreen: {
     flex: 1,
     backgroundColor: '#000',
