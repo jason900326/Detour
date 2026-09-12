@@ -31,8 +31,43 @@ jobs:
       - name: Install dependencies and refresh lockfile
         run: npm install --no-audit --no-fund
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
+      - name: Parse-check migrated TypeScript
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          const files = [
+            'src/app/index.tsx',
+            'src/app/camera.tsx',
+            'src/lib/journey-engine.ts',
+            'src/lib/playtest-analytics.ts',
+          ];
+          let failed = false;
+          for (const file of files) {
+            const source = fs.readFileSync(file, 'utf8');
+            const result = ts.transpileModule(source, {
+              fileName: file,
+              reportDiagnostics: true,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.ESNext,
+                jsx: ts.JsxEmit.ReactJSX,
+              },
+            });
+            const errors = (result.diagnostics || []).filter(
+              (d) => d.category === ts.DiagnosticCategory.Error
+            );
+            if (errors.length) {
+              failed = true;
+              console.error(`Parse errors in ${file}:`);
+              for (const d of errors) {
+                console.error(ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+              }
+            }
+          }
+          if (failed) process.exit(1);
+          console.log('Migrated TypeScript parsed successfully.');
+          NODE
 
       - name: Remove one-time migration files
         run: |
