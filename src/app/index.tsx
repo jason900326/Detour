@@ -4247,7 +4247,6 @@ export default function HomeScreen() {
                     <Pressable key={item.id} onPress={() => chooseMood(item.id)} style={({ pressed }) => [styles.v35MoodCard, item.id === 'surprise' && styles.v38MoodWide, active && styles.v35MoodCardActive, pressed && styles.v35Pressed]}>
                       <View style={styles.v35MoodArt}>
                         <Text style={[styles.v35MoodSymbol, active && styles.v35MoodSymbolActive]}>{moodSymbol(item.id)}</Text>
-                        <View style={[styles.v35MoodAccent, active && styles.v35MoodAccentActive]} />
                       </View>
                       <Text style={styles.v35MoodCardLabel}>{item.label}</Text>
                     </Pressable>
@@ -10778,8 +10777,6 @@ const styles = StyleSheet.create({
   v35MoodArt: { width: 90, height: 72, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   v35MoodSymbol: { fontSize: 54, lineHeight: 60, fontWeight: '900', color: INK },
   v35MoodSymbolActive: { color: INK },
-  v35MoodAccent: { position: 'absolute', right: 4, bottom: 8, width: 25, height: 6, borderRadius: 3, backgroundColor: '#BFBAB1', transform: [{ rotate: '-18deg' }] },
-  v35MoodAccentActive: { backgroundColor: SIGNAL },
   v35MoodCardLabel: { marginTop: 3, fontSize: 20, fontWeight: '900', color: INK },
   v35MoodPrimary: { minHeight: 72, backgroundColor: SIGNAL, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
   v35MoodPrimaryDisabled: { opacity: 0.42 },
