@@ -65,7 +65,7 @@ assets/
 2. **Journey / routing / scene / AI 計算** 留在各自 engine。
 3. **可重用 UI** 應逐步移到 `src/components`，不要再新增 `v50 / v51 / v52` 形式的整套複製樣式。
 4. UI 重構必須保持既有產品行為；先拆結構，再改視覺。
-5. 每次影響主要旅程的修改至少要通過 iOS Expo bundle，之後再合併到 `main`。
+5. 每次影響主要旅程的修改至少要通過 TypeScript typecheck 與 iOS Expo bundle，之後再合併到 `main`。
 
 ## Preview 發布
 
