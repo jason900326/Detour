@@ -1,56 +1,92 @@
-# Welcome to your Expo app 👋
+# Detour
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Detour 把現實世界變成一場 15–90 分鐘的小型探索遊戲。手機負責指路、出題與記錄；真正的遊戲畫面是使用者面前的城市。
 
-## Get started
+產品決策的正式基準請先看 [`PRODUCT_FOUNDATION.md`](./PRODUCT_FOUNDATION.md)。
 
-1. Install dependencies
+## 目前狀態
 
-   ```bash
-   npm install
-   ```
+- App：Expo / React Native / Expo Router
+- 主要平台：iOS 優先
+- Preview 更新：`main` push 後由 GitHub Actions 發布到 EAS `preview` channel
+- 核心流程：時間 → Mood → 出票 → Journey → 尋找 / 拍照 → Arrival → 完成 / 收藏 / 分享
+- 每趟照片上限：6 張
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## 本機啟動
 
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`.env.example` 目前包含 AI / Supabase client 所需的公開設定欄位。真正的 key 不要提交到 repository。
 
-### Other setup steps
+## 常用指令
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npm run start
+npm run ios
+npm run android
+npm run web
+npm run lint
+npm run typecheck
+```
 
-## Learn more
+## 專案結構
 
-To learn more about developing your project with Expo, look at the following resources:
+```text
+src/
+  app/
+    index.tsx          # 主旅程畫面與流程 orchestration
+    camera.tsx         # 相機、鏡頭切換、拍攝與照片確認
+    explore.tsx        # Explore route
+  lib/
+    app-model.ts       # App stage、session / passport model、固定 UI flow constants
+    journey-engine.ts  # Journey / Mood / 任務規則
+    navigation-engine.ts
+    routing-engine.ts
+    scene-engine.ts
+    ai-engine.ts
+    playtest-analytics.ts
+    scene-feedback.ts
+assets/
+  detour/              # 正式 Detour artwork
+  mood/                # Mood SVG
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 架構原則
 
-## Join the community
+`src/app/index.tsx` 是流程協調層，不應再成為所有邏輯與資料模型的存放處。
 
-Join our community of developers creating universal apps.
+新增功能時優先遵守：
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. **資料 model / 固定規則** 放 `src/lib`，不要宣告在畫面檔。
+2. **Journey / routing / scene / AI 計算** 留在各自 engine。
+3. **可重用 UI** 應逐步移到 `src/components`，不要再新增 `v50 / v51 / v52` 形式的整套複製樣式。
+4. UI 重構必須保持既有產品行為；先拆結構，再改視覺。
+5. 每次影響主要旅程的修改至少要通過 iOS Expo bundle，之後再合併到 `main`。
+
+## Preview 發布
+
+`.github/workflows/eas-update-preview.yml` 會在 `main` 有程式變更時執行：
+
+```bash
+eas update --channel preview
+```
+
+因此：
+
+- `main` = 手機 preview 應該能玩的版本。
+- 大型重構先走獨立 branch，驗證後再合併。
+- EAS Update 成功代表 bundle / 發布成功，不等於完整旅程已經被自動化測試。
+
+## 開發優先順序
+
+目前先以可實際 Playtest 的完整旅程為目標。新增功能前，優先處理：
+
+- 真機 journey flow 的 bug
+- `index.tsx` 拆分
+- 共用 UI component 化
+- 基本自動驗證
+- README / 架構文件與產品基準保持同步
