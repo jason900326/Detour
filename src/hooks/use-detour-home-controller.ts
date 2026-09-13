@@ -114,30 +114,26 @@ import {
 
 import { styles } from '../styles/home-styles';
 import { BONE, INK, LINE, MUTED, SIGNAL, SOFT } from '../theme/detour-theme';
+import { MoodGlyph, V45MoodIcon, V45Skyline } from '../components/mood-visuals';
+import { DetourAccentStroke, DetourTicket, V45Ticket } from '../components/ticket-visuals';
 import {
-  DetourAccentStroke,
-  DetourTicket,
-  MoodGlyph,
-  V45MoodIcon,
   V45SharePoster,
-  V45Skyline,
-  V45Ticket,
   V46CompleteArtwork,
   V46ReviewArtwork,
-} from '../components/detour-visuals';
+} from '../components/journey-recap-visuals';
 import {
   applyFoodDestinationWeight,
+  getFilmRollCapacity,
+  moodHint,
+} from '../lib/journey-selection';
+import { getDistanceInMeters, getRouteDistance, offsetPoint } from '../lib/geo-utils';
+import {
   contextCode,
   formatClockTime,
   formatPassportDate,
-  getDistanceInMeters,
-  getFilmRollCapacity,
-  getRouteDistance,
-  moodHint,
-  offsetPoint,
   parseMinutes,
   ticketSerial,
-} from '../lib/home-helpers';
+} from '../lib/detour-formatters';
 
 export function useDetourHomeController() {
 
