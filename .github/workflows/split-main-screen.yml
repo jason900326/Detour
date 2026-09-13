@@ -1,0 +1,61 @@
+name: Split Detour main screen
+
+on:
+  push:
+    branches:
+      - refactor/split-main-screen
+    paths:
+      - scripts/split-main-screen.py
+      - .github/workflows/split-main-screen.yml
+
+permissions:
+  contents: write
+
+jobs:
+  split:
+    name: Split modules and verify iOS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout refactor branch
+        uses: actions/checkout@v5
+        with:
+          ref: refactor/split-main-screen
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Split main screen
+        run: python scripts/split-main-screen.py
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS app
+        run: npx expo export --platform ios --output-dir /tmp/detour-split-export
+
+      - name: Commit validated split
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "detour-refactor-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/app/index.tsx src/components/detour-visuals.tsx src/lib/home-helpers.ts src/styles/home-styles.ts src/theme/detour-theme.ts
+          git rm scripts/split-main-screen.py .github/workflows/split-main-screen.yml
+          git commit -m "refactor: split main screen into modules"
+          git push origin HEAD:refactor/split-main-screen
