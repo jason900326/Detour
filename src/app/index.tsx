@@ -220,6 +220,7 @@ const MUTED = '#77736B';
 const LINE = '#C9C5B8';
 const SIGNAL = '#FF5A36';
 const SOFT = '#E5E1D6';
+let ticketArtworkDecoded = false;
 
 const TIME_STEPS = [15, 30, 45, 60, 90] as const;
 const TIME_MIN = TIME_STEPS[0];
@@ -701,17 +702,25 @@ function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
 }
 
 function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
+  const [artworkReady, setArtworkReady] = useState(ticketArtworkDecoded);
+  const markArtworkReady = () => {
+    ticketArtworkDecoded = true;
+    setArtworkReady(true);
+  };
+
   const stampScale = stampProgress
     ? stampProgress.interpolate({ inputRange: [0, 1], outputRange: [1.28, 1] })
     : 1;
   const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
 
   return (
-    <View style={styles.v46ArtTicket}>
+    <View style={[styles.v46ArtTicket, !artworkReady && styles.v49TicketArtworkPending]}>
       <Image
         source={require('../../assets/detour/ticket-base.png')}
         style={styles.v46ArtTicketBase}
         resizeMode="stretch"
+        onLoad={markArtworkReady}
+        onLoadEnd={markArtworkReady}
       />
 
       <View style={styles.v46ArtTicketHeader}>
@@ -5629,22 +5638,24 @@ const styles = StyleSheet.create({
   v48PrinterAssembly: {
     width: '100%',
     height: 456,
-    marginTop: 18,
+    marginTop: 12,
     position: 'relative',
     alignItems: 'center',
   },
   v48PrinterBase: {
     position: 'absolute',
     top: 0,
+    left: 0,
+    right: 0,
     width: '100%',
-    aspectRatio: 2048 / 682,
+    height: 110,
     zIndex: 1,
   },
   v48PaperViewport: {
     position: 'absolute',
-    top: 58,
+    top: 57,
     width: 310,
-    height: 398,
+    height: 399,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 2,
@@ -5660,15 +5671,17 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 74,
+    height: 78,
     overflow: 'hidden',
     zIndex: 4,
   },
   v48PrinterMaskImage: {
     position: 'absolute',
     top: 0,
+    left: 0,
+    right: 0,
     width: '100%',
-    aspectRatio: 2048 / 682,
+    height: 110,
   },
   v48RetryOverlay: {
     flex: 1,
@@ -12549,6 +12562,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
+  },
+  v49TicketArtworkPending: {
+    opacity: 0,
   },
   v46ArtTicketHeader: {
     position: 'absolute',
