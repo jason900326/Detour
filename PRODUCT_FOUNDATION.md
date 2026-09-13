@@ -796,3 +796,11 @@ Detour 真正要建立的習慣是：
 - Consumer field UI should be readable while walking: primary instructions are large, secondary copy is at least normal body size, and game feel comes from reveal / pulse / haptics rather than tiny metadata.
 - Completed journeys are a photo-first collection. Aggregate maps are secondary; an empty map rectangle must never dominate the collection home.
 - Indoor test mode advances a full navigation beat in one tap so the end-to-end flow can be tested from home.
+
+## v0.42 — one ticket, one ritual
+
+- Printing and issued states must render the exact same `DetourTicket` component. A user should never watch one ticket print and receive a visually different ticket.
+- The ticket itself is the progress language. Do not add a progress bar or duplicate loading UI.
+- Ticket reveal follows real work. Fast builds keep a short ~2 second physical-printing ritual; slow builds hold the ticket partially revealed instead of pretending to be complete.
+- `終點保密` is the final stamp. The stamp lands after the full ticket is visible, gives one short haptic, and only then unlocks the departure CTA.
+- The issued screen does not need a redundant “車票好了” headline; a complete stamped ticket plus an enabled `出發` action communicates completion.
