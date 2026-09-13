@@ -1,0 +1,64 @@
+name: Apply DETOUR v45 UI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/apply-v45-ui.py"
+      - ".github/workflows/apply-v45-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Patch and validate UI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Apply V45 UI patch
+        shell: bash
+        run: |
+          python scripts/apply-v45-ui.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("src/app/index.tsx")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace("<DetourTicket\n", "<V45Ticket\n")
+          p.write_text(s, encoding="utf-8")
+          PY
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit refined UI
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No UI changes to commit."
+            exit 0
+          fi
+          git config user.name "detour-ui-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/app/index.tsx
+          git commit -m "feat: refine DETOUR ticket journey UI"
+          git push origin HEAD:main
