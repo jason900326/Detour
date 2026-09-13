@@ -66,8 +66,8 @@ jobs:
       - name: Verify Mood page invariants
         run: |
           grep -F "DETOUR_BUILD_VERSION = '0.45.1'" src/lib/build-info.ts
-          grep -F "function MoodIcon(" src/app/index.tsx
-          grep -F "<MoodIcon moodId={item.id} />" src/app/index.tsx
+          grep -F "function V45MoodIcon(" src/app/index.tsx
+          grep -F "<V45MoodIcon moodId={item.id} />" src/app/index.tsx
           grep -F "react-native-svg-transformer/expo" metro.config.js
           test -f assets/mood/wander.svg
           test -f assets/mood/food.svg
@@ -75,8 +75,20 @@ jobs:
           test -f assets/mood/weird.svg
           test -f assets/mood/color.svg
           test -f assets/mood/surprise.svg
-          if grep -Fq "<MoodGlyph" src/app/index.tsx; then exit 1; fi
-          if grep -Fq "active && styles.v44MoodGlyphActive" src/app/index.tsx; then exit 1; fi
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('src/app/index.tsx').read_text()
+          start = text.index('function V45MoodIcon(')
+          end = text.index('function V45Ticket(', start)
+          block = text[start:end]
+          assert '<View' not in block
+          assert 'MoodWanderIcon' in block
+          assert 'MoodFoodIcon' in block
+          assert 'MoodQuietIcon' in block
+          assert 'MoodWeirdIcon' in block
+          assert 'MoodColorIcon' in block
+          assert 'MoodSurpriseIcon' in block
+          PY
           git diff --check
 
       - name: Remove one-time migration files
