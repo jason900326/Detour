@@ -1065,7 +1065,7 @@ export function DetourHomeView({
           </View>
         )}
 
-        {stage === 'preparing' && (
+        {(stage === 'preparing' || stage === 'ready') && (
           <View style={styles.v45PrintingScreen}>
             <View style={styles.v48PrintingTopBar}>
               <Pressable onPress={goBack} hitSlop={16} style={styles.v48PrintingBack}>
@@ -1075,7 +1075,9 @@ export function DetourHomeView({
             </View>
 
             <View style={[styles.v45PrintingTitleWrap, styles.v48PrintingTitleWrap]}>
-              <Text style={styles.v45PrintingTitle}>正在印製車票…</Text>
+              <Text style={styles.v45PrintingTitle}>
+                {stage === 'ready' ? '車票完成' : '正在印製車票…'}
+              </Text>
               <DetourAccentStroke width={180} style={styles.v45PrintingUnderline} />
             </View>
 
@@ -1095,7 +1097,7 @@ export function DetourHomeView({
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-326, 0],
+                            outputRange: [-420, 0],
                           }),
                         },
                       ],
@@ -1107,6 +1109,8 @@ export function DetourHomeView({
                     moodId={selectedMood ?? 'wander'}
                     moodLabel={mood?.label ?? '—'}
                     serial={ticketSerial(selectedTime, selectedMood)}
+                    stamped={stage === 'ready'}
+                    stampProgress={ticketStamp}
                   />
                 </Animated.View>
               </View>
@@ -1119,6 +1123,19 @@ export function DetourHomeView({
                 />
               </View>
             </View>
+
+            {stage === 'ready' && ticketReadyUnlocked && (
+              <Pressable
+                onPress={startDetour}
+                style={({ pressed }) => [
+                  styles.v48DepartButton,
+                  pressed && styles.v48DepartButtonPressed,
+                ]}
+              >
+                <Text style={styles.v48DepartButtonText}>出發</Text>
+                <Text style={styles.v48DepartButtonArrow}>→</Text>
+              </Pressable>
+            )}
 
             <Modal
               visible={Boolean(ticketBuildError)}
@@ -1134,7 +1151,7 @@ export function DetourHomeView({
                   <Text style={styles.v48RetryBody}>{ticketBuildError}</Text>
                   <Pressable
                     onPress={() => {
-                      routeProgress.setValue(0.04);
+                      routeProgress.setValue(0);
                       setTicketBuildError(null);
                       setTicketBuildStatus('再試一次…');
                       void prepareDetourTicket();
@@ -1153,61 +1170,6 @@ export function DetourHomeView({
                 </View>
               </View>
             </Modal>
-          </View>
-        )}
-
-        {stage === 'ready' && (
-          <View style={styles.v42TicketFlowScreen}>
-            <View style={styles.v42TicketTopBar}>
-              <Pressable onPress={goBack} hitSlop={16} style={styles.v42TicketBack}>
-                <Text style={styles.v42TicketBackText}>←</Text>
-              </Pressable>
-              <Text style={styles.v42TicketTopBrand}>DETOUR</Text>
-              <View style={styles.v42TicketTopSpacer} />
-            </View>
-
-            <View style={styles.v42ReadyTicketStage}>
-              <Animated.View
-                style={{
-                  transform: [
-                    {
-                      translateY: ticketStamp.interpolate({
-                        inputRange: [0, 0.72, 1],
-                        outputRange: [0, 3, 0],
-                      }),
-                    },
-                    {
-                      scale: ticketStamp.interpolate({
-                        inputRange: [0, 0.72, 1],
-                        outputRange: [1, 0.994, 1],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <V45Ticket
-                  timeLabel={selectedTime ?? '15'}
-                  moodId={selectedMood ?? 'wander'}
-                  moodLabel={mood?.label ?? '—'}
-                  serial={ticketSerial(selectedTime, selectedMood)}
-                  stamped
-                  stampProgress={ticketStamp}
-                />
-              </Animated.View>
-            </View>
-
-            <Pressable
-              disabled={!ticketReadyUnlocked}
-              onPress={startDetour}
-              style={({ pressed }) => [
-                styles.v42DepartButton,
-                !ticketReadyUnlocked && styles.v42DepartButtonLocked,
-                pressed && ticketReadyUnlocked && styles.v35TicketButtonPressed,
-              ]}
-            >
-              <Text style={styles.v42DepartText}>出發</Text>
-              <Text style={styles.v42DepartArrow}>→</Text>
-            </Pressable>
           </View>
         )}
 
