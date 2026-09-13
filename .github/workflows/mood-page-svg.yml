@@ -102,4 +102,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "fix: rebuild Mood page icons as SVG assets"
-          git push origin HEAD:chatgpt/mood-page-svg
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:chatgpt/mood-page-svg; then
+              exit 0
+            fi
+            echo "push failed on attempt ${attempt}; retrying..."
+            sleep $((attempt * 8))
+          done
+          exit 1
