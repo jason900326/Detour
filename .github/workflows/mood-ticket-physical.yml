@@ -49,24 +49,11 @@ jobs:
           from pathlib import Path
           p = Path('src/app/index.tsx')
           s = p.read_text(encoding='utf-8')
-
-          ready_old = """                  moodLabel={mood?.label ?? '—'}
-                  serial={ticketSerial(selectedTime, selectedMood)}
-                  stamped"""
-          ready_new = """                  moodLabel={mood?.label ?? '—'}
-                  moodId={selectedMood ?? 'wander'}
-                  serial={ticketSerial(selectedTime, selectedMood)}
-                  stamped"""
-          if s.count(ready_old) != 1:
-              raise SystemExit(f'ready ticket moodId patch expected 1 match, got {s.count(ready_old)}')
-          s = s.replace(ready_old, ready_new, 1)
-
           metal_old = "position: 'absolute', top: 0, width: '100%', height: 108, borderRadius: 20,"
           metal_new = "position: 'absolute', top: 0, width: '100%', height: 92, borderRadius: 20,"
           if s.count(metal_old) != 1:
               raise SystemExit(f'printer height patch expected 1 match, got {s.count(metal_old)}')
-          s = s.replace(metal_old, metal_new, 1)
-          p.write_text(s, encoding='utf-8')
+          p.write_text(s.replace(metal_old, metal_new, 1), encoding='utf-8')
           PY
 
       - name: Verify product invariants
