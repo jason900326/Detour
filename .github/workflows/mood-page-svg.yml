@@ -1,0 +1,93 @@
+name: Apply Mood page SVG redesign
+
+on:
+  push:
+    branches:
+      - chatgpt/mood-page-svg
+    paths:
+      - 'scripts/apply_mood_svg_page.py'
+      - '.github/workflows/mood-page-svg.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  mood-page:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install existing dependencies
+        run: npm ci
+
+      - name: Add SVG runtime and transformer
+        run: |
+          npx expo install react-native-svg
+          npm install --save-dev react-native-svg-transformer
+
+      - name: Apply Mood page redesign
+        run: python3 scripts/apply_mood_svg_page.py
+
+      - name: Syntax-check changed TypeScript
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          const file = 'src/app/index.tsx';
+          const source = fs.readFileSync(file, 'utf8');
+          const result = ts.transpileModule(source, {
+            compilerOptions: {
+              target: ts.ScriptTarget.ES2022,
+              module: ts.ModuleKind.ESNext,
+              jsx: ts.JsxEmit.ReactJSX,
+            },
+            fileName: file,
+            reportDiagnostics: true,
+          });
+          const errors = (result.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error);
+          if (errors.length) {
+            for (const d of errors) console.error(ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Bundle-check SVG imports
+        run: npx expo export --platform web --output-dir /tmp/detour-mood-svg
+
+      - name: Verify Mood page invariants
+        run: |
+          grep -F "DETOUR_BUILD_VERSION = '0.45.1'" src/lib/build-info.ts
+          grep -F "function MoodIcon(" src/app/index.tsx
+          grep -F "<MoodIcon moodId={item.id} />" src/app/index.tsx
+          grep -F "react-native-svg-transformer/expo" metro.config.js
+          test -f assets/mood/wander.svg
+          test -f assets/mood/food.svg
+          test -f assets/mood/quiet.svg
+          test -f assets/mood/weird.svg
+          test -f assets/mood/color.svg
+          test -f assets/mood/surprise.svg
+          if grep -Fq "<MoodGlyph" src/app/index.tsx; then exit 1; fi
+          if grep -Fq "active && styles.v44MoodGlyphActive" src/app/index.tsx; then exit 1; fi
+          git diff --check
+
+      - name: Remove one-time migration files
+        run: |
+          rm -f scripts/apply_mood_svg_page.py
+          rm -f .github/workflows/mood-page-svg.yml
+
+      - name: Commit Mood page only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: rebuild Mood page icons as SVG assets"
+          git push origin HEAD:chatgpt/mood-page-svg
