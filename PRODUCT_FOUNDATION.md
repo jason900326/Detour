@@ -804,3 +804,11 @@ Detour 真正要建立的習慣是：
 - Ticket reveal follows real work. Fast builds keep a short ~2 second physical-printing ritual; slow builds hold the ticket partially revealed instead of pretending to be complete.
 - `終點保密` is the final stamp. The stamp lands after the full ticket is visible, gives one short haptic, and only then unlocks the departure CTA.
 - The issued screen does not need a redundant “車票好了” headline; a complete stamped ticket plus an enabled `出發` action communicates completion.
+
+## v0.43 — UI convergence
+
+- Mood icons are a DETOUR-owned geometric system. Do not use emoji, Unicode pictograms, or platform-dependent symbols as the primary artwork.
+- Journey review is a memory page, not a diagnostics report: lead with the photo and destination, keep route information compact, and never show an empty map rectangle.
+- Mission rows in Journey Review use large readable titles and show the matching mission photo when one exists.
+- Developer-tool visibility and Indoor Test are separate states. Consumer Settings never exposes prototype, AI, or playtest controls unless developer tools have explicitly been unlocked.
+- Indoor Test remains a developer toggle and may stay on or off independently of whether the developer-tool panel is currently visible.
