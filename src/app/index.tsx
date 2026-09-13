@@ -674,16 +674,87 @@ function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
   return <MoodSurpriseIcon {...commonProps} />;
 }
 
-function V45Ticket({ timeLabel, moodLabel, moodId, serial: _serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
-  const stampScale = stampProgress ? stampProgress.interpolate({ inputRange: [0,1], outputRange: [1.28,1] }) : 1;
+function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
+  const stampScale = stampProgress
+    ? stampProgress.interpolate({ inputRange: [0, 1], outputRange: [1.28, 1] })
+    : 1;
   const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
-  return <View style={styles.v46TicketPaper}>
-    <View style={styles.v46TicketOrangeFeed}/><Text style={styles.v46TicketBrand}>DETOUR</Text><View style={styles.v46TicketDashRule}/>
-    <View style={styles.v46TicketMainRow}><View style={styles.v46TicketTimeBlock}><Text style={styles.v46TicketLabel}>旅程時間</Text><View style={styles.v46TicketTimeRow}><Text style={styles.v46TicketMinutes}>{timeLabel}</Text><Text style={styles.v46TicketMinutesUnit}>分鐘</Text></View></View><View style={styles.v46TicketVerticalDash}/><View style={styles.v46TicketMoodBlock}><Text style={styles.v46TicketLabel}>此趟心情</Text><View style={styles.v46TicketMoodRow}><V45MoodIcon moodId={moodId} size={48}/><Text style={styles.v46TicketMoodText}>{moodLabel}</Text></View></View></View>
-    <View style={styles.v46TicketDashRule}/><View style={styles.v46TicketDestinationRow}><View><Text style={styles.v46TicketLabel}>目的地</Text><View style={styles.v46TicketUnknownRow}><View style={styles.v46TicketPin}><View style={styles.v46TicketPinHole}/></View><Text style={styles.v46TicketUnknown}>???</Text></View></View><View style={styles.v46TicketMiniRoute}><View style={styles.v46MiniBuilding}/><View style={styles.v46MiniRouteDash}/><View style={styles.v46MiniTree}/><View style={[styles.v46MiniRouteDash,{left:72,transform:[{rotate:'-16deg'}]}]}/><View style={styles.v46MiniFlagPole}/><View style={styles.v46MiniFlag}/></View></View>
-    <View style={styles.v46TicketDashRule}/><View style={styles.v46Barcode}>{Array.from({length:27}).map((_,i)=><View key={`barcode-${i}`} style={[styles.v46BarcodeBar,{width:i%5===0?4:i%3===0?2:1.5}]}/>)}</View>
-    {stamped&&<Animated.View style={[styles.v46SecretStamp,{opacity:stampOpacity,transform:[{rotate:'-8deg'},{scale:stampScale}]}]}><Text style={styles.v46SecretStampText}>終點保密</Text></Animated.View>}
-  </View>;
+
+  return (
+    <View style={styles.v46ArtTicket}>
+      <Image
+        source={require('../../assets/detour/ticket-base.png')}
+        style={styles.v46ArtTicketBase}
+        resizeMode="stretch"
+      />
+
+      <View style={styles.v46ArtTicketHeader}>
+        <Text style={styles.v46ArtTicketBrand}>DETOUR</Text>
+        <Text style={styles.v46ArtTicketSerial}>{serial}</Text>
+      </View>
+
+      <View style={styles.v46ArtTicketTimeBlock}>
+        <Text style={styles.v46ArtTicketLabel}>旅程時間</Text>
+        <View style={styles.v46ArtTicketTimeRow}>
+          <Text style={styles.v46ArtTicketMinutes}>{timeLabel}</Text>
+          <Text style={styles.v46ArtTicketMinutesUnit}>分鐘</Text>
+        </View>
+      </View>
+
+      <View style={styles.v46ArtTicketMoodBlock}>
+        <Text style={styles.v46ArtTicketLabel}>此趟心情</Text>
+        <View style={styles.v46ArtTicketMoodRow}>
+          <V45MoodIcon moodId={moodId} size={43} />
+          <Text style={styles.v46ArtTicketMoodText}>{moodLabel}</Text>
+        </View>
+      </View>
+
+      <View style={styles.v46ArtTicketDestinationBlock}>
+        <Text style={styles.v46ArtTicketLabel}>目的地</Text>
+        <View style={styles.v46ArtTicketUnknownRow}>
+          <View style={styles.v46ArtTicketPin}>
+            <View style={styles.v46ArtTicketPinCore} />
+          </View>
+          <Text style={styles.v46ArtTicketUnknown}>???</Text>
+        </View>
+      </View>
+
+      <View style={styles.v46ArtTicketMiniRoute}>
+        <View style={styles.v46ArtMiniStart} />
+        <View style={[styles.v46ArtMiniDash, { left: 15, top: 28, transform: [{ rotate: '12deg' }] }]} />
+        <View style={styles.v46ArtMiniTree} />
+        <View style={[styles.v46ArtMiniDash, { left: 70, top: 22, transform: [{ rotate: '-17deg' }] }]} />
+        <View style={styles.v46ArtMiniFlagPole} />
+        <View style={styles.v46ArtMiniFlag} />
+      </View>
+
+      <View style={styles.v46ArtBarcode}>
+        {Array.from({ length: 29 }).map((_, index) => (
+          <View
+            key={`art-barcode-${index}`}
+            style={[
+              styles.v46ArtBarcodeBar,
+              { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+            ]}
+          />
+        ))}
+      </View>
+
+      {stamped && (
+        <Animated.View
+          style={[
+            styles.v46ArtSecretStamp,
+            {
+              opacity: stampOpacity,
+              transform: [{ rotate: '-8deg' }, { scale: stampScale }],
+            },
+          ]}
+        >
+          <Text style={styles.v46ArtSecretStampText}>終點保密</Text>
+        </Animated.View>
+      )}
+    </View>
+  );
 }
 
 function V45SharePoster({
@@ -731,6 +802,124 @@ function V45SharePoster({
         <View style={styles.v45PosterRouteTurn} />
         <View style={styles.v45PosterRouteLineB} />
         <View style={styles.v45PosterRouteEnd} />
+      </View>
+    </View>
+  );
+}
+
+function V46CompleteArtwork({
+  entry,
+  photos,
+  fallbackDestination,
+  fallbackMinutes,
+}: {
+  entry: PassportEntry | null;
+  photos: SessionPhoto[];
+  fallbackDestination: string;
+  fallbackMinutes: number;
+}) {
+  const completedAt = entry?.completedAt ?? new Date().toISOString();
+  const destination = entry?.sceneName ?? fallbackDestination;
+  const minutes = entry?.actualDurationMinutes ?? entry?.minutes ?? fallbackMinutes;
+
+  return (
+    <View style={styles.v46CompleteArtwork}>
+      <Image
+        source={require('../../assets/detour/journey-complete-template.png')}
+        style={styles.v46ArtworkBase}
+        resizeMode="stretch"
+      />
+
+      {photos[0] && (
+        <Image source={{ uri: photos[0].uri }} style={styles.v46CompleteHeroPhoto} resizeMode="cover" />
+      )}
+
+      <View style={styles.v46CompleteTopInfo}>
+        <Text style={styles.v46CompleteTopCell}>DETOUR</Text>
+        <Text style={styles.v46CompleteTopCell}>{entry?.moodLabel ?? '旅程'}</Text>
+        <Text style={styles.v46CompleteTopCell}>{minutes} 分</Text>
+        <Text style={[styles.v46CompleteTopCell, styles.v46CompleteTopCellLast]}>{formatPassportDate(completedAt)}</Text>
+      </View>
+
+      <View style={styles.v46CompleteThumbRow}>
+        {Array.from({ length: 6 }).map((_, index) =>
+          photos[index] ? (
+            <Image key={photos[index].id} source={{ uri: photos[index].uri }} style={styles.v46CompleteThumb} resizeMode="cover" />
+          ) : (
+            <View key={`empty-complete-${index}`} style={styles.v46CompleteThumbEmpty} />
+          )
+        )}
+      </View>
+
+      <View style={styles.v46CompleteCopy}>
+        <Text style={styles.v46CompleteKicker}>這趟走到了</Text>
+        <Text style={styles.v46CompleteDestination} numberOfLines={2}>{destination}</Text>
+        <Text style={styles.v46CompleteMeta}>{photos.length} 張照片 · {minutes} 分鐘</Text>
+      </View>
+
+      <Text style={styles.v46CompleteOrangeBand}>旅程完成</Text>
+    </View>
+  );
+}
+
+function V46ReviewArtwork({
+  entry,
+  photoIndex,
+  onPhotoIndex,
+}: {
+  entry: PassportEntry;
+  photoIndex: number;
+  onPhotoIndex: (index: number) => void;
+}) {
+  const photos = entry.photos ?? [];
+  const activeIndex = Math.min(photoIndex, Math.max(0, photos.length - 1));
+  const activePhoto = photos[activeIndex];
+  const distanceKm = ((entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000).toFixed(1);
+
+  return (
+    <View style={styles.v46ReviewArtwork}>
+      <Image
+        source={require('../../assets/detour/journey-review-template.png')}
+        style={styles.v46ArtworkBase}
+        resizeMode="stretch"
+      />
+
+      <View style={styles.v46ReviewHeader}>
+        <Text style={styles.v46ReviewBrand}>DETOUR</Text>
+        <Text style={styles.v46ReviewDate}>{formatPassportDate(entry.completedAt)}</Text>
+      </View>
+
+      {activePhoto && (
+        <Image source={{ uri: activePhoto.uri }} style={styles.v46ReviewHeroPhoto} resizeMode="cover" />
+      )}
+
+      <View style={styles.v46ReviewThumbRow}>
+        {Array.from({ length: 3 }).map((_, index) => {
+          const photo = photos[index];
+          if (!photo) return <View key={`empty-review-${index}`} style={styles.v46ReviewThumbEmpty} />;
+          return (
+            <Pressable key={photo.id} onPress={() => onPhotoIndex(index)} style={styles.v46ReviewThumbPress}>
+              <Image
+                source={{ uri: photo.uri }}
+                style={[styles.v46ReviewThumb, index === activeIndex && styles.v46ReviewThumbActive]}
+                resizeMode="cover"
+              />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.v46ReviewCopyLeft}>
+        <Text style={styles.v46ReviewKicker}>{entry.moodLabel}</Text>
+        <Text style={styles.v46ReviewDestination} numberOfLines={2}>
+          {entry.sceneName ?? `${entry.city}的一趟 DETOUR`}
+        </Text>
+      </View>
+
+      <View style={styles.v46ReviewCopyRight}>
+        <Text style={styles.v46ReviewFact}>{entry.actualDurationMinutes ?? entry.minutes} 分鐘</Text>
+        <Text style={styles.v46ReviewFact}>{distanceKm} 公里</Text>
+        <Text style={styles.v46ReviewFact}>{entry.photoCount ?? photos.length} 張照片</Text>
       </View>
     </View>
   );
@@ -4350,51 +4539,11 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              <View style={[styles.v35CityBlock, { left: '4%', height: 46 }]} />
-              <View style={[styles.v35CityBlock, { left: '10%', height: 29, width: 18 }]} />
-
-              <View style={[styles.v35RouteDash, { left: '9%', top: 91, width: 108, transform: [{ rotate: '11deg' }] }]} />
-              <View style={[styles.v35RouteDash, { left: '35%', top: 80, width: 116, transform: [{ rotate: '-37deg' }] }]} />
-              <View style={[styles.v35RouteDash, { left: '59%', top: 67, width: 110, transform: [{ rotate: '24deg' }] }]} />
-
-              <View style={[styles.v35MapPin, { left: '7%', top: 80 }]}><View style={styles.v35MapPinCore} /></View>
-              <View style={[styles.v35MapPin, { left: '35%', top: 103 }]}><View style={styles.v35MapPinCore} /></View>
-              <View style={[styles.v35MapPin, { left: '59%', top: 37 }]}><View style={styles.v35MapPinCore} /></View>
-              <View style={[styles.v35MapPin, { right: '7%', top: 86 }]}><View style={styles.v35MapPinCore} /></View>
-
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.v36TravelerDot,
-                  {
-                    transform: [
-                      {
-                        translateX: homeRouteMotion.interpolate({
-                          inputRange: [0, 0.34, 0.64, 1],
-                          outputRange: [0, 102, 194, 290],
-                        }),
-                      },
-                      {
-                        translateY: homeRouteMotion.interpolate({
-                          inputRange: [0, 0.34, 0.64, 1],
-                          outputRange: [0, 24, -42, 7],
-                        }),
-                      },
-                      {
-                        scale: homeRouteMotion.interpolate({
-                          inputRange: [0, 0.5, 1],
-                          outputRange: [0.85, 1.08, 0.85],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <View style={styles.v36TravelerDotCore} />
-              </Animated.View>
-
-              <View style={styles.v35SketchBench}><View style={styles.v35BenchSeat} /><View style={styles.v35BenchLeg} /><View style={[styles.v35BenchLeg, styles.v35BenchLegRight]} /></View>
-              <View style={styles.v35SketchFlag}><View style={styles.v35FlagPole} /><View style={styles.v35FlagCloth} /></View>
+              <Image
+                source={require('../../assets/detour/home-hero-route.png')}
+                style={styles.v46HomeHeroRoute}
+                resizeMode="contain"
+              />
             </Animated.View>
             <Text style={styles.v35HomeQuestion}>今天有多少時間，{`\n`}可以拿來偏離一下？</Text>
             <View style={styles.v35Underline} />
@@ -4553,46 +4702,39 @@ export default function HomeScreen() {
               {!ticketBuildError && <View style={styles.v45PrintingUnderline} />}
             </View>
 
-            <View style={styles.v45PrinterStage}>
-              <View style={styles.v45PrinterMachine}>
-                <Animated.View
-                  style={[
-                    styles.v45PrinterPulse,
-                    {
-                      opacity: printerPulse.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.18, 0.55],
-                      }),
-                    },
-                  ]}
-                />
-                <View style={styles.v45PrinterSlot} />
-              </View>
+            <View style={styles.v46ArtPrinterStage}>
+              <Image
+                source={require('../../assets/detour/printer-front.png')}
+                style={styles.v46ArtPrinterImage}
+                resizeMode="contain"
+              />
 
-              <Animated.View style={[styles.v45PaperMask,{height:routeProgress.interpolate({inputRange:[0,1],outputRange:[4,438]})}]}>
-                <Animated.View
-                  style={[
-                    styles.v45PaperMotion,
-                    {
-                      transform: [
-                        {
-                          translateY: routeProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 0],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  <V45Ticket
-                    timeLabel={selectedTime ?? '15'}
-                    moodId={selectedMood ?? 'wander'}
-                    moodLabel={mood?.label ?? '—'}
-                    serial={ticketSerial(selectedTime, selectedMood)}
-                  />
-                </Animated.View>
+              <Animated.View
+                style={[
+                  styles.v46ArtPaperReveal,
+                  {
+                    height: routeProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [2, 420],
+                    }),
+                  },
+                ]}
+              >
+                <V45Ticket
+                  timeLabel={selectedTime ?? '15'}
+                  moodId={selectedMood ?? 'wander'}
+                  moodLabel={mood?.label ?? '—'}
+                  serial={ticketSerial(selectedTime, selectedMood)}
+                />
               </Animated.View>
+
+              <View pointerEvents="none" style={styles.v46ArtPrinterTopMask}>
+                <Image
+                  source={require('../../assets/detour/printer-front.png')}
+                  style={styles.v46ArtPrinterImageMask}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
 
             {ticketBuildError && (
@@ -5155,53 +5297,12 @@ export default function HomeScreen() {
                 <View style={styles.v45FinishTitleUnderline} />
               </View>
 
-              <View style={styles.v45PassportCard}>
-                <View style={styles.v45PassportCardTop}>
-                  <Text style={styles.v45PassportLogo}>DETOUR</Text>
-                  <Text style={styles.v45PassportNumber}>
-                    {formatPassportDate(lastCompletedEntry?.completedAt ?? new Date().toISOString())}
-                  </Text>
-                </View>
-
-                {photos.length > 0 ? (
-                  <>
-                    <View style={styles.v45FinishHeroWrap}>
-                      <Image source={{ uri: photos[0].uri }} style={styles.v45FinishHero} resizeMode="cover" />
-                      <View style={styles.v45CompleteStamp}>
-                        <Text style={styles.v45CompleteStampText}>旅程完成</Text>
-                      </View>
-                    </View>
-                    <View style={styles.v45FinishThumbRow}>
-                      {photos.slice(0, 3).map((photo) => (
-                        <Image key={photo.id} source={{ uri: photo.uri }} style={styles.v45FinishThumb} resizeMode="cover" />
-                      ))}
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.v45FinishNoPhoto}>
-                    <View style={styles.v45FinishNoPhotoRoute} />
-                    <Text style={styles.v45FinishNoPhotoText}>{selectedScene?.name ?? '這趟的終點'}</Text>
-                  </View>
-                )}
-
-                <View style={styles.v45FinishInfoRow}>
-                  <View style={styles.v45FinishDestination}>
-                    <Text style={styles.v45FinishInfoLabel}>目的地</Text>
-                    <Text style={styles.v45FinishDestinationText} numberOfLines={2}>
-                      {selectedScene?.name ?? lastCompletedEntry?.city ?? 'DETOUR'}
-                    </Text>
-                  </View>
-                  <View style={styles.v45FinishInfoDivider} />
-                  <View style={styles.v45FinishFacts}>
-                    <Text style={styles.v45FinishInfoLabel}>日期</Text>
-                    <Text style={styles.v45FinishFact}>
-                      {formatPassportDate(lastCompletedEntry?.completedAt ?? new Date().toISOString())}
-                    </Text>
-                    <Text style={[styles.v45FinishInfoLabel, { marginTop: 10 }]}>時長</Text>
-                    <Text style={styles.v45FinishFact}>{lastCompletedEntry?.minutes ?? selectedMinutes} 分鐘</Text>
-                  </View>
-                </View>
-              </View>
+              <V46CompleteArtwork
+                entry={lastCompletedEntry}
+                photos={photos}
+                fallbackDestination={selectedScene?.name ?? '這趟的終點'}
+                fallbackMinutes={selectedMinutes}
+              />
 
               <Pressable
                 onPress={() => {
@@ -5226,7 +5327,6 @@ export default function HomeScreen() {
                 <Text style={styles.v45FinishSecondaryText}>回到首頁</Text>
               </Pressable>
             </ScrollView>
-            <V45Skyline />
           </View>
         )}
 
@@ -5320,77 +5420,33 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.v45DetailScroll}
             >
-              <View style={styles.v45DetailTicketStrip}>
-                <Text style={styles.v45DetailTicketBrand}>DETOUR</Text>
-                <View style={styles.v45DetailTicketDivider} />
-                <View style={styles.v45DetailTicketCell}>
-                  <Text style={styles.v45DetailTicketLabel}>目的地</Text>
-                  <Text style={styles.v45DetailTicketValue} numberOfLines={1}>
-                    {selectedPassportEntry.sceneName ?? selectedPassportEntry.city}
-                  </Text>
-                </View>
-                <View style={styles.v45DetailTicketDivider} />
-                <View style={styles.v45DetailTicketCellSmall}>
-                  <Text style={styles.v45DetailTicketLabel}>日期</Text>
-                  <Text style={styles.v45DetailTicketValueSmall}>
-                    {formatPassportDate(selectedPassportEntry.completedAt)}
-                  </Text>
-                </View>
-                <View style={styles.v45DetailTicketDivider} />
-                <View style={styles.v45DetailTicketCellSmall}>
-                  <Text style={styles.v45DetailTicketLabel}>總時長</Text>
-                  <Text style={styles.v45DetailTicketValueSmall}>
-                    {selectedPassportEntry.actualDurationMinutes ?? selectedPassportEntry.minutes} 分鐘
-                  </Text>
-                </View>
-              </View>
+              <V46ReviewArtwork
+                entry={selectedPassportEntry}
+                photoIndex={passportPhotoIndex}
+                onPhotoIndex={setPassportPhotoIndex}
+              />
 
-              {selectedPassportEntry.photos?.[
-                Math.min(
-                  passportPhotoIndex,
-                  Math.max(0, (selectedPassportEntry.photos?.length ?? 1) - 1)
-                )
-              ]?.uri ? (
-                <View style={styles.v45DetailHeroWrap}>
-                  <Image
-                    source={{
-                      uri: selectedPassportEntry.photos![
-                        Math.min(passportPhotoIndex, selectedPassportEntry.photos!.length - 1)
-                      ].uri,
-                    }}
-                    style={styles.v45DetailHero}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.v45DetailPhotoCount}>
-                    <Text style={styles.v45DetailPhotoCountText}>
-                      {Math.min(passportPhotoIndex + 1, selectedPassportEntry.photos!.length)} / {selectedPassportEntry.photos!.length}
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.v45DetailNoPhoto}>
-                  <Text style={styles.v45DetailNoPhotoText}>這趟沒有留下照片</Text>
-                </View>
-              )}
-
-              {selectedPassportEntry.photos && selectedPassportEntry.photos.length > 1 && (
+              {selectedPassportEntry.photos && selectedPassportEntry.photos.length > 3 && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.v45DetailThumbRow}
                 >
-                  {selectedPassportEntry.photos.map((photo, index) => (
-                    <Pressable key={photo.id} onPress={() => setPassportPhotoIndex(index)}>
-                      <Image
-                        source={{ uri: photo.uri }}
-                        style={[
-                          styles.v45DetailThumb,
-                          index === passportPhotoIndex && styles.v45DetailThumbActive,
-                        ]}
-                        resizeMode="cover"
-                      />
-                    </Pressable>
-                  ))}
+                  {selectedPassportEntry.photos.slice(3).map((photo, offset) => {
+                    const index = offset + 3;
+                    return (
+                      <Pressable key={photo.id} onPress={() => setPassportPhotoIndex(index)}>
+                        <Image
+                          source={{ uri: photo.uri }}
+                          style={[
+                            styles.v45DetailThumb,
+                            index === passportPhotoIndex && styles.v45DetailThumbActive,
+                          ]}
+                          resizeMode="cover"
+                        />
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
               )}
 
@@ -12225,5 +12281,425 @@ const styles = StyleSheet.create({
   v46TicketMainRow:{minHeight:112,flexDirection:'row',alignItems:'stretch'},v46TicketTimeBlock:{flex:.95,paddingRight:12,justifyContent:'center'},v46TicketLabel:{color:INK,fontSize:16,fontWeight:'900',letterSpacing:.5,marginBottom:5},v46TicketTimeRow:{flexDirection:'row',alignItems:'baseline'},v46TicketMinutes:{color:SIGNAL,fontSize:58,lineHeight:62,fontWeight:'900',letterSpacing:-3},v46TicketMinutesUnit:{color:INK,fontSize:20,fontWeight:'900',marginLeft:6},v46TicketVerticalDash:{width:1,borderLeftWidth:1.5,borderStyle:'dashed',borderColor:'#B7B0A5',marginVertical:7},v46TicketMoodBlock:{flex:1.15,paddingLeft:16,justifyContent:'center'},v46TicketMoodRow:{flexDirection:'row',alignItems:'center',gap:7},v46TicketMoodText:{flexShrink:1,color:INK,fontSize:24,fontWeight:'900',letterSpacing:-1},
   v46TicketDestinationRow:{minHeight:92,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},v46TicketUnknownRow:{flexDirection:'row',alignItems:'center'},v46TicketUnknown:{color:INK,fontSize:41,fontWeight:'900',letterSpacing:2},v46TicketPin:{width:25,height:32,borderRadius:15,backgroundColor:SIGNAL,marginRight:9,alignItems:'center',paddingTop:7},v46TicketPinHole:{width:8,height:8,borderRadius:4,backgroundColor:'#FCF8EE'},v46TicketMiniRoute:{width:132,height:66,position:'relative'},v46MiniBuilding:{position:'absolute',left:3,bottom:9,width:18,height:25,backgroundColor:INK},v46MiniRouteDash:{position:'absolute',left:28,top:34,width:29,height:3,borderRadius:2,backgroundColor:SIGNAL,transform:[{rotate:'18deg'}]},v46MiniTree:{position:'absolute',left:76,bottom:8,width:16,height:30,borderRadius:12,backgroundColor:INK},v46MiniFlagPole:{position:'absolute',right:16,bottom:8,width:3,height:42,backgroundColor:INK},v46MiniFlag:{position:'absolute',right:0,top:10,width:18,height:11,backgroundColor:SIGNAL},
   v46Barcode:{height:45,flexDirection:'row',alignItems:'stretch',justifyContent:'center',gap:3,paddingTop:3},v46BarcodeBar:{height:40,backgroundColor:INK},v46SecretStamp:{position:'absolute',right:18,top:205,borderWidth:3,borderColor:SIGNAL,paddingHorizontal:10,paddingVertical:7,backgroundColor:'rgba(252,248,238,.88)'},v46SecretStampText:{color:SIGNAL,fontSize:18,fontWeight:'900',letterSpacing:1},
+
+  v46HomeHeroRoute: {
+    width: '100%',
+    height: '100%',
+  },
+  v46ArtTicket: {
+    width: 310,
+    aspectRatio: 1115 / 1411,
+    position: 'relative',
+  },
+  v46ArtTicketBase: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  v46ArtTicketHeader: {
+    position: 'absolute',
+    left: '9%',
+    right: '9%',
+    top: '16.5%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  v46ArtTicketBrand: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '900',
+    letterSpacing: -1.8,
+    color: INK,
+  },
+  v46ArtTicketSerial: {
+    paddingBottom: 3,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    color: '#77736B',
+  },
+  v46ArtTicketLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+    color: INK,
+  },
+  v46ArtTicketTimeBlock: {
+    position: 'absolute',
+    left: '10%',
+    top: '32.5%',
+    width: '37%',
+  },
+  v46ArtTicketTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 2,
+  },
+  v46ArtTicketMinutes: {
+    fontSize: 47,
+    lineHeight: 50,
+    fontWeight: '900',
+    letterSpacing: -2.7,
+    color: SIGNAL,
+  },
+  v46ArtTicketMinutesUnit: {
+    marginLeft: 4,
+    marginBottom: 5,
+    fontSize: 16,
+    fontWeight: '900',
+    color: INK,
+  },
+  v46ArtTicketMoodBlock: {
+    position: 'absolute',
+    right: '7.5%',
+    top: '32.5%',
+    width: '39%',
+  },
+  v46ArtTicketMoodRow: {
+    marginTop: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  v46ArtTicketMoodText: {
+    flex: 1,
+    fontSize: 21,
+    lineHeight: 25,
+    fontWeight: '900',
+    color: INK,
+  },
+  v46ArtTicketDestinationBlock: {
+    position: 'absolute',
+    left: '10%',
+    top: '56.2%',
+    width: '39%',
+  },
+  v46ArtTicketUnknownRow: {
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  v46ArtTicketPin: {
+    width: 24,
+    height: 30,
+    borderRadius: 13,
+    backgroundColor: SIGNAL,
+    alignItems: 'center',
+    paddingTop: 7,
+  },
+  v46ArtTicketPinCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FBF8EF',
+  },
+  v46ArtTicketUnknown: {
+    fontSize: 36,
+    lineHeight: 40,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: INK,
+  },
+  v46ArtTicketMiniRoute: {
+    position: 'absolute',
+    right: '8%',
+    top: '57%',
+    width: '37%',
+    height: 56,
+  },
+  v46ArtMiniStart: {
+    position: 'absolute',
+    left: 2,
+    bottom: 10,
+    width: 13,
+    height: 22,
+    borderRadius: 2,
+    backgroundColor: INK,
+  },
+  v46ArtMiniDash: {
+    position: 'absolute',
+    width: 45,
+    borderTopWidth: 3,
+    borderStyle: 'dashed',
+    borderColor: SIGNAL,
+  },
+  v46ArtMiniTree: {
+    position: 'absolute',
+    left: 58,
+    top: 13,
+    width: 15,
+    height: 27,
+    borderRadius: 8,
+    backgroundColor: INK,
+  },
+  v46ArtMiniFlagPole: {
+    position: 'absolute',
+    right: 9,
+    top: 7,
+    width: 3,
+    height: 34,
+    backgroundColor: INK,
+  },
+  v46ArtMiniFlag: {
+    position: 'absolute',
+    right: -2,
+    top: 7,
+    width: 14,
+    height: 11,
+    backgroundColor: SIGNAL,
+  },
+  v46ArtBarcode: {
+    position: 'absolute',
+    left: '21%',
+    right: '21%',
+    bottom: '6.8%',
+    height: 39,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  v46ArtBarcodeBar: {
+    height: '100%',
+    backgroundColor: INK,
+  },
+  v46ArtSecretStamp: {
+    position: 'absolute',
+    right: '7%',
+    top: '44%',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderWidth: 3,
+    borderColor: SIGNAL,
+    backgroundColor: 'rgba(251,248,239,0.86)',
+  },
+  v46ArtSecretStampText: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: SIGNAL,
+  },
+  v46ArtPrinterStage: {
+    width: '100%',
+    height: 505,
+    marginTop: 30,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  v46ArtPrinterImage: {
+    position: 'absolute',
+    top: 0,
+    width: '100%',
+    aspectRatio: 2048 / 682,
+    zIndex: 1,
+  },
+  v46ArtPaperReveal: {
+    position: 'absolute',
+    top: 61,
+    width: 310,
+    overflow: 'hidden',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  v46ArtPrinterTopMask: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+    overflow: 'hidden',
+    zIndex: 3,
+  },
+  v46ArtPrinterImageMask: {
+    position: 'absolute',
+    top: 0,
+    width: '100%',
+    aspectRatio: 2048 / 682,
+  },
+  v46ArtworkBase: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  v46CompleteArtwork: {
+    width: '100%',
+    aspectRatio: 942 / 1670,
+    position: 'relative',
+    marginBottom: 24,
+  },
+  v46CompleteHeroPhoto: {
+    position: 'absolute',
+    left: '5.1%',
+    top: '15.2%',
+    width: '89.8%',
+    height: '41.1%',
+    borderRadius: 10,
+  },
+  v46CompleteTopInfo: {
+    position: 'absolute',
+    left: '4.8%',
+    right: '4.8%',
+    top: '3.8%',
+    height: '8.2%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  v46CompleteTopCell: {
+    flex: 1,
+    height: '100%',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    fontSize: 10,
+    fontWeight: '900',
+    color: INK,
+    borderRightWidth: 1,
+    borderRightColor: '#B8B0A4',
+  },
+  v46CompleteTopCellLast: {
+    borderRightWidth: 0,
+  },
+  v46CompleteThumbRow: {
+    position: 'absolute',
+    left: '3.2%',
+    right: '3.2%',
+    top: '58.2%',
+    height: '9.8%',
+    flexDirection: 'row',
+    gap: 3,
+  },
+  v46CompleteThumb: {
+    flex: 1,
+    height: '100%',
+    borderRadius: 8,
+  },
+  v46CompleteThumbEmpty: {
+    flex: 1,
+    height: '100%',
+  },
+  v46CompleteCopy: {
+    position: 'absolute',
+    left: '8%',
+    right: '8%',
+    top: '70.1%',
+  },
+  v46CompleteKicker: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  v46CompleteDestination: {
+    marginTop: 5,
+    width: '62%',
+    fontSize: 21,
+    lineHeight: 25,
+    fontWeight: '900',
+    color: INK,
+  },
+  v46CompleteMeta: {
+    marginTop: 7,
+    fontSize: 12,
+    fontWeight: '700',
+    color: MUTED,
+  },
+  v46CompleteOrangeBand: {
+    position: 'absolute',
+    left: '7%',
+    bottom: '9.4%',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: '#FFF8EE',
+  },
+  v46ReviewArtwork: {
+    width: '100%',
+    aspectRatio: 1122 / 1402,
+    position: 'relative',
+    marginBottom: 22,
+  },
+  v46ReviewHeader: {
+    position: 'absolute',
+    left: '9%',
+    right: '9%',
+    top: '5.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  v46ReviewBrand: {
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: 3,
+    color: INK,
+  },
+  v46ReviewDate: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  v46ReviewHeroPhoto: {
+    position: 'absolute',
+    left: '10.2%',
+    top: '17.1%',
+    width: '79.2%',
+    height: '38.4%',
+    borderRadius: 12,
+  },
+  v46ReviewThumbRow: {
+    position: 'absolute',
+    left: '10.2%',
+    right: '10.2%',
+    top: '57.1%',
+    height: '12.4%',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  v46ReviewThumbPress: {
+    flex: 1,
+    height: '100%',
+  },
+  v46ReviewThumb: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  v46ReviewThumbActive: {
+    borderColor: SIGNAL,
+  },
+  v46ReviewThumbEmpty: {
+    flex: 1,
+  },
+  v46ReviewCopyLeft: {
+    position: 'absolute',
+    left: '12.2%',
+    top: '76.7%',
+    width: '35%',
+  },
+  v46ReviewCopyRight: {
+    position: 'absolute',
+    left: '58.5%',
+    top: '76.7%',
+    width: '29%',
+  },
+  v46ReviewKicker: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: SIGNAL,
+  },
+  v46ReviewDestination: {
+    marginTop: 6,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+    color: INK,
+  },
+  v46ReviewFact: {
+    marginBottom: 7,
+    fontSize: 14,
+    fontWeight: '800',
+    color: INK,
+  },
 
 });
