@@ -1,3 +1,3 @@
 // Lightweight marker so preview releases can be identified in Git history.
-// v0.45: restores the cohesive ticket/passport visual system across Mood, printing, completion, recap, and sharing.
-export const DETOUR_BUILD_VERSION = '0.45.0';
+// v0.45.1: Mood page now uses six standalone SVG assets with stable selected-state rendering.
+export const DETOUR_BUILD_VERSION = '0.45.1';

@@ -21,6 +21,12 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Circle, Polyline } from 'react-native-maps';
 import { captureRef } from 'react-native-view-shot';
+import MoodWanderIcon from '../../assets/mood/wander.svg';
+import MoodFoodIcon from '../../assets/mood/food.svg';
+import MoodQuietIcon from '../../assets/mood/quiet.svg';
+import MoodWeirdIcon from '../../assets/mood/weird.svg';
+import MoodColorIcon from '../../assets/mood/color.svg';
+import MoodSurpriseIcon from '../../assets/mood/surprise.svg';
 
 import {
   buildJourneyPlan,
@@ -659,86 +665,13 @@ function V45Skyline() {
 }
 
 function V45MoodIcon({ moodId }: { moodId: MoodId }) {
-  if (moodId === 'wander') {
-    return (
-      <View style={styles.v45MoodIconStage}>
-        <View style={styles.v45WalkerBackpack} />
-        <View style={styles.v45WalkerHead} />
-        <View style={styles.v45WalkerBody} />
-        <View style={[styles.v45WalkerLimb, styles.v45WalkerArm]} />
-        <View style={[styles.v45WalkerLimb, styles.v45WalkerLegA]} />
-        <View style={[styles.v45WalkerLimb, styles.v45WalkerLegB]} />
-        <View style={[styles.v45AccentDash, { left: 13, top: 56, transform: [{ rotate: '18deg' }] }]} />
-      </View>
-    );
-  }
-
-  if (moodId === 'food') {
-    return (
-      <View style={styles.v45MoodIconStage}>
-        <View style={styles.v45DrinkCup} />
-        <View style={styles.v45DrinkLid} />
-        <View style={styles.v45DrinkStraw} />
-        <View style={styles.v45BurgerBun} />
-        <View style={styles.v45BurgerPatty} />
-        <View style={styles.v45BurgerBottom} />
-        <View style={[styles.v45AccentDash, { right: 13, top: 27, transform: [{ rotate: '-55deg' }] }]} />
-      </View>
-    );
-  }
-
-  if (moodId === 'quiet') {
-    return (
-      <View style={styles.v45MoodIconStage}>
-        <View style={styles.v45TreeCrownA} />
-        <View style={styles.v45TreeCrownB} />
-        <View style={styles.v45TreeTrunk} />
-        <View style={styles.v45BenchSeat} />
-        <View style={styles.v45BenchBack} />
-        <View style={[styles.v45BenchLeg, { left: 54 }]} />
-        <View style={[styles.v45BenchLeg, { left: 82 }]} />
-      </View>
-    );
-  }
-
-  if (moodId === 'weird') {
-    return (
-      <View style={styles.v45MoodIconStage}>
-        <View style={styles.v45CatBody} />
-        <View style={styles.v45CatHead} />
-        <View style={[styles.v45CatEar, styles.v45CatEarLeft]} />
-        <View style={[styles.v45CatEar, styles.v45CatEarRight]} />
-        <View style={styles.v45CatTail} />
-        <Text style={styles.v45QuestionMark}>?</Text>
-      </View>
-    );
-  }
-
-  if (moodId === 'color') {
-    return (
-      <View style={styles.v45MoodIconStage}>
-        <View style={styles.v45CameraBody} />
-        <View style={styles.v45CameraTop} />
-        <View style={styles.v45CameraLensOuter}>
-          <View style={styles.v45CameraLensInner} />
-        </View>
-        <View style={[styles.v45AccentDash, { left: 8, top: 43, transform: [{ rotate: '18deg' }] }]} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.v45MoodIconStage}>
-      <View style={styles.v45Die}>
-        <View style={[styles.v45DiePip, { left: 15, top: 14 }]} />
-        <View style={[styles.v45DiePip, { right: 15, top: 14 }]} />
-        <View style={[styles.v45DiePip, { left: 28, top: 30 }]} />
-        <View style={[styles.v45DiePip, { left: 15, bottom: 14 }]} />
-        <View style={[styles.v45DiePip, { right: 15, bottom: 14 }]} />
-      </View>
-      <View style={[styles.v45AccentDash, { left: 9, top: 42, transform: [{ rotate: '12deg' }] }]} />
-    </View>
-  );
+  const commonProps = { width: 76, height: 76 };
+  if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
+  if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
+  if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
+  if (moodId === 'weird') return <MoodWeirdIcon {...commonProps} />;
+  if (moodId === 'color') return <MoodColorIcon {...commonProps} />;
+  return <MoodSurpriseIcon {...commonProps} />;
 }
 
 function V45Ticket({
