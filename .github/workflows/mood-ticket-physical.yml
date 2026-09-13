@@ -32,16 +32,41 @@ jobs:
 
       - name: Apply UI migration
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply-mood-ticket-physical.py')
+          s = p.read_text(encoding='utf-8')
+          old = "if text.count(old_call) != 2:\n    raise SystemExit(f'Ticket calls: expected 2, got {text.count(old_call)}')"
+          new = "if text.count(old_call) != 1:\n    raise SystemExit(f'Ticket calls: expected 1 legacy preparing match, got {text.count(old_call)}')"
+          if s.count(old) != 1:
+              raise SystemExit(f'migration call-count patch expected 1 match, got {s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
           python .github/scripts/apply-mood-ticket-physical.py
+
           python - <<'PY'
           from pathlib import Path
           p = Path('src/app/index.tsx')
           s = p.read_text(encoding='utf-8')
-          old = "position: 'absolute', top: 0, width: '100%', height: 108, borderRadius: 20,"
-          new = "position: 'absolute', top: 0, width: '100%', height: 92, borderRadius: 20,"
-          if s.count(old) != 1:
-              raise SystemExit(f'printer height patch expected 1 match, got {s.count(old)}')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          ready_old = """                  moodLabel={mood?.label ?? '—'}
+                  serial={ticketSerial(selectedTime, selectedMood)}
+                  stamped"""
+          ready_new = """                  moodLabel={mood?.label ?? '—'}
+                  moodId={selectedMood ?? 'wander'}
+                  serial={ticketSerial(selectedTime, selectedMood)}
+                  stamped"""
+          if s.count(ready_old) != 1:
+              raise SystemExit(f'ready ticket moodId patch expected 1 match, got {s.count(ready_old)}')
+          s = s.replace(ready_old, ready_new, 1)
+
+          metal_old = "position: 'absolute', top: 0, width: '100%', height: 108, borderRadius: 20,"
+          metal_new = "position: 'absolute', top: 0, width: '100%', height: 92, borderRadius: 20,"
+          if s.count(metal_old) != 1:
+              raise SystemExit(f'printer height patch expected 1 match, got {s.count(metal_old)}')
+          s = s.replace(metal_old, metal_new, 1)
+          p.write_text(s, encoding='utf-8')
           PY
 
       - name: Verify product invariants
@@ -57,11 +82,12 @@ jobs:
               '<Text style={styles.v46TicketLabel}>旅程時間</Text>',
               '<Text style={styles.v46TicketLabel}>此趟心情</Text>',
               '<Text style={styles.v46TicketLabel}>目的地</Text>',
-              "moodId={selectedMood ?? 'wander'}",
           ]
           missing = [item for item in required if item not in text]
           if missing:
               raise SystemExit('Missing invariants: ' + repr(missing))
+          if text.count("moodId={selectedMood ?? 'wander'}") != 2:
+              raise SystemExit('Both preparing and ready tickets must receive the selected Mood icon')
           mood_block = text[text.index('const MOODS:'):text.index('const FREE_CAMERA_MISSION')]
           for old in ['隨便走走', '吃點東西', '放鬆一下', '探索新鮮', '拍照走走', '交給驚喜']:
               if old in mood_block:
@@ -71,7 +97,8 @@ jobs:
               raise SystemExit('Preparing skyline should be removed')
           if 'translateY: routeProgress.interpolate' in preparing:
               raise SystemExit('Old floating-paper animation remains')
-          if "height: 92" not in text[text.index('v46PrinterMachine:'):text.index('v46PrinterMetalHighlight:')]:
+          metal = text[text.index('v46PrinterMachine:'):text.index('v46PrinterMetalHighlight:')]
+          if 'height: 92' not in metal:
               raise SystemExit('Metal printer height patch missing')
           print('Product invariants OK')
           PY
