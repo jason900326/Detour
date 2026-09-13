@@ -659,7 +659,7 @@ export function useDetourHomeController() {
   useEffect(() => {
     if (stage !== 'preparing') return;
 
-    routeProgress.setValue(0.04);
+    routeProgress.setValue(0);
     setTicketBuildError(null);
     setTicketBuildStatus('正在取得現在位置…');
 
@@ -1149,23 +1149,12 @@ export function useDetourHomeController() {
   }
 
   function advanceTicketProgress(
-    toValue: number,
+    _toValue: number,
     status: string
   ) {
+    // Route/data preparation and physical paper movement are separate.
+    // The ticket must stay fully inside the printer until the route is ready.
     setTicketBuildStatus(status);
-
-    Animated.timing(
-      routeProgress,
-      {
-        toValue,
-        duration: 260,
-        easing:
-          Easing.out(
-            Easing.cubic
-          ),
-        useNativeDriver: false,
-      }
-    ).start();
   }
 
   function animateIn() {
@@ -2423,7 +2412,7 @@ export function useDetourHomeController() {
 
       setTicketBuildStatus('車票完成');
 
-      const minimumPrintMs = 1850;
+      const minimumPrintMs = 650;
       const remainingPrintMs = Math.max(
         0,
         minimumPrintMs - (Date.now() - ticketStartedAt)
@@ -2438,8 +2427,8 @@ export function useDetourHomeController() {
       await new Promise<void>((resolve) => {
         Animated.timing(routeProgress, {
           toValue: 1,
-          duration: 360,
-          easing: Easing.out(Easing.cubic),
+          duration: 1100,
+          easing: Easing.inOut(Easing.quad),
           useNativeDriver: false,
         }).start(() => resolve());
       });
@@ -2459,7 +2448,9 @@ export function useDetourHomeController() {
       console.log(
         `[DETOUR TIMING] ticket ready in ${Date.now() - ticketStartedAt}ms`
       );
-      transitionTo('ready');
+      // Keep the exact same printer/ticket tree mounted while the stamp lands.
+      // A normal screen transition would make the freshly printed ticket jump.
+      setStage('ready');
 
       // Arrival copy may get an AI polish later, but never blocks the ticket.
       // Color Walk intentionally has no arrival task to rewrite.
