@@ -26,28 +26,23 @@ import {
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-const CAMERA_RESULT_KEY = '@detour/camera/result/v1';
+import {
+  CAMERA_RESULT_KEY,
+  type CameraRouteResult,
+  type CameraSource,
+  type SessionPhoto,
+} from '../lib/app-model';
 
 const INK = '#11110F';
 const BONE = '#F1EFE7';
 const MUTED = '#B7B2A8';
 const SIGNAL = '#FF5A36';
-
-type CameraSource = 'side' | 'arrival' | 'free';
-
-type SessionPhoto = {
-  id: string;
-  uri: string;
-  missionCode: string;
-  missionTitle: string;
-  source?: 'mission' | 'free';
-  savedToLibrary?: boolean;
-};
-
-type CameraRouteResult = {
-  requestId: string;
-  source: CameraSource;
-  photo: SessionPhoto;
+const ABSOLUTE_FILL = {
+  position: 'absolute' as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
 };
 
 function getParam(value: string | string[] | undefined, fallback = '') {
@@ -426,8 +421,8 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
 
   reviewScreen: { flex: 1, backgroundColor: '#000' },
-  reviewImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  reviewShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.12)' },
+  reviewImage: { ...ABSOLUTE_FILL, width: '100%', height: '100%' },
+  reviewShade: { ...ABSOLUTE_FILL, backgroundColor: 'rgba(0,0,0,0.12)' },
   reviewTop: { position: 'absolute', top: 58, left: 24, right: 24 },
   reviewKicker: { fontSize: 16, fontWeight: '800', color: SIGNAL },
   reviewTitle: { marginTop: 8, fontSize: 28, lineHeight: 34, fontWeight: '900', color: '#FFF' },
@@ -519,10 +514,10 @@ const styles = StyleSheet.create({
   cameraView: {
     flex: 1,
   },
-  pinchSurface: { ...StyleSheet.absoluteFillObject },
+  pinchSurface: { ...ABSOLUTE_FILL },
 
   cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     paddingTop: 58,
     paddingHorizontal: 18,
     paddingBottom: 28,
@@ -669,7 +664,7 @@ const styles = StyleSheet.create({
   },
 
   exposedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     backgroundColor: 'rgba(0,0,0,0.28)',
     alignItems: 'center',
     justifyContent: 'center',
