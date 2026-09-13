@@ -224,12 +224,12 @@ const TIME_MIN = TIME_STEPS[0];
 const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
 
 const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
-  { id: 'wander', label: '隨便走走', code: 'WANDER' },
-  { id: 'food', label: '吃點東西', code: 'FOOD' },
-  { id: 'quiet', label: '放鬆一下', code: 'QUIET' },
-  { id: 'weird', label: '探索新鮮', code: 'WEIRD' },
-  { id: 'color', label: '拍照走走', code: 'COLOR' },
-  { id: 'surprise', label: '交給驚喜', code: 'SURPRISE' },
+  { id: 'wander', label: '隨便走', code: 'WANDER' },
+  { id: 'food', label: '吃東西', code: 'FOOD' },
+  { id: 'quiet', label: '想安靜', code: 'QUIET' },
+  { id: 'weird', label: '這是哪', code: 'WEIRD' },
+  { id: 'color', label: '色色的', code: 'COLOR' },
+  { id: 'surprise', label: '命運', code: 'SURPRISE' },
 ];
 
 const FREE_CAMERA_MISSION: Mission = {
@@ -538,6 +538,7 @@ const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 
 type DetourTicketProps = {
   timeLabel: string;
   moodLabel: string;
+  moodId?: MoodId;
   serial: string;
   stamped?: boolean;
   stampProgress?: Animated.Value;
@@ -664,8 +665,8 @@ function V45Skyline() {
   );
 }
 
-function V45MoodIcon({ moodId }: { moodId: MoodId }) {
-  const commonProps = { width: 76, height: 76 };
+function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
+  const commonProps = { width: size, height: size };
   if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
   if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
   if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
@@ -677,6 +678,7 @@ function V45MoodIcon({ moodId }: { moodId: MoodId }) {
 function V45Ticket({
   timeLabel,
   moodLabel,
+  moodId = 'wander',
   serial: _serial,
   stamped = false,
   stampProgress,
@@ -700,60 +702,70 @@ function V45Ticket({
     : undefined;
 
   return (
-    <View style={styles.v45TicketPaper}>
-      <View style={styles.v45TicketOrangeBand} />
-      <Text style={styles.v45TicketBrand}>DETOUR</Text>
-      <View style={styles.v45TicketRule} />
+    <View style={styles.v46TicketPaper}>
+      {DETOUR_TICKET_EDGE.map((top) => (
+        <View key={`v46-left-${top}`} style={[styles.v46TicketEdgeCut, styles.v46TicketEdgeLeft, { top }]} />
+      ))}
+      {DETOUR_TICKET_EDGE.map((top) => (
+        <View key={`v46-right-${top}`} style={[styles.v46TicketEdgeCut, styles.v46TicketEdgeRight, { top }]} />
+      ))}
 
-      <View style={styles.v45TicketInfoRow}>
-        <View style={styles.v45TicketInfoBlock}>
-          <Text style={styles.v45TicketLabel}>旅程時間</Text>
-          <View style={styles.v45TicketMinutesRow}>
-            <Text style={styles.v45TicketMinutes}>{timeLabel}</Text>
-            <Text style={styles.v45TicketMinutesUnit}>分鐘</Text>
+      <View style={styles.v46TicketOrangeBand} />
+      <Text style={styles.v46TicketBrand}>DETOUR</Text>
+      <View style={styles.v46TicketRule} />
+
+      <View style={styles.v46TicketInfoRow}>
+        <View style={styles.v46TicketInfoBlock}>
+          <Text style={styles.v46TicketLabel}>旅程時間</Text>
+          <View style={styles.v46TicketMinutesRow}>
+            <Text style={styles.v46TicketMinutes}>{timeLabel}</Text>
+            <Text style={styles.v46TicketMinutesUnit}>分鐘</Text>
           </View>
         </View>
-        <View style={styles.v45TicketVerticalRule} />
-        <View style={styles.v45TicketInfoBlock}>
-          <Text style={styles.v45TicketLabel}>此趟心情</Text>
-          <Text style={styles.v45TicketMood}>{moodLabel}</Text>
-          <View style={styles.v45TicketMoodUnderline} />
+        <View style={styles.v46TicketVerticalRule} />
+        <View style={styles.v46TicketInfoBlock}>
+          <Text style={styles.v46TicketLabel}>此趟心情</Text>
+          <View style={styles.v46TicketMoodRow}>
+            <View style={styles.v46TicketMoodIcon}>
+              <V45MoodIcon moodId={moodId} size={40} />
+            </View>
+            <Text style={styles.v46TicketMood}>{moodLabel}</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.v45TicketRule} />
-      <View style={styles.v45TicketDestinationRow}>
-        <View>
-          <Text style={styles.v45TicketLabel}>目的地</Text>
-          <Text style={styles.v45TicketUnknown}>● ????</Text>
+      <View style={styles.v46TicketRule} />
+      <View style={styles.v46TicketDestinationRow}>
+        <View style={styles.v46TicketDestinationCopy}>
+          <Text style={styles.v46TicketLabel}>目的地</Text>
+          <View style={styles.v46TicketUnknownRow}>
+            <View style={styles.v46TicketPin}><View style={styles.v46TicketPinCore} /></View>
+            <Text style={styles.v46TicketUnknown}>???</Text>
+          </View>
         </View>
-        <View style={styles.v45TicketRouteMini}>
-          <View style={styles.v45TicketRouteDot} />
-          <View style={styles.v45TicketRouteDashA} />
-          <View style={styles.v45TicketRouteDashB} />
-          <View style={styles.v45TicketRouteFlagPole} />
-          <View style={styles.v45TicketRouteFlag} />
+        <View style={styles.v46TicketRouteMini}>
+          <View style={styles.v46TicketMiniBuilding} />
+          <View style={styles.v46TicketMiniTreeCrown} />
+          <View style={styles.v46TicketMiniTreeTrunk} />
+          <View style={[styles.v46TicketRouteDash, styles.v46TicketRouteDashA]} />
+          <View style={[styles.v46TicketRouteDash, styles.v46TicketRouteDashB]} />
+          <View style={[styles.v46TicketRouteDot, styles.v46TicketRouteDotA]} />
+          <View style={[styles.v46TicketRouteDot, styles.v46TicketRouteDotB]} />
+          <View style={styles.v46TicketRouteFlagPole} />
+          <View style={styles.v46TicketRouteFlag} />
         </View>
       </View>
 
-      <View style={styles.v45TicketRule} />
-      <View style={styles.v45BarcodeRow}>
+      <View style={styles.v46TicketRule} />
+      <View style={styles.v46BarcodeRow}>
         {DETOUR_TICKET_BARS.concat(DETOUR_TICKET_BARS.slice(0, 9)).map((width, index) => (
-          <View
-            key={`${width}-${index}`}
-            style={[styles.v45BarcodeBar, { width: Math.max(1, width) }]}
-          />
+          <View key={`${width}-${index}`} style={[styles.v46BarcodeBar, { width: Math.max(1, width) }]} />
         ))}
       </View>
 
       {stamped && (
-        <Animated.View
-          style={[
-            styles.v45TicketStamp,
-            stampAnimatedStyle,
-          ]}
-        >
-          <Text style={styles.v45TicketStampText}>終點保密</Text>
+        <Animated.View style={[styles.v46TicketStamp, stampAnimatedStyle]}>
+          <Text style={styles.v46TicketStampText}>終點保密</Text>
         </Animated.View>
       )}
     </View>
@@ -4627,44 +4639,45 @@ export default function HomeScreen() {
               {!ticketBuildError && <View style={styles.v45PrintingUnderline} />}
             </View>
 
-            <View style={styles.v45PrinterStage}>
-              <View style={styles.v45PrinterMachine}>
+            <View style={styles.v46PrinterStage}>
+              <Animated.View
+                style={[
+                  styles.v46PaperReveal,
+                  {
+                    height: routeProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 432],
+                    }),
+                  },
+                ]}
+              >
+                <V45Ticket
+                  timeLabel={selectedTime ?? '15'}
+                  moodLabel={mood?.label ?? '—'}
+                  moodId={selectedMood ?? 'wander'}
+                  serial={ticketSerial(selectedTime, selectedMood)}
+                />
+              </Animated.View>
+
+              <View style={styles.v46PrinterMachine}>
+                <View pointerEvents="none" style={styles.v46PrinterMetalHighlight} />
+                <View pointerEvents="none" style={styles.v46PrinterMetalShade} />
                 <Animated.View
+                  pointerEvents="none"
                   style={[
-                    styles.v45PrinterPulse,
+                    styles.v46PrinterGlow,
                     {
                       opacity: printerPulse.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [0.18, 0.55],
+                        outputRange: [0.06, 0.2],
                       }),
                     },
                   ]}
                 />
-                <View style={styles.v45PrinterSlot} />
-              </View>
-
-              <View style={styles.v45PaperMask}>
-                <Animated.View
-                  style={[
-                    styles.v45PaperMotion,
-                    {
-                      transform: [
-                        {
-                          translateY: routeProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-438, 0],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  <V45Ticket
-                    timeLabel={selectedTime ?? '15'}
-                    moodLabel={mood?.label ?? '—'}
-                    serial={ticketSerial(selectedTime, selectedMood)}
-                  />
-                </Animated.View>
+                <View style={styles.v46PrinterSlotFrame}>
+                  <View style={styles.v46PrinterSlotInner} />
+                  <View pointerEvents="none" style={styles.v46PrinterSlotSheen} />
+                </View>
               </View>
             </View>
 
@@ -4688,7 +4701,6 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             )}
-            <V45Skyline />
           </View>
         )}
 
@@ -4724,6 +4736,7 @@ export default function HomeScreen() {
                 <V45Ticket
                   timeLabel={selectedTime ?? '15'}
                   moodLabel={mood?.label ?? '—'}
+                  moodId={selectedMood ?? 'wander'}
                   serial={ticketSerial(selectedTime, selectedMood)}
                   stamped
                   stampProgress={ticketStamp}
@@ -12299,5 +12312,131 @@ const styles = StyleSheet.create({
   v45PosterRouteTurn: { width: 20, height: 20, borderTopWidth: 4, borderRightWidth: 4, borderColor: INK, transform: [{ rotate: '25deg' }] },
   v45PosterRouteLineB: { flex: 1, height: 3, backgroundColor: INK, transform: [{ rotate: '5deg' }] },
   v45PosterRouteEnd: { width: 15, height: 15, backgroundColor: SIGNAL },
+
+
+  // v0.45.2 — approved Mood reference + physical ticket printer
+  v46PrinterStage: {
+    marginTop: 34,
+    height: 510,
+    alignItems: 'center',
+    position: 'relative',
+    zIndex: 2,
+  },
+  v46PrinterMachine: {
+    position: 'absolute', top: 0, width: '100%', height: 92, borderRadius: 20,
+    backgroundColor: '#96938D', borderWidth: 1, borderColor: '#BBB8B0',
+    paddingHorizontal: 20, justifyContent: 'center', zIndex: 6, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 9 }, shadowOpacity: 0.22,
+    shadowRadius: 13, elevation: 9,
+  },
+  v46PrinterMetalHighlight: {
+    position: 'absolute', left: 18, right: 18, top: 8, height: 2,
+    borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.46)',
+  },
+  v46PrinterMetalShade: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: 25,
+    backgroundColor: 'rgba(42,40,37,0.14)',
+  },
+  v46PrinterGlow: {
+    position: 'absolute', left: 24, right: 24, top: 39, height: 34,
+    borderRadius: 12, backgroundColor: SIGNAL,
+  },
+  v46PrinterSlotFrame: {
+    height: 31, borderRadius: 10, padding: 5, backgroundColor: '#4C4A46',
+    borderWidth: 1, borderColor: '#6B6862', shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.34, shadowRadius: 4, elevation: 4,
+  },
+  v46PrinterSlotInner: { flex: 1, borderRadius: 5, backgroundColor: '#080807' },
+  v46PrinterSlotSheen: {
+    position: 'absolute', left: 10, right: 10, top: 5, height: 2,
+    borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  v46PaperReveal: {
+    position: 'absolute', top: 62, width: '86%', overflow: 'hidden',
+    alignItems: 'center', zIndex: 3,
+  },
+  v46TicketPaper: {
+    width: '100%', height: 432, backgroundColor: '#FCF8EE', paddingHorizontal: 24,
+    paddingTop: 48, paddingBottom: 16, borderRadius: 2, position: 'relative',
+    overflow: 'hidden', borderWidth: 1, borderColor: '#E2DBCF', shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 6,
+  },
+  v46TicketEdgeCut: {
+    position: 'absolute', width: 13, height: 13, borderRadius: 7,
+    backgroundColor: '#F5F1E8', zIndex: 4,
+  },
+  v46TicketEdgeLeft: { left: -7 },
+  v46TicketEdgeRight: { right: -7 },
+  v46TicketOrangeBand: {
+    position: 'absolute', left: 0, right: 0, top: 0, height: 37, backgroundColor: SIGNAL,
+  },
+  v46TicketBrand: {
+    fontSize: 30, lineHeight: 33, fontWeight: '900', letterSpacing: -1.5, color: INK,
+  },
+  v46TicketRule: { height: 1, backgroundColor: '#C8C0B3', marginVertical: 11, opacity: 0.82 },
+  v46TicketInfoRow: { minHeight: 106, flexDirection: 'row', alignItems: 'stretch' },
+  v46TicketInfoBlock: { flex: 1, justifyContent: 'center' },
+  v46TicketVerticalRule: { width: 1, marginHorizontal: 13, backgroundColor: '#D1C9BB' },
+  v46TicketLabel: { fontSize: 14, lineHeight: 18, fontWeight: '900', color: INK },
+  v46TicketMinutesRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
+  v46TicketMinutes: {
+    fontSize: 61, lineHeight: 65, fontWeight: '900', color: SIGNAL, letterSpacing: -3,
+  },
+  v46TicketMinutesUnit: {
+    fontSize: 16, lineHeight: 25, fontWeight: '900', color: INK, marginLeft: 5, marginBottom: 5,
+  },
+  v46TicketMoodRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  v46TicketMoodIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  v46TicketMood: { flexShrink: 1, fontSize: 21, lineHeight: 27, fontWeight: '900', color: INK },
+  v46TicketDestinationRow: {
+    minHeight: 80, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  v46TicketDestinationCopy: { minWidth: 112 },
+  v46TicketUnknownRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  v46TicketPin: {
+    width: 25, height: 25, borderRadius: 13, backgroundColor: SIGNAL,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  v46TicketPinCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FCF8EE' },
+  v46TicketUnknown: { fontSize: 29, lineHeight: 32, fontWeight: '900', color: INK, letterSpacing: 1 },
+  v46TicketRouteMini: { width: 124, height: 62, position: 'relative' },
+  v46TicketMiniBuilding: {
+    position: 'absolute', left: 7, bottom: 12, width: 16, height: 24, backgroundColor: INK,
+  },
+  v46TicketMiniTreeCrown: {
+    position: 'absolute', left: 63, bottom: 23, width: 17, height: 17,
+    borderRadius: 9, backgroundColor: INK,
+  },
+  v46TicketMiniTreeTrunk: {
+    position: 'absolute', left: 70, bottom: 12, width: 3, height: 15, backgroundColor: INK,
+  },
+  v46TicketRouteDash: { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: SIGNAL },
+  v46TicketRouteDashA: { left: 24, bottom: 22, width: 37, transform: [{ rotate: '22deg' }] },
+  v46TicketRouteDashB: { left: 76, bottom: 21, width: 28, transform: [{ rotate: '-20deg' }] },
+  v46TicketRouteDot: {
+    position: 'absolute', width: 8, height: 8, borderRadius: 4,
+    backgroundColor: SIGNAL, borderWidth: 2, borderColor: '#FCF8EE',
+  },
+  v46TicketRouteDotA: { left: 24, bottom: 16 },
+  v46TicketRouteDotB: { right: 8, bottom: 18 },
+  v46TicketRouteFlagPole: {
+    position: 'absolute', right: 10, bottom: 21, width: 3, height: 28,
+    backgroundColor: INK, transform: [{ rotate: '5deg' }],
+  },
+  v46TicketRouteFlag: {
+    position: 'absolute', right: -1, bottom: 37, width: 18, height: 12,
+    backgroundColor: SIGNAL, transform: [{ rotate: '8deg' }],
+  },
+  v46BarcodeRow: {
+    height: 39, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', gap: 3,
+  },
+  v46BarcodeBar: { height: 39, backgroundColor: '#4E4B46' },
+  v46TicketStamp: {
+    position: 'absolute', right: 17, top: 133, width: 86, height: 40,
+    borderWidth: 3, borderColor: SIGNAL, borderRadius: 5, alignItems: 'center',
+    justifyContent: 'center', transform: [{ rotate: '-7deg' }],
+    backgroundColor: 'rgba(252,248,238,0.9)',
+  },
+  v46TicketStampText: { fontSize: 15, fontWeight: '900', color: SIGNAL },
 
 });
