@@ -55,7 +55,6 @@ for name, svg in SVG_FILES.items():
 (ROOT / 'metro.config.js').write_text("""const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
-
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer/expo');
 config.resolver.assetExts = config.resolver.assetExts.filter((ext) => ext !== 'svg');
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'svg'];
@@ -66,14 +65,12 @@ module.exports = config;
 (TYPE_DIR / 'svg.d.ts').write_text("""declare module '*.svg' {
   import type { FC } from 'react';
   import type { SvgProps } from 'react-native-svg';
-
   const content: FC<SvgProps>;
   export default content;
 }
 """, encoding='utf-8')
 
 text = INDEX.read_text(encoding='utf-8')
-
 import_anchor = "import { captureRef } from 'react-native-view-shot';\n"
 svg_imports = """import MoodWanderIcon from '../../assets/mood/wander.svg';
 import MoodFoodIcon from '../../assets/mood/food.svg';
@@ -87,15 +84,10 @@ if svg_imports not in text:
         raise SystemExit('Could not find SVG import anchor')
     text = text.replace(import_anchor, import_anchor + svg_imports, 1)
 
-start = text.index('type MoodGlyphProps = {')
-end = text.index('function moodHint', start)
-replacement = """type MoodIconProps = {
-  moodId: MoodId;
-};
-
-function MoodIcon({ moodId }: MoodIconProps) {
+start = text.index('function V45MoodIcon(')
+end = text.index('function V45Ticket(', start)
+replacement = """function V45MoodIcon({ moodId }: { moodId: MoodId }) {
   const commonProps = { width: 76, height: 76 };
-
   if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
   if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
   if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
@@ -106,19 +98,6 @@ function MoodIcon({ moodId }: MoodIconProps) {
 
 """
 text = text[:start] + replacement + text[end:]
-
-old_usage = '<MoodGlyph moodId={item.id} active={active} />'
-new_usage = '<MoodIcon moodId={item.id} />'
-if old_usage not in text:
-    raise SystemExit('Could not find MoodGlyph usage')
-text = text.replace(old_usage, new_usage, 1)
-
-# SVG artwork stays identical when selected; only the card communicates state.
-text = text.replace(
-    "v35MoodCardActive: { borderWidth: 2, borderColor: SIGNAL, backgroundColor: '#F8EFE6' },",
-    "v35MoodCardActive: { borderWidth: 2.5, borderColor: SIGNAL, backgroundColor: '#FFF4EE' },",
-)
-
 INDEX.write_text(text, encoding='utf-8')
 
 build = BUILD.read_text(encoding='utf-8')
