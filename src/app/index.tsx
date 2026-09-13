@@ -20,6 +20,7 @@ import { Directory, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Circle, Polyline } from 'react-native-maps';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import MoodWanderIcon from '../../assets/mood/wander.svg';
 import MoodFoodIcon from '../../assets/mood/food.svg';
@@ -628,6 +629,30 @@ function DetourTicket({
 }
 
 
+
+
+function DetourAccentStroke({
+  width,
+  style,
+}: {
+  width: number;
+  style?: any;
+}) {
+  const height = 18;
+  return (
+    <View pointerEvents="none" style={[{ width, height }, style]}>
+      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <SvgPath
+          d={`M 5 12 Q ${Math.round(width * 0.52)} 4 ${width - 5} 8`}
+          fill="none"
+          stroke={SIGNAL}
+          strokeWidth={7}
+          strokeLinecap="round"
+        />
+      </Svg>
+    </View>
+  );
+}
 
 // DETOUR V45 — ticket / mood / recap visual system
 function V45Skyline() {
@@ -4546,7 +4571,7 @@ export default function HomeScreen() {
               />
             </Animated.View>
             <Text style={styles.v35HomeQuestion}>今天有多少時間，{`\n`}可以拿來偏離一下？</Text>
-            <View style={styles.v35Underline} />
+            <DetourAccentStroke width={126} style={styles.v35Underline} />
             <Animated.View
               style={[
                 styles.v35MinuteReadout,
@@ -4648,7 +4673,7 @@ export default function HomeScreen() {
 
             <View style={styles.v45MoodTitleWrap}>
               <Text style={styles.v45MoodTitle}>今天想要哪種心情？</Text>
-              <View style={styles.v45MoodUnderline} />
+              <DetourAccentStroke width={180} style={styles.v45MoodUnderline} />
             </View>
 
             <View style={styles.v45MoodGrid}>
@@ -4699,7 +4724,7 @@ export default function HomeScreen() {
               <Text style={styles.v45PrintingTitle}>
                 {ticketBuildError ? '這張票卡住了。' : '正在印製車票…'}
               </Text>
-              {!ticketBuildError && <View style={styles.v45PrintingUnderline} />}
+              {!ticketBuildError && <DetourAccentStroke width={180} style={styles.v45PrintingUnderline} />}
             </View>
 
             <View style={styles.v46ArtPrinterStage}>
@@ -4715,17 +4740,19 @@ export default function HomeScreen() {
                   {
                     height: routeProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [2, 420],
+                      outputRange: [8, 392],
                     }),
                   },
                 ]}
               >
-                <V45Ticket
-                  timeLabel={selectedTime ?? '15'}
-                  moodId={selectedMood ?? 'wander'}
-                  moodLabel={mood?.label ?? '—'}
-                  serial={ticketSerial(selectedTime, selectedMood)}
-                />
+                <View style={styles.v47PrintTicketBottomAnchor}>
+                  <V45Ticket
+                    timeLabel={selectedTime ?? '15'}
+                    moodId={selectedMood ?? 'wander'}
+                    moodLabel={mood?.label ?? '—'}
+                    serial={ticketSerial(selectedTime, selectedMood)}
+                  />
+                </View>
               </Animated.View>
 
               <View pointerEvents="none" style={styles.v46ArtPrinterTopMask}>
@@ -5294,7 +5321,7 @@ export default function HomeScreen() {
             >
               <View style={styles.v45FinishTitleWrap}>
                 <Text style={styles.v45FinishTitle}>旅程完成</Text>
-                <View style={styles.v45FinishTitleUnderline} />
+                <DetourAccentStroke width={76} style={styles.v45FinishTitleUnderline} />
               </View>
 
               <V46CompleteArtwork
@@ -5411,7 +5438,7 @@ export default function HomeScreen() {
               </Pressable>
               <View style={styles.v45DetailTitleWrap}>
                 <Text style={styles.v45DetailTitle}>旅程回顧</Text>
-                <View style={styles.v45DetailTitleUnderline} />
+                <DetourAccentStroke width={86} style={styles.v45DetailTitleUnderline} />
               </View>
               <View style={styles.v45DetailTopSpacer} />
             </View>
@@ -11370,7 +11397,11 @@ const styles = StyleSheet.create({
   v35FlagPole: { position: 'absolute', left: 4, top: 0, width: 4, height: 42, backgroundColor: INK, transform: [{ rotate: '5deg' }] },
   v35FlagCloth: { position: 'absolute', left: 9, top: 3, width: 25, height: 17, backgroundColor: SIGNAL, transform: [{ rotate: '7deg' }] },
   v35HomeQuestion: { marginTop: 4, fontSize: 38, lineHeight: 47, fontWeight: '900', letterSpacing: -2.2, color: INK, textAlign: 'center' },
-  v35Underline: { alignSelf: 'center', width: 126, height: 7, marginTop: 4, marginLeft: 112, backgroundColor: SIGNAL, borderRadius: 4, transform: [{ rotate: '-5deg' }] },
+  v35Underline: {
+    alignSelf: 'center',
+    marginTop: 0,
+    marginLeft: 112,
+  },
   v35MinuteReadout: { marginTop: 25, alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-end', gap: 9 },
   v35MinuteNumber: { fontSize: 78, lineHeight: 82, fontWeight: '900', letterSpacing: -4, color: SIGNAL },
   v35MinuteUnit: { marginBottom: 11, fontSize: 17, fontWeight: '900', color: INK },
@@ -11932,13 +11963,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   v45MoodUnderline: {
-    width: 180,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: SIGNAL,
-    marginTop: 7,
-    marginLeft: 94,
-    transform: [{ rotate: '-3deg' }],
+    marginTop: 2,
   },
   v45MoodGrid: {
     flex: 1,
@@ -12126,13 +12151,16 @@ const styles = StyleSheet.create({
   v45PrintingBrand: {
     fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: -1.4, color: INK,
   },
-  v45PrintingTitleWrap: { marginTop: 96, alignItems: 'center', zIndex: 4 },
+  v45PrintingTitleWrap: {
+    marginTop: 68,
+    alignItems: 'center',
+    zIndex: 5,
+  },
   v45PrintingTitle: {
     fontSize: 38, lineHeight: 47, fontWeight: '900', letterSpacing: -1.7, color: INK, textAlign: 'center',
   },
   v45PrintingUnderline: {
-    width: 180, height: 7, borderRadius: 4, backgroundColor: SIGNAL, marginTop: 7,
-    transform: [{ rotate: '-3deg' }],
+    marginTop: 2,
   },
   v45PrinterStage: { marginTop: 38, alignItems: 'center', height: 500, zIndex: 2 },
   v45PrinterMachine: { width:'100%',height:96,borderRadius:20,backgroundColor:'#AAA69E',borderWidth:1,borderColor:'#D3D0C9',paddingHorizontal:20,justifyContent:'center',zIndex:6,shadowColor:'#000',shadowOffset:{width:0,height:10},shadowOpacity:.22,shadowRadius:14,elevation:9 },
@@ -12173,9 +12201,29 @@ const styles = StyleSheet.create({
   v45BarcodeBar: { height: 44, backgroundColor: '#5F5B55' },
   v45TicketStamp: { position: 'absolute', right: 25, top: 50, width: 90, height: 44, borderWidth: 3, borderColor: SIGNAL, borderRadius: 7, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-7deg' }] },
   v45TicketStampText: { fontSize: 16, fontWeight: '900', color: SIGNAL },
-  v45TicketErrorPanel: { zIndex: 7, marginTop: -15, padding: 18, borderWidth: 1, borderColor: SIGNAL, backgroundColor: '#FFF7F1' },
+  v45TicketErrorPanel: {
+    position: 'absolute',
+    left: 30,
+    right: 30,
+    bottom: 24,
+    zIndex: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: SIGNAL,
+    borderRadius: 14,
+    backgroundColor: '#FFF7F1',
+  },
   v45TicketErrorText: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: INK },
-  v45TicketRetry: { marginTop: 16, height: 54, backgroundColor: INK, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  v45TicketRetry: {
+    marginTop: 12,
+    minHeight: 54,
+    borderRadius: 27,
+    backgroundColor: INK,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   v45TicketRetryText: { fontSize: 18, fontWeight: '800', color: BONE },
   v45TicketRetryArrow: { fontSize: 25, color: SIGNAL },
 
@@ -12187,7 +12235,10 @@ const styles = StyleSheet.create({
   v45FinishScroll: { paddingHorizontal: 28, paddingTop: 20, paddingBottom: 110 },
   v45FinishTitleWrap: { alignItems: 'center', marginBottom: 22 },
   v45FinishTitle: { fontSize: 40, lineHeight: 46, fontWeight: '900', letterSpacing: -1.5, color: INK },
-  v45FinishTitleUnderline: { width: 76, height: 6, borderRadius: 3, backgroundColor: SIGNAL, marginTop: 3, marginLeft: 120, transform: [{ rotate: '-4deg' }] },
+  v45FinishTitleUnderline: {
+    marginTop: -2,
+    marginLeft: 120,
+  },
   v45PassportCard: { backgroundColor: '#FBF8EF', padding: 18, borderRadius: 13, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 5 },
   v45PassportCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   v45PassportLogo: { fontSize: 26, fontWeight: '900', letterSpacing: -1, color: INK },
@@ -12218,7 +12269,10 @@ const styles = StyleSheet.create({
   v45DetailTop: { height: 64, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   v45DetailTitleWrap: { flex: 1, alignItems: 'center' },
   v45DetailTitle: { fontSize: 36, lineHeight: 42, fontWeight: '900', letterSpacing: -1.4, color: INK },
-  v45DetailTitleUnderline: { width: 86, height: 5, borderRadius: 3, backgroundColor: SIGNAL, marginTop: 2, marginLeft: 72, transform: [{ rotate: '-4deg' }] },
+  v45DetailTitleUnderline: {
+    marginTop: -2,
+    marginLeft: 72,
+  },
   v45DetailTopSpacer: { width: 42 },
   v45DetailScroll: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 70 },
   v45DetailTicketStrip: { minHeight: 92, borderWidth: 1, borderColor: '#D0CABD', borderRadius: 10, backgroundColor: '#FBF8EF', flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 13, paddingVertical: 12 },
@@ -12482,34 +12536,36 @@ const styles = StyleSheet.create({
   },
   v46ArtPrinterStage: {
     width: '100%',
-    height: 505,
-    marginTop: 30,
+    height: 430,
+    marginTop: 18,
     alignItems: 'center',
     position: 'relative',
+    zIndex: 2,
   },
   v46ArtPrinterImage: {
     position: 'absolute',
-    top: 0,
+    top: -25,
     width: '100%',
     aspectRatio: 2048 / 682,
-    zIndex: 1,
+    zIndex: 4,
   },
   v46ArtPaperReveal: {
     position: 'absolute',
-    top: 61,
+    top: 34,
     width: 310,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 2,
   },
-  v46ArtPrinterTopMask: {
+  v47PrintTicketBottomAnchor: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
-    height: 64,
-    overflow: 'hidden',
-    zIndex: 3,
+    bottom: 0,
+    alignItems: 'center',
+  },
+  v46ArtPrinterTopMask: {
+    display: 'none',
   },
   v46ArtPrinterImageMask: {
     position: 'absolute',
