@@ -111,6 +111,7 @@ import {
   type DetourPrewarm,
   type PassportEntry,
   type PassportMission,
+  type MissionResult,
   type SceneIssueReason,
   type SessionPhoto,
   type SessionSceneFailure,
@@ -125,6 +126,13 @@ const MUTED = '#77736B';
 const LINE = '#C9C5B8';
 const SIGNAL = '#FF5A36';
 const SOFT = '#E5E1D6';
+const ABSOLUTE_FILL = {
+  position: 'absolute' as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
 let ticketArtworkDecoded = false;
 
 type MoodGlyphProps = {
@@ -2720,7 +2728,7 @@ export default function HomeScreen() {
         const beat =
           route?.beats[navigationBeatIndexRef.current] ?? null;
 
-        if (!beat) return;
+        if (!route || !beat) return;
 
         const remainingOnBeat =
           remainingDistanceOnPolyline(
@@ -8198,7 +8206,7 @@ const styles = StyleSheet.create({
 
   moodLabel: {
     fontSize: 22,
-    fontWeight: '650',
+    fontWeight: '600',
     letterSpacing: -0.9,
     color: INK,
   },
@@ -8575,7 +8583,7 @@ const styles = StyleSheet.create({
   },
 
   nextBeatMap: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
   },
 
   nextBeatMapChrome: {
@@ -8755,7 +8763,7 @@ const styles = StyleSheet.create({
   },
 
   questPulseOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     zIndex: 20,
     backgroundColor: BONE,
     alignItems: 'center',
@@ -8877,7 +8885,7 @@ const styles = StyleSheet.create({
   },
 
   cleanMap: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
   },
 
   cleanMapTop: {
@@ -9308,7 +9316,7 @@ const styles = StyleSheet.create({
   cleanMissionTitle: {
     fontSize: 45,
     lineHeight: 52,
-    fontWeight: '650',
+    fontWeight: '600',
     letterSpacing: -2.4,
     color: BONE,
   },
@@ -9801,17 +9809,17 @@ const styles = StyleSheet.create({
   arrivalRuleText: { marginTop: 8, fontSize: 13, lineHeight: 20, color: INK },
 
   cameraNativeLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     zIndex: 100,
     backgroundColor: '#000',
   },
   cameraModalScreen: { flex: 1, backgroundColor: '#000' },
   cameraPreview: { flex: 1 },
   cameraScreen: { flex: 1, backgroundColor: '#000' },
-  cameraView: { ...StyleSheet.absoluteFillObject },
+  cameraView: { ...ABSOLUTE_FILL },
 
   cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     paddingTop: 58,
     paddingHorizontal: 18,
     paddingBottom: 28,
@@ -9875,8 +9883,8 @@ const styles = StyleSheet.create({
   shutterPressed: { transform: [{ scale: 0.94 }] },
 
   reviewScreen: { flex: 1, backgroundColor: '#000' },
-  reviewImage: { ...StyleSheet.absoluteFillObject },
-  reviewShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.18)' },
+  reviewImage: { ...ABSOLUTE_FILL },
+  reviewShade: { ...ABSOLUTE_FILL, backgroundColor: 'rgba(0,0,0,0.18)' },
 
   reviewTop: {
     position: 'absolute',
@@ -10959,7 +10967,7 @@ const styles = StyleSheet.create({
     backgroundColor: SOFT,
   },
 
-  traceMap: { ...StyleSheet.absoluteFillObject },
+  traceMap: { ...ABSOLUTE_FILL },
 
   passportSectionHeader: {
     marginTop: 40,
@@ -11142,7 +11150,7 @@ const styles = StyleSheet.create({
   },
 
   postcardMap: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
   },
 
   postcardMissionSection: {
@@ -12244,7 +12252,7 @@ const styles = StyleSheet.create({
   v45PrinterStage: { marginTop: 38, alignItems: 'center', height: 500, zIndex: 2 },
   v45PrinterMachine: { width:'100%',height:96,borderRadius:20,backgroundColor:'#AAA69E',borderWidth:1,borderColor:'#D3D0C9',paddingHorizontal:20,justifyContent:'center',zIndex:6,shadowColor:'#000',shadowOffset:{width:0,height:10},shadowOpacity:.22,shadowRadius:14,elevation:9 },
   v45PrinterPulse: {
-    ...StyleSheet.absoluteFillObject, borderRadius: 18, backgroundColor: '#C8B7A6',
+    ...ABSOLUTE_FILL, borderRadius: 18, backgroundColor: '#C8B7A6',
   },
   v45PrinterSlot: { height:25,borderRadius:8,backgroundColor:'#11110F',borderWidth:6,borderColor:'#5D5A54',shadowColor:'#000',shadowOffset:{width:0,height:3},shadowOpacity:.4,shadowRadius:4,elevation:5 },
   v45PaperMask: {
@@ -12425,7 +12433,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   v46ArtTicketBase: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     width: '100%',
     height: '100%',
   },
@@ -12656,7 +12664,7 @@ const styles = StyleSheet.create({
     aspectRatio: 2048 / 682,
   },
   v46ArtworkBase: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     width: '100%',
     height: '100%',
   },
