@@ -1,0 +1,103 @@
+name: Apply v0.46.2 navigation polish
+
+on:
+  push:
+    branches:
+      - chatgpt/v0462-navigation-polish
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: chatgpt/v0462-navigation-polish
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply v0.46.2 migration
+        run: python scripts/v0462_polish.py
+
+      - name: Verify UI invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('src/app/index.tsx').read_text(encoding='utf-8')
+          required = [
+              "import {",
+              "  Modal,",
+              "styles.v48PrinterAssembly",
+              "outputRange: [-326, 0]",
+              "styles.v48RetryOverlay",
+              "<Modal",
+              "styles.v48PrintingBack",
+              "edgeBackResponder.panHandlers",
+              "gestureState.x0 <= 30",
+          ]
+          for needle in required:
+              assert needle in text, needle
+          assert "v47PrintTicketBottomAnchor" not in text[text.index("{stage === 'preparing'"):text.index("{stage === 'ready'")]
+          build = Path('src/lib/build-info.ts').read_text(encoding='utf-8')
+          assert "DETOUR_BUILD_VERSION = '0.46.2'" in build
+          PY
+
+      - name: Syntax-check TypeScript
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          for (const file of ['src/app/index.tsx', 'src/lib/build-info.ts']) {
+            const source = fs.readFileSync(file, 'utf8');
+            const out = ts.transpileModule(source, {
+              compilerOptions: {
+                jsx: ts.JsxEmit.ReactJSX,
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.ESNext,
+              },
+              reportDiagnostics: true,
+              fileName: file,
+            });
+            const errors = (out.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error);
+            if (errors.length) {
+              console.error(file, errors.map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')));
+              process.exit(1);
+            }
+          }
+          NODE
+
+      - name: Bundle-check Expo iOS
+        env:
+          EXPO_NO_DOTENV: '1'
+        run: npx expo export --platform ios --output-dir /tmp/detour-v0462-export
+
+      - name: Clean one-time files
+        run: |
+          rm -f scripts/v0462_polish.py
+          rm -f .github/workflows/v0462-navigation-polish.yml
+
+      - name: Check diff
+        run: git diff --check
+
+      - name: Commit finished polish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "fix: polish ticket retry and back navigation"
+            git push origin HEAD:chatgpt/v0462-navigation-polish
+          fi
