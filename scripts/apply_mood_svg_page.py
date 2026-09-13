@@ -83,20 +83,18 @@ import MoodColorIcon from '../../assets/mood/color.svg';
 import MoodSurpriseIcon from '../../assets/mood/surprise.svg';
 """
 if svg_imports not in text:
-    text = text.replace(import_anchor, import_anchor + svg_imports)
+    if import_anchor not in text:
+        raise SystemExit('Could not find SVG import anchor')
+    text = text.replace(import_anchor, import_anchor + svg_imports, 1)
 
-pattern = re.compile(r"type MoodGlyphProps = \{.*?\n\}\n\nfunction MoodGlyph\(.*?\n\}\n\nfunction moodHint", re.S)
+start = text.index('type MoodGlyphProps = {')
+end = text.index('function moodHint', start)
 replacement = """type MoodIconProps = {
   moodId: MoodId;
 };
 
 function MoodIcon({ moodId }: MoodIconProps) {
-  const commonProps = {
-    width: 76,
-    height: 76,
-    accessibilityElementsHidden: true,
-    importantForAccessibility: 'no-hide-descendants' as const,
-  };
+  const commonProps = { width: 76, height: 76 };
 
   if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
   if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
@@ -106,10 +104,8 @@ function MoodIcon({ moodId }: MoodIconProps) {
   return <MoodSurpriseIcon {...commonProps} />;
 }
 
-function moodHint"""
-text, count = pattern.subn(replacement, text, count=1)
-if count != 1:
-    raise SystemExit(f'Could not replace MoodGlyph block: {count}')
+"""
+text = text[:start] + replacement + text[end:]
 
 old_usage = '<MoodGlyph moodId={item.id} active={active} />'
 new_usage = '<MoodIcon moodId={item.id} />'
@@ -117,7 +113,7 @@ if old_usage not in text:
     raise SystemExit('Could not find MoodGlyph usage')
 text = text.replace(old_usage, new_usage, 1)
 
-# The SVG never changes when a Mood is selected. Selection belongs to the card.
+# SVG artwork stays identical when selected; only the card communicates state.
 text = text.replace(
     "v35MoodCardActive: { borderWidth: 2, borderColor: SIGNAL, backgroundColor: '#F8EFE6' },",
     "v35MoodCardActive: { borderWidth: 2.5, borderColor: SIGNAL, backgroundColor: '#FFF4EE' },",
@@ -126,8 +122,12 @@ text = text.replace(
 INDEX.write_text(text, encoding='utf-8')
 
 build = BUILD.read_text(encoding='utf-8')
-build = re.sub(r"// v0\.45:.*?\nexport const DETOUR_BUILD_VERSION = '0\.45\.0';",
-               "// v0.45.1: Mood page now uses six standalone SVG assets with stable selected-state rendering.\nexport const DETOUR_BUILD_VERSION = '0.45.1';",
-               build,
-               count=1)
+build, count = re.subn(
+    r"// v0\.45:.*?\nexport const DETOUR_BUILD_VERSION = '0\.45\.0';",
+    "// v0.45.1: Mood page now uses six standalone SVG assets with stable selected-state rendering.\nexport const DETOUR_BUILD_VERSION = '0.45.1';",
+    build,
+    count=1,
+)
+if count != 1:
+    raise SystemExit('Could not update build version')
 BUILD.write_text(build, encoding='utf-8')
