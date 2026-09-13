@@ -26,6 +26,17 @@ jobs:
           cat > assets/mood/surprise.svg <<'SVG'
           <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="49" cy="82" rx="27" ry="5" fill="#DDD7CC"/><path d="M31 31L53 20L76 30L54 43L31 31Z" fill="#11110F"/><path d="M31 31L54 43V72L31 60V31Z" fill="#0D0D0C"/><path d="M54 43L76 30V59L54 72V43Z" fill="#171715"/><circle cx="47" cy="29" r="3" fill="#F1EFE7"/><circle cx="62" cy="30" r="3" fill="#F1EFE7"/><circle cx="39" cy="43" r="3" fill="#F1EFE7"/><circle cx="46" cy="56" r="3" fill="#F1EFE7"/><circle cx="65" cy="48" r="3" fill="#F1EFE7"/><circle cx="65" cy="61" r="3" fill="#F1EFE7"/><path d="M21 45L11 41M22 54L11 55" stroke="#FF5A36" stroke-width="5" stroke-linecap="round"/></svg>
           SVG
+      - name: Make migration indentation-safe
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/apply_v046_ui.py')
+          s=p.read_text()
+          old='''needle="<V45Ticket\\n                    timeLabel={selectedTime ?? \'15\'}"; assert text.count(needle)==2\ntext=text.replace(needle,"<V45Ticket\\n                    timeLabel={selectedTime ?? \'15\'}\\n                    moodId={selectedMood ?? \'wander\'}")'''
+          new='''call_re=re.compile(r"(<V45Ticket\\n(?P<indent>\\s*)timeLabel=\\{selectedTime \\?\\? \'15\'\\})")\ntext,count=call_re.subn(lambda m: m.group(1)+"\\n"+m.group("indent")+"moodId={selectedMood ?? \'wander\'}",text)\nassert count==2, f"Expected 2 V45Ticket calls, found {count}"'''
+          if old not in s: raise SystemExit('target lines not found')
+          p.write_text(s.replace(old,new,1))
+          PY
       - run: python3 scripts/apply_v046_ui.py
       - name: Syntax check
         run: |
