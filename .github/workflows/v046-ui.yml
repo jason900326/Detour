@@ -1,0 +1,58 @@
+name: Apply v0.45.2 Mood and ticket UI
+
+on:
+  push:
+    branches: [chatgpt/mood-ticket-v046]
+    paths:
+      - 'scripts/apply_v046_ui.py'
+      - '.github/workflows/v046-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Complete surprise icon
+        run: |
+          cat > assets/mood/surprise.svg <<'SVG'
+          <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="49" cy="82" rx="27" ry="5" fill="#DDD7CC"/><path d="M31 31L53 20L76 30L54 43L31 31Z" fill="#11110F"/><path d="M31 31L54 43V72L31 60V31Z" fill="#0D0D0C"/><path d="M54 43L76 30V59L54 72V43Z" fill="#171715"/><circle cx="47" cy="29" r="3" fill="#F1EFE7"/><circle cx="62" cy="30" r="3" fill="#F1EFE7"/><circle cx="39" cy="43" r="3" fill="#F1EFE7"/><circle cx="46" cy="56" r="3" fill="#F1EFE7"/><circle cx="65" cy="48" r="3" fill="#F1EFE7"/><circle cx="65" cy="61" r="3" fill="#F1EFE7"/><path d="M21 45L11 41M22 54L11 55" stroke="#FF5A36" stroke-width="5" stroke-linecap="round"/></svg>
+          SVG
+      - run: python3 scripts/apply_v046_ui.py
+      - name: Syntax check
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),ts=require('typescript'),f='src/app/index.tsx';
+          const r=ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX},fileName:f,reportDiagnostics:true});
+          const e=(r.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error); if(e.length){for(const d of e) console.error(ts.flattenDiagnosticMessageText(d.messageText,'\n'));process.exit(1)}
+          NODE
+      - run: npx expo export --platform web --output-dir /tmp/detour-v046
+      - name: Verify
+        run: |
+          grep -F "label: '隨便走'" src/app/index.tsx
+          grep -F "label: '吃東西'" src/app/index.tsx
+          grep -F "label: '想安靜'" src/app/index.tsx
+          grep -F "label: '這是哪'" src/app/index.tsx
+          grep -F "label: '色色的'" src/app/index.tsx
+          grep -F "label: '命運'" src/app/index.tsx
+          grep -F "v46TicketPaper" src/app/index.tsx
+          grep -F "outputRange: [0, 0]" src/app/index.tsx
+          grep -F "DETOUR_BUILD_VERSION = '0.45.2'" src/lib/build-info.ts
+          git diff --check
+      - name: Clean and commit
+        run: |
+          rm -f scripts/apply_v046_ui.py .github/workflows/v046-ui.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: rebuild Mood references and physical ticket printer"
+          for attempt in 1 2 3 4; do git push origin HEAD:chatgpt/mood-ticket-v046 && exit 0; sleep $((attempt*8)); done
+          exit 1
