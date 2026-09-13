@@ -224,12 +224,12 @@ const TIME_MIN = TIME_STEPS[0];
 const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
 
 const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
-  { id: 'wander', label: '隨便走走', code: 'WANDER' },
-  { id: 'food', label: '吃點東西', code: 'FOOD' },
-  { id: 'quiet', label: '放鬆一下', code: 'QUIET' },
-  { id: 'weird', label: '探索新鮮', code: 'WEIRD' },
-  { id: 'color', label: '拍照走走', code: 'COLOR' },
-  { id: 'surprise', label: '交給驚喜', code: 'SURPRISE' },
+  { id: 'wander', label: '隨便走', code: 'WANDER' },
+  { id: 'food', label: '吃東西', code: 'FOOD' },
+  { id: 'quiet', label: '想安靜', code: 'QUIET' },
+  { id: 'weird', label: '這是哪', code: 'WEIRD' },
+  { id: 'color', label: '色色的', code: 'COLOR' },
+  { id: 'surprise', label: '命運', code: 'SURPRISE' },
 ];
 
 const FREE_CAMERA_MISSION: Mission = {
@@ -664,8 +664,8 @@ function V45Skyline() {
   );
 }
 
-function V45MoodIcon({ moodId }: { moodId: MoodId }) {
-  const commonProps = { width: 76, height: 76 };
+function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
+  const commonProps = { width: size, height: size };
   if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
   if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
   if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
@@ -674,90 +674,16 @@ function V45MoodIcon({ moodId }: { moodId: MoodId }) {
   return <MoodSurpriseIcon {...commonProps} />;
 }
 
-function V45Ticket({
-  timeLabel,
-  moodLabel,
-  serial: _serial,
-  stamped = false,
-  stampProgress,
-}: DetourTicketProps) {
-  const stampAnimatedStyle = stampProgress
-    ? {
-        opacity: stampProgress.interpolate({
-          inputRange: [0, 0.45, 1],
-          outputRange: [0, 0.2, 1],
-        }),
-        transform: [
-          { rotate: '-7deg' },
-          {
-            scale: stampProgress.interpolate({
-              inputRange: [0, 0.7, 1],
-              outputRange: [1.25, 0.95, 1],
-            }),
-          },
-        ],
-      }
-    : undefined;
-
-  return (
-    <View style={styles.v45TicketPaper}>
-      <View style={styles.v45TicketOrangeBand} />
-      <Text style={styles.v45TicketBrand}>DETOUR</Text>
-      <View style={styles.v45TicketRule} />
-
-      <View style={styles.v45TicketInfoRow}>
-        <View style={styles.v45TicketInfoBlock}>
-          <Text style={styles.v45TicketLabel}>旅程時間</Text>
-          <View style={styles.v45TicketMinutesRow}>
-            <Text style={styles.v45TicketMinutes}>{timeLabel}</Text>
-            <Text style={styles.v45TicketMinutesUnit}>分鐘</Text>
-          </View>
-        </View>
-        <View style={styles.v45TicketVerticalRule} />
-        <View style={styles.v45TicketInfoBlock}>
-          <Text style={styles.v45TicketLabel}>此趟心情</Text>
-          <Text style={styles.v45TicketMood}>{moodLabel}</Text>
-          <View style={styles.v45TicketMoodUnderline} />
-        </View>
-      </View>
-
-      <View style={styles.v45TicketRule} />
-      <View style={styles.v45TicketDestinationRow}>
-        <View>
-          <Text style={styles.v45TicketLabel}>目的地</Text>
-          <Text style={styles.v45TicketUnknown}>● ????</Text>
-        </View>
-        <View style={styles.v45TicketRouteMini}>
-          <View style={styles.v45TicketRouteDot} />
-          <View style={styles.v45TicketRouteDashA} />
-          <View style={styles.v45TicketRouteDashB} />
-          <View style={styles.v45TicketRouteFlagPole} />
-          <View style={styles.v45TicketRouteFlag} />
-        </View>
-      </View>
-
-      <View style={styles.v45TicketRule} />
-      <View style={styles.v45BarcodeRow}>
-        {DETOUR_TICKET_BARS.concat(DETOUR_TICKET_BARS.slice(0, 9)).map((width, index) => (
-          <View
-            key={`${width}-${index}`}
-            style={[styles.v45BarcodeBar, { width: Math.max(1, width) }]}
-          />
-        ))}
-      </View>
-
-      {stamped && (
-        <Animated.View
-          style={[
-            styles.v45TicketStamp,
-            stampAnimatedStyle,
-          ]}
-        >
-          <Text style={styles.v45TicketStampText}>終點保密</Text>
-        </Animated.View>
-      )}
-    </View>
-  );
+function V45Ticket({ timeLabel, moodLabel, moodId, serial: _serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
+  const stampScale = stampProgress ? stampProgress.interpolate({ inputRange: [0,1], outputRange: [1.28,1] }) : 1;
+  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
+  return <View style={styles.v46TicketPaper}>
+    <View style={styles.v46TicketOrangeFeed}/><Text style={styles.v46TicketBrand}>DETOUR</Text><View style={styles.v46TicketDashRule}/>
+    <View style={styles.v46TicketMainRow}><View style={styles.v46TicketTimeBlock}><Text style={styles.v46TicketLabel}>旅程時間</Text><View style={styles.v46TicketTimeRow}><Text style={styles.v46TicketMinutes}>{timeLabel}</Text><Text style={styles.v46TicketMinutesUnit}>分鐘</Text></View></View><View style={styles.v46TicketVerticalDash}/><View style={styles.v46TicketMoodBlock}><Text style={styles.v46TicketLabel}>此趟心情</Text><View style={styles.v46TicketMoodRow}><V45MoodIcon moodId={moodId} size={48}/><Text style={styles.v46TicketMoodText}>{moodLabel}</Text></View></View></View>
+    <View style={styles.v46TicketDashRule}/><View style={styles.v46TicketDestinationRow}><View><Text style={styles.v46TicketLabel}>目的地</Text><View style={styles.v46TicketUnknownRow}><View style={styles.v46TicketPin}><View style={styles.v46TicketPinHole}/></View><Text style={styles.v46TicketUnknown}>???</Text></View></View><View style={styles.v46TicketMiniRoute}><View style={styles.v46MiniBuilding}/><View style={styles.v46MiniRouteDash}/><View style={styles.v46MiniTree}/><View style={[styles.v46MiniRouteDash,{left:72,transform:[{rotate:'-16deg'}]}]}/><View style={styles.v46MiniFlagPole}/><View style={styles.v46MiniFlag}/></View></View>
+    <View style={styles.v46TicketDashRule}/><View style={styles.v46Barcode}>{Array.from({length:27}).map((_,i)=><View key={`barcode-${i}`} style={[styles.v46BarcodeBar,{width:i%5===0?4:i%3===0?2:1.5}]}/>)}</View>
+    {stamped&&<Animated.View style={[styles.v46SecretStamp,{opacity:stampOpacity,transform:[{rotate:'-8deg'},{scale:stampScale}]}]}><Text style={styles.v46SecretStampText}>終點保密</Text></Animated.View>}
+  </View>;
 }
 
 function V45SharePoster({
@@ -4643,7 +4569,7 @@ export default function HomeScreen() {
                 <View style={styles.v45PrinterSlot} />
               </View>
 
-              <View style={styles.v45PaperMask}>
+              <Animated.View style={[styles.v45PaperMask,{height:routeProgress.interpolate({inputRange:[0,1],outputRange:[4,438]})}]}>
                 <Animated.View
                   style={[
                     styles.v45PaperMotion,
@@ -4652,7 +4578,7 @@ export default function HomeScreen() {
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-438, 0],
+                            outputRange: [0, 0],
                           }),
                         },
                       ],
@@ -4661,11 +4587,12 @@ export default function HomeScreen() {
                 >
                   <V45Ticket
                     timeLabel={selectedTime ?? '15'}
+                    moodId={selectedMood ?? 'wander'}
                     moodLabel={mood?.label ?? '—'}
                     serial={ticketSerial(selectedTime, selectedMood)}
                   />
                 </Animated.View>
-              </View>
+              </Animated.View>
             </View>
 
             {ticketBuildError && (
@@ -4688,7 +4615,6 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             )}
-            <V45Skyline />
           </View>
         )}
 
@@ -4723,6 +4649,7 @@ export default function HomeScreen() {
               >
                 <V45Ticket
                   timeLabel={selectedTime ?? '15'}
+                  moodId={selectedMood ?? 'wander'}
                   moodLabel={mood?.label ?? '—'}
                   serial={ticketSerial(selectedTime, selectedMood)}
                   stamped
@@ -12152,17 +12079,11 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-3deg' }],
   },
   v45PrinterStage: { marginTop: 38, alignItems: 'center', height: 500, zIndex: 2 },
-  v45PrinterMachine: {
-    width: '100%', height: 92, borderRadius: 18, backgroundColor: '#8E8981',
-    paddingHorizontal: 20, justifyContent: 'center', zIndex: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8,
-  },
+  v45PrinterMachine: { width:'100%',height:96,borderRadius:20,backgroundColor:'#AAA69E',borderWidth:1,borderColor:'#D3D0C9',paddingHorizontal:20,justifyContent:'center',zIndex:6,shadowColor:'#000',shadowOffset:{width:0,height:10},shadowOpacity:.22,shadowRadius:14,elevation:9 },
   v45PrinterPulse: {
     ...StyleSheet.absoluteFillObject, borderRadius: 18, backgroundColor: '#C8B7A6',
   },
-  v45PrinterSlot: {
-    height: 23, borderRadius: 8, backgroundColor: '#11110F', borderWidth: 5, borderColor: '#55504A',
-  },
+  v45PrinterSlot: { height:25,borderRadius:8,backgroundColor:'#11110F',borderWidth:6,borderColor:'#5D5A54',shadowColor:'#000',shadowOffset:{width:0,height:3},shadowOpacity:.4,shadowRadius:4,elevation:5 },
   v45PaperMask: {
     position: 'absolute', top: 64, width: '92%', height: 438, overflow: 'hidden', alignItems: 'center', zIndex: 3,
   },
@@ -12299,5 +12220,10 @@ const styles = StyleSheet.create({
   v45PosterRouteTurn: { width: 20, height: 20, borderTopWidth: 4, borderRightWidth: 4, borderColor: INK, transform: [{ rotate: '25deg' }] },
   v45PosterRouteLineB: { flex: 1, height: 3, backgroundColor: INK, transform: [{ rotate: '5deg' }] },
   v45PosterRouteEnd: { width: 15, height: 15, backgroundColor: SIGNAL },
+
+  v46TicketPaper:{width:'100%',height:432,backgroundColor:'#FCF8EE',paddingHorizontal:24,paddingTop:40,paddingBottom:18,borderColor:'#D6D0C2',borderWidth:1,shadowColor:'#000',shadowOffset:{width:0,height:7},shadowOpacity:.12,shadowRadius:8,elevation:4,overflow:'hidden',position:'relative'}, v46TicketOrangeFeed:{position:'absolute',top:0,left:0,right:0,height:22,backgroundColor:SIGNAL,opacity:.9}, v46TicketBrand:{color:INK,fontSize:35,fontWeight:'900',letterSpacing:-2.3,marginBottom:12}, v46TicketDashRule:{height:1,borderTopWidth:1.5,borderStyle:'dashed',borderColor:'#B7B0A5',marginVertical:10},
+  v46TicketMainRow:{minHeight:112,flexDirection:'row',alignItems:'stretch'},v46TicketTimeBlock:{flex:.95,paddingRight:12,justifyContent:'center'},v46TicketLabel:{color:INK,fontSize:16,fontWeight:'900',letterSpacing:.5,marginBottom:5},v46TicketTimeRow:{flexDirection:'row',alignItems:'baseline'},v46TicketMinutes:{color:SIGNAL,fontSize:58,lineHeight:62,fontWeight:'900',letterSpacing:-3},v46TicketMinutesUnit:{color:INK,fontSize:20,fontWeight:'900',marginLeft:6},v46TicketVerticalDash:{width:1,borderLeftWidth:1.5,borderStyle:'dashed',borderColor:'#B7B0A5',marginVertical:7},v46TicketMoodBlock:{flex:1.15,paddingLeft:16,justifyContent:'center'},v46TicketMoodRow:{flexDirection:'row',alignItems:'center',gap:7},v46TicketMoodText:{flexShrink:1,color:INK,fontSize:24,fontWeight:'900',letterSpacing:-1},
+  v46TicketDestinationRow:{minHeight:92,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},v46TicketUnknownRow:{flexDirection:'row',alignItems:'center'},v46TicketUnknown:{color:INK,fontSize:41,fontWeight:'900',letterSpacing:2},v46TicketPin:{width:25,height:32,borderRadius:15,backgroundColor:SIGNAL,marginRight:9,alignItems:'center',paddingTop:7},v46TicketPinHole:{width:8,height:8,borderRadius:4,backgroundColor:'#FCF8EE'},v46TicketMiniRoute:{width:132,height:66,position:'relative'},v46MiniBuilding:{position:'absolute',left:3,bottom:9,width:18,height:25,backgroundColor:INK},v46MiniRouteDash:{position:'absolute',left:28,top:34,width:29,height:3,borderRadius:2,backgroundColor:SIGNAL,transform:[{rotate:'18deg'}]},v46MiniTree:{position:'absolute',left:76,bottom:8,width:16,height:30,borderRadius:12,backgroundColor:INK},v46MiniFlagPole:{position:'absolute',right:16,bottom:8,width:3,height:42,backgroundColor:INK},v46MiniFlag:{position:'absolute',right:0,top:10,width:18,height:11,backgroundColor:SIGNAL},
+  v46Barcode:{height:45,flexDirection:'row',alignItems:'stretch',justifyContent:'center',gap:3,paddingTop:3},v46BarcodeBar:{height:40,backgroundColor:INK},v46SecretStamp:{position:'absolute',right:18,top:205,borderWidth:3,borderColor:SIGNAL,paddingHorizontal:10,paddingVertical:7,backgroundColor:'rgba(252,248,238,.88)'},v46SecretStampText:{color:SIGNAL,fontSize:18,fontWeight:'900',letterSpacing:1},
 
 });
