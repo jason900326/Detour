@@ -3,7 +3,7 @@ name: Apply Mood page SVG redesign
 on:
   push:
     branches:
-      - chatgpt/mood-page-svg
+      - chatgpt/mood-svg-final
     paths:
       - 'scripts/apply_mood_svg_page.py'
       - '.github/workflows/mood-page-svg.yml'
@@ -103,7 +103,7 @@ jobs:
           git add -A
           git commit -m "fix: rebuild Mood page icons as SVG assets"
           for attempt in 1 2 3 4; do
-            if git push origin HEAD:chatgpt/mood-page-svg; then
+            if git push origin HEAD:chatgpt/mood-svg-final; then
               exit 0
             fi
             echo "push failed on attempt ${attempt}; retrying..."
