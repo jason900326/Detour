@@ -16,10 +16,9 @@ import { styles } from '../styles/home-styles';
 import { MUTED } from '../theme/detour-theme';
 import { ticketSerial } from '../lib/detour-formatters';
 import {
-  DETOUR_TICKET_MAIN_HEIGHT,
-  DETOUR_TICKET_STUB_HEIGHT,
+  DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_STUB_SOURCE,
-  DETOUR_TICKET_TOTAL_HEIGHT,
+  DETOUR_TICKET_TEAR_SEAM_RATIO,
   DETOUR_TICKET_WIDTH,
   DetourAccentStroke,
   V45Ticket,
@@ -149,6 +148,22 @@ export function PrinterPhysicalHaptics({ controller }: { controller: Controller 
   return null;
 }
 
+function StubBarcode() {
+  return (
+    <View pointerEvents="none" style={styles.v46ArtBarcode}>
+      {Array.from({ length: 29 }).map((_, index) => (
+        <View
+          key={`tear-barcode-${index}`}
+          style={[
+            styles.v46ArtBarcodeBar,
+            { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 function TicketStub({
   enabled,
   onTorn,
@@ -219,10 +234,10 @@ function TicketStub({
           directionRef.current = direction || 1;
           const progress = Math.min(1, distance / requiredDistance);
 
-          // The stub does not follow the finger sideways. It only starts to
-          // peel away from the seam while the finger travels across the tear
-          // line, which reads much more like perforated paper than dragging a
-          // loose card around the screen.
+          // The visible stub starts exactly aligned with the main artwork and
+          // only peels a few points while the finger travels along the seam.
+          // The full-canvas transparent layer means only the real stub pixels
+          // move even though its coordinate system stays identical to main.
           dragX.setValue(directionRef.current * progress * 5);
           dragY.setValue(progress * 7);
 
@@ -258,7 +273,7 @@ function TicketStub({
               useNativeDriver: true,
             }),
             Animated.timing(dragY, {
-              toValue: Math.max(86, DETOUR_TICKET_STUB_HEIGHT * 1.7),
+              toValue: Math.max(92, DETOUR_TICKET_HEIGHT * 0.25),
               duration: 180,
               easing: Easing.in(Easing.quad),
               useNativeDriver: true,
@@ -287,6 +302,8 @@ function TicketStub({
     extrapolate: 'clamp',
   });
 
+  const seamY = DETOUR_TICKET_HEIGHT * DETOUR_TICKET_TEAR_SEAM_RATIO;
+
   return (
     <>
       <Animated.View
@@ -294,9 +311,6 @@ function TicketStub({
         style={[
           motionStyles.stubLayer,
           {
-            top: DETOUR_TICKET_MAIN_HEIGHT,
-            width: DETOUR_TICKET_WIDTH,
-            height: DETOUR_TICKET_STUB_HEIGHT,
             opacity,
             transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
           },
@@ -307,6 +321,7 @@ function TicketStub({
           style={motionStyles.ticketImage}
           resizeMode="contain"
         />
+        <StubBarcode />
       </Animated.View>
 
       <View
@@ -315,7 +330,7 @@ function TicketStub({
         accessibilityLabel="沿齒孔滑開票根，開始旅程"
         style={[
           motionStyles.stubHitArea,
-          { top: Math.max(0, DETOUR_TICKET_MAIN_HEIGHT - 22) },
+          { top: Math.max(0, seamY - 28) },
         ]}
       />
     </>
@@ -323,10 +338,9 @@ function TicketStub({
 }
 
 /**
- * The ready state reuses the exact same V45Ticket object that was printed.
- * Only the stub artwork is swapped for an animated copy at the seam. Main and
- * stub dimensions are derived from their source PNGs, so there are no guessed
- * offsets, stretch ratios, or device-specific alignment values.
+ * Main and stub are two transparent layers from one source canvas. Ready state
+ * uses the exact geometry that was printed; only the stub layer becomes
+ * animated. There is no vertical concatenation and therefore no seam drift.
  */
 export function ReadyTicketTearOverlay({ controller }: { controller: Controller }) {
   const hintOpacity = useRef(new Animated.Value(0)).current;
@@ -393,6 +407,7 @@ export function ReadyTicketTearOverlay({ controller }: { controller: Controller 
                   stamped
                   stampProgress={controller.ticketStamp}
                   showStubArtwork={false}
+                  showBarcode={false}
                 />
                 <TicketStub
                   enabled={controller.ticketReadyUnlocked}
@@ -470,7 +485,7 @@ const motionStyles = StyleSheet.create({
   },
   ticketGestureStage: {
     width: DETOUR_TICKET_WIDTH,
-    height: DETOUR_TICKET_TOTAL_HEIGHT,
+    height: DETOUR_TICKET_HEIGHT,
     position: 'relative',
   },
   ticketImage: {
@@ -479,19 +494,17 @@ const motionStyles = StyleSheet.create({
   },
   stubLayer: {
     position: 'absolute',
+    top: 0,
     left: 0,
+    width: DETOUR_TICKET_WIDTH,
+    height: DETOUR_TICKET_HEIGHT,
     zIndex: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 6,
   },
   stubHitArea: {
     position: 'absolute',
     left: 10,
     right: 10,
-    height: 44,
+    height: 56,
     zIndex: 5,
   },
   hintWrap: {
