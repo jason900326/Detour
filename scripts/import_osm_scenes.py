@@ -240,7 +240,7 @@ def normalize_feature(feature: dict[str, Any], batch: str) -> dict[str, Any] | N
 
 def request_supabase(
     supabase_url: str,
-    service_key: str,
+    secret_key: str,
     path: str,
     payload: Any,
     *,
@@ -249,10 +249,16 @@ def request_supabase(
     url = f"{supabase_url.rstrip('/')}{path}"
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
+        "apikey": secret_key,
         "Content-Type": "application/json",
     }
+
+    # New Supabase `sb_secret_...` keys are API keys, not JWTs, and must not be
+    # sent as a Bearer token. Keep Authorization only for legacy service_role
+    # JWTs so existing local setups continue to work during the transition.
+    if not secret_key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {secret_key}"
+
     if prefer:
         headers["Prefer"] = prefer
 
@@ -265,20 +271,20 @@ def request_supabase(
         raise RuntimeError(f"Supabase {error.code}: {detail[:1000]}") from error
 
 
-def upload_batch(supabase_url: str, service_key: str, rows: list[dict[str, Any]]) -> None:
+def upload_batch(supabase_url: str, secret_key: str, rows: list[dict[str, Any]]) -> None:
     request_supabase(
         supabase_url,
-        service_key,
+        secret_key,
         "/rest/v1/scenes?on_conflict=id",
         rows,
         prefer="resolution=merge-duplicates,return=minimal",
     )
 
 
-def finalize_import(supabase_url: str, service_key: str, batch: str) -> int:
+def finalize_import(supabase_url: str, secret_key: str, batch: str) -> int:
     raw = request_supabase(
         supabase_url,
-        service_key,
+        secret_key,
         "/rest/v1/rpc/finalize_osm_scene_import",
         {"p_batch": batch},
     )
@@ -314,9 +320,12 @@ def main() -> int:
         return 2
 
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
-    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if not args.dry_run and (not supabase_url or not service_key):
-        print("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.", file=sys.stderr)
+    secret_key = (
+        os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+        or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    )
+    if not args.dry_run and (not supabase_url or not secret_key):
+        print("SUPABASE_URL and SUPABASE_SECRET_KEY are required.", file=sys.stderr)
         return 2
 
     batch = f"osm-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
@@ -338,7 +347,7 @@ def main() -> int:
 
         if len(pending) >= BATCH_SIZE:
             if not args.dry_run:
-                upload_batch(supabase_url, service_key, pending)
+                upload_batch(supabase_url, secret_key, pending)
             uploaded += len(pending)
             print(f"uploaded {uploaded} scenes (scanned {scanned})", flush=True)
             pending.clear()
@@ -348,12 +357,12 @@ def main() -> int:
 
     if pending:
         if not args.dry_run:
-            upload_batch(supabase_url, service_key, pending)
+            upload_batch(supabase_url, secret_key, pending)
         uploaded += len(pending)
 
     deactivated = 0
     if not args.dry_run:
-        deactivated = finalize_import(supabase_url, service_key, batch)
+        deactivated = finalize_import(supabase_url, secret_key, batch)
 
     elapsed = time.time() - started_at
     print(
