@@ -66,4 +66,10 @@ export const printerOverrides = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
+  // V45Ticket still owns the barcode view structurally, but the current ticket
+  // design intentionally omits it. Overriding the shared style keeps all
+  // existing layouts stable without adding another special-case render path.
+  v46ArtBarcode: {
+    display: 'none',
+  },
 });
