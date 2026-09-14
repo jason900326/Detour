@@ -15,18 +15,18 @@ export const DETOUR_TICKET_WIDTH = 310;
 export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');
 export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
 
-const MAIN_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
-const STUB_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_STUB_SOURCE);
+const TICKET_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
 
-// Both artwork slices come from the same ticket export and keep their native
-// aspect ratios. We only choose one screen width; every vertical coordinate is
-// derived from the source pixels so the seam cannot drift across device sizes.
-export const DETOUR_TICKET_MAIN_HEIGHT =
-  DETOUR_TICKET_WIDTH * (MAIN_ARTWORK.height / MAIN_ARTWORK.width);
-export const DETOUR_TICKET_STUB_HEIGHT =
-  DETOUR_TICKET_WIDTH * (STUB_ARTWORK.height / STUB_ARTWORK.width);
-export const DETOUR_TICKET_TOTAL_HEIGHT =
-  DETOUR_TICKET_MAIN_HEIGHT + DETOUR_TICKET_STUB_HEIGHT;
+// ticket-main.png and ticket-stub.png are transparent layers exported from the
+// same source canvas. They must always share the same origin and dimensions;
+// stacking their heights would duplicate the transparent canvas and move the
+// visible stub away from the perforation.
+export const DETOUR_TICKET_HEIGHT =
+  DETOUR_TICKET_WIDTH * (TICKET_ARTWORK.height / TICKET_ARTWORK.width);
+
+// The perforation lives in artwork coordinates, not device coordinates. The
+// gesture band is centered on this ratio and scales together with the ticket.
+export const DETOUR_TICKET_TEAR_SEAM_RATIO = 1050 / 1411;
 
 export type DetourTicketProps = {
   timeLabel: string;
@@ -264,7 +264,7 @@ export function V45Ticket({
     <Animated.View
       style={[
         styles.v46ArtTicket,
-        { height: DETOUR_TICKET_TOTAL_HEIGHT },
+        { height: DETOUR_TICKET_HEIGHT },
         artworkVisible && !artworkReady && styles.v49TicketArtworkPending,
         feedStyle,
       ]}
@@ -278,7 +278,7 @@ export function V45Ticket({
               top: 0,
               left: 0,
               width: DETOUR_TICKET_WIDTH,
-              height: DETOUR_TICKET_MAIN_HEIGHT,
+              height: DETOUR_TICKET_HEIGHT,
             }}
             resizeMode="contain"
             onLoad={markArtworkReady}
@@ -289,10 +289,10 @@ export function V45Ticket({
               source={DETOUR_TICKET_STUB_SOURCE}
               style={{
                 position: 'absolute',
-                top: DETOUR_TICKET_MAIN_HEIGHT,
+                top: 0,
                 left: 0,
                 width: DETOUR_TICKET_WIDTH,
-                height: DETOUR_TICKET_STUB_HEIGHT,
+                height: DETOUR_TICKET_HEIGHT,
               }}
               resizeMode="contain"
             />
