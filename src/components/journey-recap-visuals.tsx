@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Animated,
+  Easing,
   Image,
   Pressable,
   ScrollView,
@@ -26,6 +28,58 @@ type RoutePoint = {
   latitude: number;
   longitude: number;
 };
+
+function PlacedPhoto({
+  children,
+  delay = 0,
+}: {
+  children: ReactNode;
+  delay?: number;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.stopAnimation();
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 260,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [delay, progress]);
+
+  const rotate = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['1.4deg', '0deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        opacity: progress,
+        transform: [
+          {
+            translateY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [14, 0],
+            }),
+          },
+          { rotate },
+          {
+            scale: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.985, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 function routeForEntry(entry: PassportEntry | null) {
   if (!entry) return [] as RoutePoint[];
@@ -102,11 +156,7 @@ function JourneyRouteTrace({
 
   return (
     <View style={styles.v54RouteTrace}>
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${ROUTE_VIEW_WIDTH} ${ROUTE_VIEW_HEIGHT}`}
-      >
+      <Svg width="100%" height="100%" viewBox={`0 0 ${ROUTE_VIEW_WIDTH} ${ROUTE_VIEW_HEIGHT}`}>
         <SvgPolyline
           points={route.points}
           fill="none"
@@ -158,11 +208,7 @@ function ZoomablePhoto({ uri }: { uri: string }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.v54ZoomCanvas}>
-        <Image
-          source={{ uri }}
-          style={styles.v54HeroPhoto}
-          resizeMode="contain"
-        />
+        <Image source={{ uri }} style={styles.v54HeroPhoto} resizeMode="contain" />
       </View>
     </ScrollView>
   );
@@ -210,20 +256,21 @@ function PhotoStrip({
     <View style={styles.v54FilmStrip}>
       <View style={styles.v54FilmPhotos}>
         {photos.slice(0, 6).map((photo, index) => (
-          <Pressable
-            key={photo.id}
-            onPress={() => onPhotoIndex(index)}
-            style={styles.v54FilmPress}
-          >
-            <Image
-              source={{ uri: photo.uri }}
-              style={[
-                styles.v54FilmPhoto,
-                index === activeIndex && styles.v54FilmPhotoActive,
-              ]}
-              resizeMode="cover"
-            />
-          </Pressable>
+          <PlacedPhoto key={photo.id} delay={90 + index * 70}>
+            <Pressable
+              onPress={() => onPhotoIndex(index)}
+              style={styles.v54FilmPress}
+            >
+              <Image
+                source={{ uri: photo.uri }}
+                style={[
+                  styles.v54FilmPhoto,
+                  index === activeIndex && styles.v54FilmPhotoActive,
+                ]}
+                resizeMode="cover"
+              />
+            </Pressable>
+          </PlacedPhoto>
         ))}
       </View>
     </View>
@@ -256,11 +303,9 @@ function JourneyNoteEditor({ entry }: { entry: PassportEntry }) {
 
   useEffect(() => {
     if (!loaded) return;
-
     const handle = setTimeout(() => {
       void AsyncStorage.setItem(storageKey, note);
     }, 350);
-
     return () => clearTimeout(handle);
   }, [loaded, note, storageKey]);
 
@@ -280,9 +325,7 @@ function JourneyNoteEditor({ entry }: { entry: PassportEntry }) {
         maxLength={280}
         textAlignVertical="top"
       />
-      {note.length > 0 && (
-        <Text style={styles.v54NoteCount}>{note.length} / 280</Text>
-      )}
+      {note.length > 0 && <Text style={styles.v54NoteCount}>{note.length} / 280</Text>}
     </View>
   );
 }
@@ -290,10 +333,8 @@ function JourneyNoteEditor({ entry }: { entry: PassportEntry }) {
 function orderedSharePhotos(entry: PassportEntry, selectedUri?: string) {
   const photos = entry.photos ?? [];
   if (!selectedUri) return photos.slice(0, 6);
-
   const selected = photos.find((photo) => photo.uri === selectedUri);
   if (!selected) return photos.slice(0, 6);
-
   return [selected, ...photos.filter((photo) => photo.id !== selected.id)].slice(0, 6);
 }
 
@@ -302,11 +343,13 @@ function SharePhotoCollage({ photos }: { photos: SessionPhoto[] }) {
 
   if (photos.length === 1) {
     return (
-      <Image
-        source={{ uri: photos[0].uri }}
-        style={styles.v54PosterSinglePhoto}
-        resizeMode="contain"
-      />
+      <PlacedPhoto>
+        <Image
+          source={{ uri: photos[0].uri }}
+          style={styles.v54PosterSinglePhoto}
+          resizeMode="contain"
+        />
+      </PlacedPhoto>
     );
   }
 
@@ -317,13 +360,11 @@ function SharePhotoCollage({ photos }: { photos: SessionPhoto[] }) {
 
   return (
     <View style={styles.v54PosterCollage}>
-      {photos.map((photo) => (
+      {photos.map((photo, index) => (
         <View key={photo.id} style={[styles.v54PosterTile, { width, height }]}> 
-          <Image
-            source={{ uri: photo.uri }}
-            style={styles.v54PosterTilePhoto}
-            resizeMode="cover"
-          />
+          <PlacedPhoto delay={index * 55}>
+            <Image source={{ uri: photo.uri }} style={styles.v54PosterTilePhoto} resizeMode="cover" />
+          </PlacedPhoto>
         </View>
       ))}
     </View>
@@ -337,14 +378,9 @@ export function V45SharePoster({
   entry: PassportEntry;
   photoUri?: string;
 }) {
-  const distance = (
-    (entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000
-  ).toFixed(1);
+  const distance = ((entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000).toFixed(1);
   const minutes = entry.actualDurationMinutes ?? entry.minutes;
-  const sharePhotos = useMemo(
-    () => orderedSharePhotos(entry, photoUri),
-    [entry, photoUri]
-  );
+  const sharePhotos = useMemo(() => orderedSharePhotos(entry, photoUri), [entry, photoUri]);
 
   return (
     <View style={styles.v45Poster}>
@@ -371,9 +407,7 @@ export function V45SharePoster({
         <View style={styles.v54PosterFacts}>
           <Text style={styles.v54PosterFact}>{minutes} 分鐘</Text>
           <Text style={styles.v54PosterFact}>{distance} 公里</Text>
-          <Text style={styles.v54PosterFact}>
-            {entry.photoCount ?? entry.photos?.length ?? 0} 張照片
-          </Text>
+          <Text style={styles.v54PosterFact}>{entry.photoCount ?? entry.photos?.length ?? 0} 張照片</Text>
         </View>
       </View>
 
@@ -420,7 +454,9 @@ export function V46CompleteArtwork({
 
         <View style={[styles.v54HeroStage, !activePhoto && styles.v54HeroStageRoute]}>
           {activePhoto ? (
-            <ZoomablePhoto uri={activePhoto.uri} />
+            <PlacedPhoto key={activePhoto.id}>
+              <ZoomablePhoto uri={activePhoto.uri} />
+            </PlacedPhoto>
           ) : entry ? (
             <JourneyRouteTrace entry={entry} showLabel />
           ) : (
@@ -435,11 +471,7 @@ export function V46CompleteArtwork({
           </View>
         </View>
 
-        <PhotoStrip
-          photos={photos}
-          activeIndex={activeIndex}
-          onPhotoIndex={setPhotoIndex}
-        />
+        <PhotoStrip photos={photos} activeIndex={activeIndex} onPhotoIndex={setPhotoIndex} />
 
         <View style={styles.v54TicketCopy}>
           <Text style={styles.v54MoodTicket}>{entry?.moodLabel ?? '旅程'}</Text>
@@ -469,9 +501,7 @@ export function V46ReviewArtwork({
   const activeIndex = Math.min(photoIndex, Math.max(0, photos.length - 1));
   const activePhoto = photos[activeIndex];
   const minutes = entry.actualDurationMinutes ?? entry.minutes;
-  const distanceKm = (
-    (entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000
-  ).toFixed(1);
+  const distanceKm = ((entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000).toFixed(1);
 
   return (
     <View style={styles.v54TicketPaper}>
@@ -487,7 +517,9 @@ export function V46ReviewArtwork({
 
       <View style={[styles.v54HeroStage, !activePhoto && styles.v54HeroStageRoute]}>
         {activePhoto ? (
-          <ZoomablePhoto uri={activePhoto.uri} />
+          <PlacedPhoto key={activePhoto.id}>
+            <ZoomablePhoto uri={activePhoto.uri} />
+          </PlacedPhoto>
         ) : (
           <JourneyRouteTrace entry={entry} showLabel />
         )}
@@ -496,22 +528,14 @@ export function V46ReviewArtwork({
         </View>
       </View>
 
-      <PhotoStrip
-        photos={photos}
-        activeIndex={activeIndex}
-        onPhotoIndex={onPhotoIndex}
-      />
+      <PhotoStrip photos={photos} activeIndex={activeIndex} onPhotoIndex={onPhotoIndex} />
 
       <View style={styles.v54TicketCopy}>
         <Text style={styles.v54MoodTicket}>{entry.moodLabel}</Text>
         <Text style={styles.v54Destination} numberOfLines={2}>
           {entry.sceneName ?? `${entry.city}的一趟 DETOUR`}
         </Text>
-        <TripFacts
-          minutes={minutes}
-          distanceKm={distanceKm}
-          photoCount={entry.photoCount ?? photos.length}
-        />
+        <TripFacts minutes={minutes} distanceKm={distanceKm} photoCount={entry.photoCount ?? photos.length} />
       </View>
 
       <View style={styles.v54PerforationInset} />
