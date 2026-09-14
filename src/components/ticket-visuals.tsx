@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, Text, View } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import type { MoodId } from '../lib/journey-engine';
 import { styles } from '../styles/home-styles';
 import { SIGNAL } from '../theme/detour-theme';
 import { V45MoodIcon } from './mood-visuals';
+import { useTicketTear } from './ticket-tear-context';
 
 let ticketArtworkDecoded = false;
 
@@ -18,14 +19,11 @@ export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stu
 const TICKET_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
 
 // ticket-main.png and ticket-stub.png are transparent layers exported from the
-// same source canvas. They must always share the same origin and dimensions;
-// stacking their heights would duplicate the transparent canvas and move the
-// visible stub away from the perforation.
+// same source canvas. They always share one origin and one geometry.
 export const DETOUR_TICKET_HEIGHT =
   DETOUR_TICKET_WIDTH * (TICKET_ARTWORK.height / TICKET_ARTWORK.width);
 
-// The perforation lives in artwork coordinates, not device coordinates. The
-// gesture band is centered on this ratio and scales together with the ticket.
+// The perforation lives in artwork coordinates, not device coordinates.
 export const DETOUR_TICKET_TEAR_SEAM_RATIO = 1050 / 1411;
 
 export type DetourTicketProps = {
@@ -143,6 +141,36 @@ export function DetourAccentStroke({
   );
 }
 
+function TearableTicketStub() {
+  const { dragX, dragY, opacity } = useTicketTear();
+  const rotate = dragX.interpolate({
+    inputRange: [-44, 0, 44],
+    outputRange: ['-9deg', '0deg', '9deg'],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: DETOUR_TICKET_WIDTH,
+        height: DETOUR_TICKET_HEIGHT,
+        opacity,
+        transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
+      }}
+    >
+      <Image
+        source={DETOUR_TICKET_STUB_SOURCE}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="contain"
+      />
+    </Animated.View>
+  );
+}
+
 // DETOUR V45 — ticket / mood / recap visual system
 
 type V45TicketProps = {
@@ -172,17 +200,40 @@ export function V45Ticket({
     artworkVisible ? ticketArtworkDecoded : true
   );
   const feedJitter = useRef(new Animated.Value(0)).current;
+  const ticketRef = useRef<View>(null);
+  const { enabled: tearEnabled, setTicketBounds } = useTicketTear();
 
   const markArtworkReady = () => {
     ticketArtworkDecoded = true;
     setArtworkReady(true);
   };
 
+  const measureTicket = useCallback(() => {
+    if (!tearEnabled) return;
+
+    requestAnimationFrame(() => {
+      ticketRef.current?.measureInWindow((x, y, width, height) => {
+        if (width <= 0 || height <= 0) return;
+        setTicketBounds({
+          x,
+          y,
+          width,
+          height,
+          seamY: y + height * DETOUR_TICKET_TEAR_SEAM_RATIO,
+        });
+      });
+    });
+  }, [setTicketBounds, tearEnabled]);
+
   useEffect(() => {
     if (!artworkVisible) {
       setArtworkReady(true);
     }
   }, [artworkVisible]);
+
+  useEffect(() => {
+    measureTicket();
+  }, [measureTicket]);
 
   useEffect(() => {
     feedJitter.stopAnimation();
@@ -262,6 +313,8 @@ export function V45Ticket({
 
   return (
     <Animated.View
+      ref={ticketRef}
+      onLayout={measureTicket}
       style={[
         styles.v46ArtTicket,
         { height: DETOUR_TICKET_HEIGHT },
@@ -284,19 +337,7 @@ export function V45Ticket({
             onLoad={markArtworkReady}
             onLoadEnd={markArtworkReady}
           />
-          {showStubArtwork && (
-            <Image
-              source={DETOUR_TICKET_STUB_SOURCE}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: DETOUR_TICKET_WIDTH,
-                height: DETOUR_TICKET_HEIGHT,
-              }}
-              resizeMode="contain"
-            />
-          )}
+          {showStubArtwork && <TearableTicketStub />}
         </>
       )}
 
