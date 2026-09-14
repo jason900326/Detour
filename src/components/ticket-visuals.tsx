@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Animated, Image, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Text, View } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import type { MoodId } from '../lib/journey-engine';
 import { styles } from '../styles/home-styles';
@@ -103,9 +103,6 @@ export function DetourTicket({
   );
 }
 
-
-
-
 export function DetourAccentStroke({
   width,
   style,
@@ -133,18 +130,97 @@ export function DetourAccentStroke({
 
 export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
   const [artworkReady, setArtworkReady] = useState(ticketArtworkDecoded);
+  const feedJitter = useRef(new Animated.Value(0)).current;
+
   const markArtworkReady = () => {
     ticketArtworkDecoded = true;
     setArtworkReady(true);
   };
+
+  useEffect(() => {
+    feedJitter.stopAnimation();
+    feedJitter.setValue(0);
+
+    if (stamped) return;
+
+    // Thermal/transport printers rarely move paper with a perfectly smooth
+    // tween. Short, asymmetric roller bites make the existing vertical feed
+    // read as a physical mechanism without turning the screen into a gimmick.
+    const feedLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(180),
+        Animated.timing(feedJitter, {
+          toValue: 1,
+          duration: 54,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(feedJitter, {
+          toValue: 2,
+          duration: 48,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(feedJitter, {
+          toValue: 3,
+          duration: 62,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(feedJitter, {
+          toValue: 0,
+          duration: 88,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(330),
+      ])
+    );
+
+    feedLoop.start();
+
+    return () => {
+      feedLoop.stop();
+      feedJitter.setValue(0);
+    };
+  }, [feedJitter, stamped]);
 
   const stampScale = stampProgress
     ? stampProgress.interpolate({ inputRange: [0, 1], outputRange: [1.28, 1] })
     : 1;
   const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
 
+  const feedStyle = {
+    transform: [
+      {
+        translateX: feedJitter.interpolate({
+          inputRange: [0, 1, 2, 3],
+          outputRange: [0, -0.9, 0.65, -0.3],
+        }),
+      },
+      {
+        translateY: feedJitter.interpolate({
+          inputRange: [0, 1, 2, 3],
+          outputRange: [0, 0.55, 0.08, 0.34],
+        }),
+      },
+      {
+        rotate: feedJitter.interpolate({
+          inputRange: [0, 1, 2, 3],
+          outputRange: ['0deg', '-0.08deg', '0.06deg', '-0.03deg'],
+        }),
+      },
+    ],
+  };
+
   return (
-    <View style={[styles.v46ArtTicket, !artworkReady && styles.v49TicketArtworkPending]}>
+    <Animated.View
+      style={[
+        styles.v46ArtTicket,
+        !artworkReady && styles.v49TicketArtworkPending,
+        feedStyle,
+      ]}
+    >
       <Image
         source={require('../../assets/detour/ticket-base.png')}
         style={styles.v46ArtTicketBase}
@@ -152,7 +228,6 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
         onLoad={markArtworkReady}
         onLoadEnd={markArtworkReady}
       />
-
 
       <View style={styles.v46ArtTicketHeader}>
         <Text style={styles.v46ArtTicketBrand}>DETOUR</Text>
@@ -219,6 +294,6 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
           <Text style={styles.v46ArtSecretStampText}>終點保密</Text>
         </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 }
