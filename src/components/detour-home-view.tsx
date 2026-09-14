@@ -1089,22 +1089,19 @@ export function DetourHomeView({
                 </View>
               </View>
 
-              <View style={styles.v48PaperViewport} pointerEvents="none">
-                <Animated.View
-                  style={[
-                    styles.v48PaperTrack,
-                    {
-                      transform: [
-                        {
-                          translateY: routeProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-420, 0],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.v48PaperViewport,
+                  {
+                    height: routeProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 409],
+                    }),
+                  },
+                ]}
+              >
+                <View style={styles.v48PaperTrack}>
                   <V45Ticket
                     timeLabel={selectedTime ?? '15'}
                     moodId={selectedMood ?? 'wander'}
@@ -1113,8 +1110,8 @@ export function DetourHomeView({
                     stamped={stage === 'ready'}
                     stampProgress={ticketStamp}
                   />
-                </Animated.View>
-              </View>
+                </View>
+              </Animated.View>
 
               <View pointerEvents="none" style={styles.v50PrinterFrontLip}>
                 <View style={styles.v50PrinterFrontLipHighlight} />
