@@ -41,10 +41,6 @@ replacements = [
         """  way${around}[\"highway\"=\"pedestrian\"];""",
     ),
     (
-        """out center 100;""",
-        """out center 180;""",
-    ),
-    (
         """    .slice(0, 24);""",
         """    .slice(0, 40);""",
     ),
@@ -54,5 +50,9 @@ for old, new in replacements:
     if old not in text:
         raise SystemExit(f'expected block not found:\n{old[:160]}')
     text = text.replace(old, new, 1)
+
+if text.count('out center 100;') != 2:
+    raise SystemExit('expected two Overpass result caps')
+text = text.replace('out center 100;', 'out center 180;')
 
 path.write_text(text, encoding='utf-8')
