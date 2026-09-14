@@ -190,6 +190,19 @@ function TearableTicketStub() {
         style={{ width: '100%', height: '100%' }}
         resizeMode="contain"
       />
+      <Image
+        source={DETOUR_TICKET_STUB_SOURCE}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          tintColor: '#D28A54',
+          opacity: 0.18,
+        }}
+        resizeMode="contain"
+      />
     </Animated.View>
   );
 }
@@ -216,7 +229,7 @@ export function V45Ticket({
   stamped = false,
   stampProgress,
   artworkVisible = true,
-  showBarcode = true,
+  showBarcode = false,
   showStubArtwork = true,
 }: V45TicketProps) {
   const [artworkReady, setArtworkReady] = useState(
