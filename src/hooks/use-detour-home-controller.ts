@@ -600,11 +600,15 @@ export function useDetourHomeController() {
   }, [stage]);
 
   useEffect(() => {
-    if (stage !== 'mood' || !selectedMood) return;
+    if (stage !== 'mood') return;
 
+    // Warm the generic nearby OSM query as soon as the mood screen appears.
+    // All non-food moods share this discovery query, so the user's decision
+    // time becomes useful network time instead of dead time after tapping go.
+    const warmMood = selectedMood ?? 'wander';
     const timer = setTimeout(() => {
-      void prewarmDetour(selectedMood);
-    }, 80);
+      void prewarmDetour(warmMood);
+    }, selectedMood ? 40 : 0);
 
     return () => clearTimeout(timer);
   }, [stage, selectedMood, selectedMinutes]);
@@ -2132,7 +2136,13 @@ export function useDetourHomeController() {
 
       // Warm one or two likely walking legs in the background. fetchWalkingRoute
       // caches them, so pressing 出發 can often issue immediately.
-      void prewarmWalkingRoutes(point, candidates, 2);
+      void prewarmWalkingRoutes(
+        point,
+        candidates,
+        2,
+        minutes,
+        paceDistanceScale
+      );
 
       // Taste ranking is future preference data only; never block this ticket.
       if (
@@ -2187,6 +2197,16 @@ export function useDetourHomeController() {
     setTicketBuildError(null);
     const ticketStartedAt = Date.now();
 
+    // Never show a dead printer. Feed the top edge immediately while data is
+    // being prepared, then hold here until the real route is ready.
+    routeProgress.stopAnimation();
+    Animated.timing(routeProgress, {
+      toValue: 0.13,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+
     let permission = await Location.getForegroundPermissionsAsync();
 
     if (permission.status !== 'granted') {
@@ -2224,7 +2244,7 @@ export function useDetourHomeController() {
 
       const cachedCandidates = cached?.candidatesByMood[finalMood] ?? [];
 
-      if (cached && cachedCandidates.length > 0) {
+      if (cached) {
         startPoint = cached.point;
         context = cached.context;
 
@@ -2268,9 +2288,16 @@ export function useDetourHomeController() {
       } else {
         advanceTicketProgress(0.12, '正在取得現在位置…');
 
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+        let location = await Location.getLastKnownPositionAsync({
+          maxAge: 2 * 60 * 1000,
+          requiredAccuracy: 150,
         });
+
+        if (!location) {
+          location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
 
         startPoint = {
           latitude: location.coords.latitude,
@@ -2412,7 +2439,10 @@ export function useDetourHomeController() {
 
       setTicketBuildStatus('車票完成');
 
-      const minimumPrintMs = 650;
+      // The printer has already shown a small paper edge while searching.
+      // Once routing is real, finish the physical feed quickly instead of
+      // adding another full second of perceived loading.
+      const minimumPrintMs = 300;
       const remainingPrintMs = Math.max(
         0,
         minimumPrintMs - (Date.now() - ticketStartedAt)
@@ -2424,11 +2454,12 @@ export function useDetourHomeController() {
         });
       }
 
+      routeProgress.stopAnimation();
       await new Promise<void>((resolve) => {
         Animated.timing(routeProgress, {
           toValue: 1,
-          duration: 1100,
-          easing: Easing.inOut(Easing.quad),
+          duration: 650,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
         }).start(() => resolve());
       });

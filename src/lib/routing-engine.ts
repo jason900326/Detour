@@ -30,6 +30,7 @@ const FOOT_ROUTER =
 let lastRoutingRequestAt = 0;
 const WALKING_ROUTE_CACHE_TTL = 2 * 60 * 1000;
 const walkingRouteCache = new Map<string, { expiresAt: number; route: WalkingRoute }>();
+const walkingRouteInFlight = new Map<string, Promise<WalkingRoute>>();
 
 function walkingRouteCacheKey(start: GeoPoint, destination: GeoPoint) {
   const round = (value: number) => value.toFixed(5);
@@ -71,52 +72,77 @@ export async function fetchWalkingRoute(
   const cached = walkingRouteCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.route;
 
-  await throttleRouter();
+  // Prewarm and ticket issue often ask for the exact same leg at nearly the
+  // same time. Share that request instead of queueing a duplicate behind the
+  // router throttle.
+  const inFlight = walkingRouteInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
 
-  const coordinates = [
-    `${start.longitude},${start.latitude}`,
-    `${destination.longitude},${destination.latitude}`,
-  ].join(';');
+  const request = (async () => {
+    await throttleRouter();
 
-  const url =
-    `${FOOT_ROUTER}/${coordinates}` +
-    '?overview=full&geometries=geojson&steps=true&alternatives=false';
-  const response = await fetchWithTimeout(url, timeoutMs);
+    const coordinates = [
+      `${start.longitude},${start.latitude}`,
+      `${destination.longitude},${destination.latitude}`,
+    ].join(';');
 
-  if (!response.ok) throw new Error(`Walking router ${response.status}`);
+    const url =
+      `${FOOT_ROUTER}/${coordinates}` +
+      '?overview=full&geometries=geojson&steps=true&alternatives=false';
+    const response = await fetchWithTimeout(url, timeoutMs);
 
-  const data = (await response.json()) as OsrmResponse;
-  const route = data.routes?.[0];
+    if (!response.ok) throw new Error(`Walking router ${response.status}`);
 
-  if (data.code !== 'Ok' || !route || !route.geometry?.coordinates?.length) {
-    throw new Error('No walking route');
-  }
+    const data = (await response.json()) as OsrmResponse;
+    const route = data.routes?.[0];
 
-  const normalized: WalkingRoute = {
-    coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({
-      latitude,
-      longitude,
-    })),
-    distanceMeters: route.distance,
-    durationSeconds: route.duration,
-  };
+    if (data.code !== 'Ok' || !route || !route.geometry?.coordinates?.length) {
+      throw new Error('No walking route');
+    }
 
-  walkingRouteCache.set(cacheKey, {
-    expiresAt: Date.now() + WALKING_ROUTE_CACHE_TTL,
-    route: normalized,
+    const normalized: WalkingRoute = {
+      coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      distanceMeters: route.distance,
+      durationSeconds: route.duration,
+    };
+
+    walkingRouteCache.set(cacheKey, {
+      expiresAt: Date.now() + WALKING_ROUTE_CACHE_TTL,
+      route: normalized,
+    });
+
+    return normalized;
+  })().finally(() => {
+    walkingRouteInFlight.delete(cacheKey);
   });
 
-  return normalized;
+  walkingRouteInFlight.set(cacheKey, request);
+  return request;
 }
 
 export async function prewarmWalkingRoutes(
   start: GeoPoint,
   candidates: SceneCandidate[],
-  limit = 2
+  limit = 2,
+  minutes = 15,
+  distanceScale = 1
 ) {
-  for (const scene of candidates.slice(0, Math.max(0, limit))) {
+  const straightTarget = targetDistance(minutes) * distanceScale * 0.74;
+  const likely = candidates
+    .slice(0, 7)
+    .sort(
+      (a, b) =>
+        Math.abs(a.straightDistanceMeters - straightTarget) -
+        Math.abs(b.straightDistanceMeters - straightTarget)
+    )
+    .slice(0, Math.max(0, limit));
+
+  for (const scene of likely) {
     try {
-      await fetchWalkingRoute(start, scene.point, 4200);
+      await fetchWalkingRoute(start, scene.point, 3200);
     } catch {
       // Prewarming is opportunistic; ticket issue can still try another route.
     }
@@ -224,7 +250,7 @@ export async function resolveRoutedScene(args: {
   const avoidRoutes = args.avoidRoutes ?? [];
   const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
   const routingStartedAt = Date.now();
-  const TICKET_ROUTING_BUDGET_MS = 6800;
+  const TICKET_ROUTING_BUDGET_MS = 4800;
 
   // Candidate quality is already ranked upstream. Only consider a small window,
   // then prefer the one whose straight-line distance best fits this duration.
@@ -246,7 +272,7 @@ export async function resolveRoutedScene(args: {
     }
 
     try {
-      const route = await fetchWalkingRoute(args.start, scene.point, 4400);
+      const route = await fetchWalkingRoute(args.start, scene.point, 3200);
       const overlap = routeOverlapRatio(route.coordinates, avoidRoutes);
       const estimatedSeconds = estimatedJourneySeconds(
         route,
@@ -264,6 +290,14 @@ export async function resolveRoutedScene(args: {
         bestFallbackScore = score;
       }
 
+      // A route that is safely inside the time/distance envelope is already
+      // good enough for a fast ticket, even if it misses the ideal-distance
+      // band or repeats a little more history than preferred.
+      const fastFallbackFits =
+        route.distanceMeters <= maxDistance * 1.08 &&
+        estimatedSeconds <= timeBudgetSeconds * 1.1 &&
+        overlap <= 0.76;
+
       const distanceFits =
         route.distanceMeters >= profile.min &&
         route.distanceMeters <= maxDistance;
@@ -273,6 +307,10 @@ export async function resolveRoutedScene(args: {
       // Fast path: a route that clears all product gates is good enough. Do not
       // make the user wait while we compare mathematically nicer alternatives.
       if (distanceFits && timeFits && noveltyFits) {
+        return { scene, route };
+      }
+
+      if (fastFallbackFits) {
         return { scene, route };
       }
     } catch {
