@@ -281,7 +281,7 @@ export function V46CompleteArtwork({
       <View style={styles.v53CompleteArtifact}>
         <View style={styles.v53ArtifactRail}>
           <Text style={styles.v53ArtifactRailBrand}>DETOUR</Text>
-          <Text style={styles.v53ArtifactRailLabel}>旅程完成</Text>
+          <Text style={styles.v53ArtifactRailLabel}>完成票</Text>
           <Text style={styles.v53ArtifactRailDate}>{formatPassportDate(completedAt)}</Text>
         </View>
 
@@ -301,7 +301,7 @@ export function V46CompleteArtwork({
             </View>
           )}
           <View style={styles.v53CompleteStamp}>
-            <Text style={styles.v53CompleteStampTop}>DONE</Text>
+            <Text style={styles.v53CompleteStampTop}>完成</Text>
             <Text style={styles.v53CompleteStampBottom}>{String(photos.length).padStart(2, '0')}</Text>
           </View>
         </View>
@@ -347,7 +347,7 @@ export function V46ReviewArtwork({
   return (
     <View style={styles.v53ReviewArtifact}>
       <View style={styles.v53ArchiveRail}>
-        <Text style={styles.v53ArchiveRailText}>DETOUR ARCHIVE</Text>
+        <Text style={styles.v53ArchiveRailText}>DETOUR · 收藏</Text>
         <Text style={styles.v53ArchiveRailMeta}>{String(activeIndex + 1).padStart(2, '0')} / {String(Math.max(photos.length, 1)).padStart(2, '0')}</Text>
       </View>
 
@@ -387,7 +387,7 @@ export function V46ReviewArtwork({
       <View style={styles.v53RouteSection}>
         <View style={styles.v53RouteSectionTop}>
           <View>
-            <Text style={styles.v53RouteSectionKicker}>ROUTE  /  {distanceKm} KM</Text>
+            <Text style={styles.v53RouteSectionKicker}>路線 · {distanceKm} 公里</Text>
             <Text style={styles.v53RouteSectionTitle}>這趟走過的路</Text>
           </View>
           <View style={styles.v53RouteSectionFlag} />
