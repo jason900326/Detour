@@ -20,15 +20,17 @@ if dice_start != -1:
     dice_end += len('              </Pressable>')
     view = view[:dice_start] + view[dice_end:]
 
-# Keep surprise out of the visible grid if the previous patch already filtered it.
-view = view.replace(
-    "{MOODS.map((item) => {",
-    "{MOODS.filter((item) => item.id !== 'surprise').map((item) => {",
-    1,
-)
+# Keep surprise out of the visible grid.
+if "{MOODS.map((item) => {" in view:
+    view = view.replace(
+        "{MOODS.map((item) => {",
+        "{MOODS.filter((item) => item.id !== 'surprise').map((item) => {",
+        1,
+    )
 
-# Replace height reveal with true physical translation of the entire finished ticket.
-old_paper = '''              <Animated.View
+# Preserve the physical-translation model. The paper itself moves; it is never
+# height-revealed/cropped as a fake growing rectangle.
+height_reveal = '''              <Animated.View
                 pointerEvents="none"
                 style={[
                   styles.v48PaperViewport,
@@ -51,7 +53,7 @@ old_paper = '''              <Animated.View
                   />
                 </View>
               </Animated.View>'''
-new_paper = '''              <View style={styles.v48PaperViewport} pointerEvents="none">
+physical = '''              <View style={styles.v48PaperViewport} pointerEvents="none">
                 <Animated.View
                   style={[
                     styles.v48PaperTrack,
@@ -59,8 +61,8 @@ new_paper = '''              <View style={styles.v48PaperViewport} pointerEvents
                       transform: [
                         {
                           translateY: routeProgress.interpolate({
-                            inputRange: [0, 0.13, 1],
-                            outputRange: [-372, -330, 0],
+                            inputRange: [0, 1],
+                            outputRange: [-380, 0],
                           }),
                         },
                       ],
@@ -77,29 +79,38 @@ new_paper = '''              <View style={styles.v48PaperViewport} pointerEvents
                   />
                 </Animated.View>
               </View>'''
-if old_paper not in view:
-    raise SystemExit('height-reveal paper block not found')
-view = view.replace(old_paper, new_paper, 1)
+if height_reveal in view:
+    view = view.replace(height_reveal, physical, 1)
+elif 'outputRange: [-405, 0],' in view:
+    view = view.replace('outputRange: [-405, 0],', 'outputRange: [-380, 0],', 1)
+elif 'outputRange: [-420, 0],' in view:
+    view = view.replace('outputRange: [-420, 0],', 'outputRange: [-380, 0],', 1)
+else:
+    raise SystemExit('physical paper translation block not found')
+
 view_path.write_text(view, encoding='utf-8')
 
 style_path = Path('src/styles/home/ticket-recap-styles.ts')
 styles = style_path.read_text(encoding='utf-8')
 
-replacements = {
-    "    left: 18,\n    right: 18,\n    top: 31,": "    left: 8,\n    right: 8,\n    top: 31,",
-    "    width: '94%',\n    height: 13,": "    width: '97%',\n    height: 13,",
-    "    width: 310,\n    height: 409,": "    width: 280,\n    height: 409,",
-    "    width: 310,\n    alignItems: 'center',": "    width: 280,\n    alignItems: 'center',",
-    "    left: 22,\n    right: 22,\n    top: 51,": "    left: 8,\n    right: 8,\n    top: 51,",
-    "  v46ArtTicket: {\n    width: 310,": "  v46ArtTicket: {\n    width: 280,",
-}
-for old, new in replacements.items():
-    if old not in styles:
+# The actual slot opening and the front lip must both be wider than the ticket.
+# Ticket = 280px. Slot opening ends up roughly >300px on the target phone width.
+replacements = [
+    ("    left: 18,\n    right: 18,\n    top: 31,", "    left: 8,\n    right: 8,\n    top: 31,"),
+    ("    width: '94%',\n    height: 13,", "    width: '97%',\n    height: 13,"),
+    ("    width: 310,\n    height: 409,", "    width: 280,\n    height: 409,"),
+    ("    width: 310,\n    alignItems: 'center',", "    width: 280,\n    alignItems: 'center',"),
+    ("    left: 22,\n    right: 22,\n    top: 51,", "    left: 8,\n    right: 8,\n    top: 51,"),
+    ("  v46ArtTicket: {\n    width: 310,", "  v46ArtTicket: {\n    width: 280,"),
+]
+for old, new in replacements:
+    if old in styles:
+        styles = styles.replace(old, new, 1)
+    elif new not in styles:
         raise SystemExit(f'style pattern not found: {old!r}')
-    styles = styles.replace(old, new, 1)
 
 style_path.write_text(styles, encoding='utf-8')
 
-# Important: ticket-visuals.tsx is deliberately untouched. The original
-# ticket-base.png remains the single artwork source so paper texture, printed
-# rules, perforation/serrated edges and all supplied art survive intact.
+# ticket-visuals.tsx is deliberately untouched. ticket-base.png remains the
+# artwork source, so paper texture, cut/perforation marks and serrated edges are
+# not redrawn or replaced by programmatic rectangles.
