@@ -10,6 +10,24 @@ import {
   type SceneFeedbackRecord,
 } from './scene-feedback';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
+const DEFAULT_SCENE_ENDPOINT =
+  'https://ldlhzyfubjbuumikrkuv.supabase.co/functions/v1/detour-scene';
+
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+  'sb_publishable_qhZ09r25etnEi-0dURQCYw_EStro0t_';
+
+const SCENE_ENDPOINT =
+  process.env.EXPO_PUBLIC_DETOUR_SCENE_URL?.trim() ||
+  DEFAULT_SCENE_ENDPOINT;
+
+const SUPABASE_PUBLISHABLE_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+  DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+
 export type SceneKind =
   | 'mural'
   | 'street-art'
@@ -68,14 +86,13 @@ type OverpassInFlight = {
 };
 
 const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  SCENE_ENDPOINT,
 ];
 
 const OVERPASS_CACHE_TTL = 10 * 60 * 1000;
 const OVERPASS_QUERY_TIMEOUT_SECONDS = 5;
-const OVERPASS_REQUEST_TIMEOUT_MS = 6200;
-const OVERPASS_HEDGE_DELAY_MS = 300;
+const OVERPASS_REQUEST_TIMEOUT_MS = 7000;
+const OVERPASS_HEDGE_DELAY_MS = 0;
 const overpassCache = new Map<string, { expiresAt: number; elements: OverpassElement[] }>();
 const overpassInFlight = new Map<string, OverpassInFlight>();
 
@@ -866,6 +883,7 @@ async function fetchOverpass(query: string) {
             'Content-Type':
               'application/x-www-form-urlencoded;charset=UTF-8',
             Accept: 'application/json',
+            apikey: SUPABASE_PUBLISHABLE_KEY,
           },
           body: `data=${encodeURIComponent(query)}`,
         },
@@ -873,13 +891,13 @@ async function fetchOverpass(query: string) {
       );
 
       if (!response.ok) {
-        throw new Error(`Overpass ${response.status}`);
+        throw new Error(`Scene gateway ${response.status}`);
       }
 
       const data = (await response.json()) as OverpassResponse;
 
       if (!Array.isArray(data.elements)) {
-        throw new Error('Overpass response missing elements');
+        throw new Error('Scene gateway response missing elements');
       }
 
       console.log(
@@ -911,7 +929,7 @@ async function fetchOverpass(query: string) {
       errors.push(
         error instanceof Error
           ? error
-          : new Error('Unknown Overpass error')
+          : new Error('Unknown Scene gateway error')
       );
 
       if (!settled && failures >= OVERPASS_ENDPOINTS.length) {
