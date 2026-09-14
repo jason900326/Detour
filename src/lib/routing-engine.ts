@@ -252,16 +252,17 @@ export async function resolveRoutedScene(args: {
   const routingStartedAt = Date.now();
   const TICKET_ROUTING_BUDGET_MS = 4800;
 
-  // Candidate quality is already ranked upstream. Only consider a small window,
-  // then prefer the one whose straight-line distance best fits this duration.
+  // Search a broader quality window, then try the candidates closest to the
+  // requested time first. This avoids throwing away perfectly walkable nearby
+  // places just because they ranked 8th or 9th on POI quality.
   const shortlist = args.candidates
-    .slice(0, 7)
+    .slice(0, 18)
     .sort(
       (a, b) =>
         Math.abs(a.straightDistanceMeters - straightTarget) -
         Math.abs(b.straightDistanceMeters - straightTarget)
     )
-    .slice(0, 3);
+    .slice(0, 5);
 
   let bestFallback: RoutedScene | null = null;
   let bestFallbackScore = Number.POSITIVE_INFINITY;
@@ -285,7 +286,11 @@ export async function resolveRoutedScene(args: {
       const overtimePenalty = overtimeSeconds * 1.4;
       const score = distanceDelta + noveltyPenalty + overtimePenalty;
 
-      if (route.distanceMeters <= maxDistance * 1.08 && score < bestFallbackScore) {
+      if (
+        route.distanceMeters >= 70 &&
+        estimatedSeconds <= timeBudgetSeconds * 1.12 &&
+        score < bestFallbackScore
+      ) {
         bestFallback = { scene, route };
         bestFallbackScore = score;
       }
@@ -294,9 +299,9 @@ export async function resolveRoutedScene(args: {
       // good enough for a fast ticket, even if it misses the ideal-distance
       // band or repeats a little more history than preferred.
       const fastFallbackFits =
-        route.distanceMeters <= maxDistance * 1.08 &&
-        estimatedSeconds <= timeBudgetSeconds * 1.1 &&
-        overlap <= 0.76;
+        route.distanceMeters >= 70 &&
+        estimatedSeconds <= timeBudgetSeconds * 1.06 &&
+        overlap <= 0.85;
 
       const distanceFits =
         route.distanceMeters >= profile.min &&
