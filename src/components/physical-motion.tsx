@@ -15,13 +15,17 @@ import type { useDetourHomeController } from '../hooks/use-detour-home-controlle
 import { styles } from '../styles/home-styles';
 import { MUTED } from '../theme/detour-theme';
 import { ticketSerial } from '../lib/detour-formatters';
-import { DetourAccentStroke, V45Ticket } from './ticket-visuals';
+import {
+  DETOUR_TICKET_MAIN_HEIGHT,
+  DETOUR_TICKET_STUB_HEIGHT,
+  DETOUR_TICKET_STUB_SOURCE,
+  DETOUR_TICKET_TOTAL_HEIGHT,
+  DETOUR_TICKET_WIDTH,
+  DetourAccentStroke,
+  V45Ticket,
+} from './ticket-visuals';
 
 type Controller = ReturnType<typeof useDetourHomeController>;
-
-const TICKET_BACK = require('../../assets/detour/ticket-back.png');
-const TICKET_MAIN = require('../../assets/detour/ticket-main.png');
-const TICKET_STUB = require('../../assets/detour/ticket-stub.png');
 
 function lightImpact() {
   return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -145,22 +149,6 @@ export function PrinterPhysicalHaptics({ controller }: { controller: Controller 
   return null;
 }
 
-function StubBarcode() {
-  return (
-    <View pointerEvents="none" style={styles.v46ArtBarcode}>
-      {Array.from({ length: 29 }).map((_, index) => (
-        <View
-          key={`tear-barcode-${index}`}
-          style={[
-            styles.v46ArtBarcodeBar,
-            { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
 function TicketStub({
   enabled,
   onTorn,
@@ -171,13 +159,38 @@ function TicketStub({
   const dragX = useRef(new Animated.Value(0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
-  const tensionFiredRef = useRef(false);
+  const tickIndexRef = useRef(0);
+  const directionRef = useRef(1);
   const tornRef = useRef(false);
+
+  const requiredDistance = DETOUR_TICKET_WIDTH * 0.58;
+  const fastDistance = DETOUR_TICKET_WIDTH * 0.34;
+  const tickThresholds = [0.22, 0.48, 0.74];
+
+  const resetStub = () => {
+    tickIndexRef.current = 0;
+    directionRef.current = 1;
+    Animated.parallel([
+      Animated.spring(dragX, {
+        toValue: 0,
+        speed: 24,
+        bounciness: 4,
+        useNativeDriver: true,
+      }),
+      Animated.spring(dragY, {
+        toValue: 0,
+        speed: 24,
+        bounciness: 4,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   useEffect(() => {
     if (!enabled) return;
     tornRef.current = false;
-    tensionFiredRef.current = false;
+    tickIndexRef.current = 0;
+    directionRef.current = 1;
     dragX.setValue(0);
     dragY.setValue(0);
     opacity.setValue(1);
@@ -186,110 +199,91 @@ function TicketStub({
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => enabled,
-        onMoveShouldSetPanResponder: (_event, gesture) =>
-          enabled && gesture.dy > 3 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.72,
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_event, gesture) => {
+          const horizontal = Math.abs(gesture.dx);
+          const vertical = Math.abs(gesture.dy);
+          return enabled && horizontal > 5 && horizontal > vertical * 1.15;
+        },
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           if (!enabled || tornRef.current) return;
-          tensionFiredRef.current = false;
+          tickIndexRef.current = 0;
           void Haptics.selectionAsync();
         },
         onPanResponderMove: (_event, gesture) => {
           if (!enabled || tornRef.current) return;
 
-          const positiveY = Math.max(0, gesture.dy);
-          const resistedY = positiveY <= 28
-            ? positiveY * 0.48
-            : 13.4 + (positiveY - 28) * 0.72;
-          const resistedX = Math.max(-18, Math.min(18, gesture.dx * 0.2));
+          const distance = Math.abs(gesture.dx);
+          const direction = gesture.dx === 0 ? directionRef.current : Math.sign(gesture.dx);
+          directionRef.current = direction || 1;
+          const progress = Math.min(1, distance / requiredDistance);
 
-          dragX.setValue(resistedX);
-          dragY.setValue(resistedY);
+          // The stub does not follow the finger sideways. It only starts to
+          // peel away from the seam while the finger travels across the tear
+          // line, which reads much more like perforated paper than dragging a
+          // loose card around the screen.
+          dragX.setValue(directionRef.current * progress * 5);
+          dragY.setValue(progress * 7);
 
-          if (positiveY >= 30 && !tensionFiredRef.current) {
-            tensionFiredRef.current = true;
+          const nextTick = tickIndexRef.current;
+          if (nextTick < tickThresholds.length && progress >= tickThresholds[nextTick]) {
+            tickIndexRef.current = nextTick + 1;
             void softImpact();
           }
         },
         onPanResponderRelease: (_event, gesture) => {
           if (!enabled || tornRef.current) return;
 
+          const distance = Math.abs(gesture.dx);
+          const speed = Math.abs(gesture.vx);
           const shouldTear =
-            gesture.dy >= 88 || (gesture.dy >= 58 && gesture.vy >= 0.62);
+            distance >= requiredDistance || (distance >= fastDistance && speed >= 0.85);
 
           if (!shouldTear) {
-            tensionFiredRef.current = false;
             void Haptics.selectionAsync();
-            Animated.parallel([
-              Animated.spring(dragX, {
-                toValue: 0,
-                speed: 24,
-                bounciness: 5,
-                useNativeDriver: true,
-              }),
-              Animated.spring(dragY, {
-                toValue: 0,
-                speed: 24,
-                bounciness: 5,
-                useNativeDriver: true,
-              }),
-            ]).start();
+            resetStub();
             return;
           }
 
           tornRef.current = true;
-          // startDetour starts with the existing medium impact, so that single
-          // impact becomes the actual perforation snap instead of double buzz.
-          onTorn();
+          const direction = gesture.dx === 0 ? directionRef.current : Math.sign(gesture.dx);
+          directionRef.current = direction || 1;
 
-          const releaseX = Math.max(-34, Math.min(34, gesture.dx * 0.42));
           Animated.parallel([
             Animated.timing(dragX, {
-              toValue: releaseX,
-              duration: 270,
+              toValue: directionRef.current * 24,
+              duration: 180,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
             Animated.timing(dragY, {
-              toValue: 184,
-              duration: 270,
+              toValue: Math.max(86, DETOUR_TICKET_STUB_HEIGHT * 1.7),
+              duration: 180,
               easing: Easing.in(Easing.quad),
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
               toValue: 0,
-              duration: 250,
+              duration: 180,
               easing: Easing.in(Easing.quad),
               useNativeDriver: true,
             }),
-          ]).start();
+          ]).start(({ finished }) => {
+            if (finished) onTorn();
+          });
         },
         onPanResponderTerminate: () => {
           if (!enabled || tornRef.current) return;
-          tensionFiredRef.current = false;
-          Animated.parallel([
-            Animated.spring(dragX, {
-              toValue: 0,
-              speed: 24,
-              bounciness: 5,
-              useNativeDriver: true,
-            }),
-            Animated.spring(dragY, {
-              toValue: 0,
-              speed: 24,
-              bounciness: 5,
-              useNativeDriver: true,
-            }),
-          ]).start();
+          resetStub();
         },
       }),
-    [dragX, dragY, enabled, onTorn, opacity]
+    [dragX, dragY, enabled, fastDistance, onTorn, opacity, requiredDistance]
   );
 
-  const rotate = dragY.interpolate({
-    inputRange: [0, 28, 90, 184],
-    outputRange: ['0deg', '0.5deg', '2.6deg', '8deg'],
+  const rotate = dragX.interpolate({
+    inputRange: [-24, 0, 24],
+    outputRange: ['-8deg', '0deg', '8deg'],
     extrapolate: 'clamp',
   });
 
@@ -298,33 +292,41 @@ function TicketStub({
       <Animated.View
         pointerEvents="none"
         style={[
-          motionStyles.ticketLayer,
           motionStyles.stubLayer,
           {
+            top: DETOUR_TICKET_MAIN_HEIGHT,
+            width: DETOUR_TICKET_WIDTH,
+            height: DETOUR_TICKET_STUB_HEIGHT,
             opacity,
             transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
           },
         ]}
       >
-        <Image source={TICKET_STUB} style={motionStyles.ticketImage} resizeMode="stretch" />
-        <StubBarcode />
+        <Image
+          source={DETOUR_TICKET_STUB_SOURCE}
+          style={motionStyles.ticketImage}
+          resizeMode="contain"
+        />
       </Animated.View>
 
       <View
         {...responder.panHandlers}
         accessible
-        accessibilityLabel="撕下票根，開始旅程"
-        style={motionStyles.stubHitArea}
+        accessibilityLabel="沿齒孔滑開票根，開始旅程"
+        style={[
+          motionStyles.stubHitArea,
+          { top: Math.max(0, DETOUR_TICKET_MAIN_HEIGHT - 22) },
+        ]}
       />
     </>
   );
 }
 
 /**
- * Ready state uses the user's final three-layer PNG set. The back layer stays
- * still, the main body stays attached, and only the transparent stub layer is
- * draggable. All three PNGs share the same canvas, so the perforation remains
- * pixel-aligned while the stub moves away.
+ * The ready state reuses the exact same V45Ticket object that was printed.
+ * Only the stub artwork is swapped for an animated copy at the seam. Main and
+ * stub dimensions are derived from their source PNGs, so there are no guessed
+ * offsets, stretch ratios, or device-specific alignment values.
  */
 export function ReadyTicketTearOverlay({ controller }: { controller: Controller }) {
   const hintOpacity = useRef(new Animated.Value(0)).current;
@@ -383,27 +385,15 @@ export function ReadyTicketTearOverlay({ controller }: { controller: Controller 
           <View style={[styles.v48PaperViewport, motionStyles.readyPaperViewport]}>
             <View style={styles.v48PaperTrack}>
               <View style={motionStyles.ticketGestureStage}>
-                <View pointerEvents="none" style={[motionStyles.ticketLayer, motionStyles.backLayer]}>
-                  <Image source={TICKET_BACK} style={motionStyles.ticketImage} resizeMode="stretch" />
-                </View>
-
-                <View pointerEvents="none" style={[motionStyles.ticketLayer, motionStyles.mainLayer]}>
-                  <Image source={TICKET_MAIN} style={motionStyles.ticketImage} resizeMode="stretch" />
-                </View>
-
-                <View pointerEvents="none" style={motionStyles.contentLayer}>
-                  <V45Ticket
-                    timeLabel={controller.selectedTime ?? '15'}
-                    moodId={moodId}
-                    moodLabel={moodLabel}
-                    serial={serial}
-                    stamped
-                    stampProgress={controller.ticketStamp}
-                    artworkVisible={false}
-                    showBarcode={false}
-                  />
-                </View>
-
+                <V45Ticket
+                  timeLabel={controller.selectedTime ?? '15'}
+                  moodId={moodId}
+                  moodLabel={moodLabel}
+                  serial={serial}
+                  stamped
+                  stampProgress={controller.ticketStamp}
+                  showStubArtwork={false}
+                />
                 <TicketStub
                   enabled={controller.ticketReadyUnlocked}
                   onTorn={handleTorn}
@@ -423,7 +413,7 @@ export function ReadyTicketTearOverlay({ controller }: { controller: Controller 
             style={[motionStyles.hintWrap, { opacity: hintOpacity }]}
           >
             <View style={motionStyles.hintRule} />
-            <Text style={motionStyles.hintText}>撕下票根，開始旅程</Text>
+            <Text style={motionStyles.hintText}>沿齒孔滑開票根，開始旅程</Text>
           </Animated.View>
         )}
       </View>
@@ -479,49 +469,29 @@ const motionStyles = StyleSheet.create({
     overflow: 'visible',
   },
   ticketGestureStage: {
-    width: 310,
-    aspectRatio: 1115 / 1411,
+    width: DETOUR_TICKET_WIDTH,
+    height: DETOUR_TICKET_TOTAL_HEIGHT,
     position: 'relative',
-  },
-  ticketLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 310,
-    aspectRatio: 1115 / 1411,
   },
   ticketImage: {
     width: '100%',
     height: '100%',
   },
-  backLayer: {
-    zIndex: 1,
-  },
-  mainLayer: {
-    zIndex: 2,
-  },
-  contentLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 310,
-    aspectRatio: 1115 / 1411,
-    zIndex: 3,
-  },
   stubLayer: {
+    position: 'absolute',
+    left: 0,
     zIndex: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 1, height: 6 },
-    elevation: 7,
+    shadowOpacity: 0.12,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
   },
   stubHitArea: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 106,
+    left: 10,
+    right: 10,
+    height: 44,
     zIndex: 5,
   },
   hintWrap: {
