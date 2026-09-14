@@ -1,0 +1,47 @@
+name: Relax scene filter
+
+on:
+  push:
+    branches:
+      - fix/relax-scene-filter
+    paths:
+      - ".github/workflows/relax-scene-filter.yml"
+      - "scripts/relax_scene_filter.py"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply scene filter patch
+        run: python scripts/relax_scene_filter.py
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS app
+        run: npx expo export --platform ios --output-dir /tmp/detour-relaxed-scene-filter
+
+      - name: Commit verified filter change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/scene-engine.ts
+          git commit -m "fix: relax scene candidate filtering"
+          git push origin HEAD:fix/relax-scene-filter
