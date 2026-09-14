@@ -24,6 +24,14 @@ type OsrmResponse = {
   }>;
 };
 
+type RouteRequestPurpose = 'prewarm' | 'interactive';
+
+type InFlightWalkingRoute = {
+  promise: Promise<WalkingRoute>;
+  purpose: RouteRequestPurpose;
+  startedAt: number;
+};
+
 const FOOT_ROUTER =
   'https://routing.openstreetmap.de/routed-foot/route/v1/driving';
 
@@ -31,6 +39,7 @@ let lastRoutingRequestAt = 0;
 const WALKING_ROUTE_CACHE_TTL = 5 * 60 * 1000;
 const ROUTE_REQUEST_SPACING_MS = 1100;
 const PREWARM_ROUTE_TIMEOUT_MS = 2600;
+const PREWARM_TICKET_GRACE_MS = 200;
 const TICKET_ROUTING_BUDGET_MS = 3600;
 const TICKET_ROUTE_TIMEOUT_MS = 2200;
 const MAX_TICKET_NETWORK_ATTEMPTS = 2;
@@ -39,7 +48,7 @@ const walkingRouteCache = new Map<
   string,
   { expiresAt: number; route: WalkingRoute }
 >();
-const walkingRouteInFlight = new Map<string, Promise<WalkingRoute>>();
+const walkingRouteInFlight = new Map<string, InFlightWalkingRoute>();
 
 function walkingRouteCacheKey(start: GeoPoint, destination: GeoPoint) {
   const round = (value: number) => value.toFixed(5);
@@ -63,13 +72,59 @@ function getCachedWalkingRoute(
   return cached.route;
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function getInFlightWalkingRoute(
+  start: GeoPoint,
+  destination: GeoPoint
+) {
+  return walkingRouteInFlight.get(
+    walkingRouteCacheKey(start, destination)
+  ) ?? null;
 }
 
-async function throttleRouter() {
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForInFlightWalkingRoute(
+  start: GeoPoint,
+  destination: GeoPoint,
+  waitMs: number
+): Promise<WalkingRoute | null> {
+  const inFlight = getInFlightWalkingRoute(start, destination);
+  if (!inFlight || waitMs <= 0) return null;
+
+  return await new Promise<WalkingRoute | null>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = (route: WalkingRoute | null) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(route);
+    };
+
+    timer = setTimeout(
+      () => finish(null),
+      waitMs
+    );
+
+    void inFlight.promise
+      .then((route) => finish(route))
+      .catch(() => finish(null));
+  });
+}
+
+async function throttleRouter(deadlineAt?: number) {
   const elapsed = Date.now() - lastRoutingRequestAt;
   const waitFor = Math.max(0, ROUTE_REQUEST_SPACING_MS - elapsed);
+
+  if (
+    deadlineAt !== undefined &&
+    Date.now() + waitFor >= deadlineAt
+  ) {
+    throw new Error('Routing deadline reached before request');
+  }
 
   if (waitFor > 0) await wait(waitFor);
   lastRoutingRequestAt = Date.now();
@@ -92,20 +147,39 @@ async function fetchWithTimeout(url: string, timeoutMs: number) {
 export async function fetchWalkingRoute(
   start: GeoPoint,
   destination: GeoPoint,
-  timeoutMs = 12000
+  timeoutMs = 12000,
+  options?: {
+    purpose?: RouteRequestPurpose;
+    deadlineAt?: number;
+  }
 ): Promise<WalkingRoute> {
   const cacheKey = walkingRouteCacheKey(start, destination);
   const cached = getCachedWalkingRoute(start, destination);
   if (cached) return cached;
 
-  // Prewarm and ticket issue often ask for the exact same leg at nearly the
-  // same time. Share that request instead of queueing a duplicate behind the
-  // router throttle.
+  // Normal callers still share identical work. Ticket selection itself avoids
+  // awaiting a prewarm request by checking in-flight state before calling here.
   const inFlight = walkingRouteInFlight.get(cacheKey);
-  if (inFlight) return inFlight;
+  if (inFlight) return inFlight.promise;
 
-  const request = (async () => {
-    await throttleRouter();
+  const purpose = options?.purpose ?? 'interactive';
+  let request!: Promise<WalkingRoute>;
+
+  request = (async () => {
+    await throttleRouter(options?.deadlineAt);
+
+    const deadlineRemaining =
+      options?.deadlineAt === undefined
+        ? timeoutMs
+        : options.deadlineAt - Date.now();
+    const effectiveTimeout = Math.min(
+      timeoutMs,
+      deadlineRemaining
+    );
+
+    if (effectiveTimeout < 300) {
+      throw new Error('Routing deadline reached before fetch');
+    }
 
     const coordinates = [
       `${start.longitude},${start.latitude}`,
@@ -115,7 +189,7 @@ export async function fetchWalkingRoute(
     const url =
       `${FOOT_ROUTER}/${coordinates}` +
       '?overview=full&geometries=geojson&steps=true&alternatives=false';
-    const response = await fetchWithTimeout(url, timeoutMs);
+    const response = await fetchWithTimeout(url, effectiveTimeout);
 
     if (!response.ok) throw new Error(`Walking router ${response.status}`);
 
@@ -142,10 +216,18 @@ export async function fetchWalkingRoute(
 
     return normalized;
   })().finally(() => {
-    walkingRouteInFlight.delete(cacheKey);
+    const current = walkingRouteInFlight.get(cacheKey);
+    if (current?.promise === request) {
+      walkingRouteInFlight.delete(cacheKey);
+    }
   });
 
-  walkingRouteInFlight.set(cacheKey, request);
+  walkingRouteInFlight.set(cacheKey, {
+    promise: request,
+    purpose,
+    startedAt: Date.now(),
+  });
+
   return request;
 }
 
@@ -195,37 +277,56 @@ function routingShortlist(
 export async function prewarmWalkingRoutes(
   start: GeoPoint,
   candidates: SceneCandidate[],
-  limit = 2,
+  limit = 1,
   minutes = 15,
   distanceScale = 1
 ) {
   const startedAt = Date.now();
+
+  // Warm only the most likely winner. A second speculative OSRM request has
+  // not earned its latency/throttle cost yet and must never compete with Go.
   const likely = routingShortlist(
     candidates,
     minutes,
     distanceScale,
-    Math.min(2, Math.max(0, limit))
+    Math.min(1, Math.max(0, limit))
   );
 
-  let warmed = 0;
-
-  for (const scene of likely) {
-    if (getCachedWalkingRoute(start, scene.point)) {
-      warmed += 1;
-      continue;
-    }
-
-    try {
-      await fetchWalkingRoute(start, scene.point, PREWARM_ROUTE_TIMEOUT_MS);
-      warmed += 1;
-    } catch {
-      // Prewarming is opportunistic; ticket issue can still try the route.
-    }
+  if (likely.length === 0) {
+    console.log('[DETOUR PREWARM] no route candidate to warm');
+    return;
   }
 
-  console.log(
-    `[DETOUR PREWARM] routes ${warmed}/${likely.length} ready in ${Date.now() - startedAt}ms`
-  );
+  const scene = likely[0];
+
+  if (getCachedWalkingRoute(start, scene.point)) {
+    console.log(
+      `[DETOUR PREWARM] cache already ready in ${Date.now() - startedAt}ms`
+    );
+    return;
+  }
+
+  try {
+    await fetchWalkingRoute(
+      start,
+      scene.point,
+      PREWARM_ROUTE_TIMEOUT_MS,
+      { purpose: 'prewarm' }
+    );
+
+    console.log(
+      `[DETOUR PREWARM] top route ready in ${Date.now() - startedAt}ms`
+    );
+  } catch (error) {
+    const reason =
+      error instanceof Error
+        ? error.message
+        : 'unknown';
+
+    console.log(
+      `[DETOUR PREWARM] top route missed in ${Date.now() - startedAt}ms: ${reason}`
+    );
+  }
 }
 
 function distanceBetweenPoints(a: GeoPoint, b: GeoPoint) {
@@ -333,6 +434,33 @@ function assessRoute(args: {
   };
 }
 
+function assessRoutedScene(args: {
+  scene: SceneCandidate;
+  route: WalkingRoute;
+  profile: ReturnType<typeof routeDistanceProfile>;
+  maxDistance: number;
+  timeBudgetSeconds: number;
+  sideMissionCount: number;
+  minutes: number;
+  avoidRoutes: GeoPoint[][];
+}) {
+  return {
+    routed: {
+      scene: args.scene,
+      route: args.route,
+    } satisfies RoutedScene,
+    assessment: assessRoute({
+      route: args.route,
+      profile: args.profile,
+      maxDistance: args.maxDistance,
+      timeBudgetSeconds: args.timeBudgetSeconds,
+      sideMissionCount: args.sideMissionCount,
+      minutes: args.minutes,
+      avoidRoutes: args.avoidRoutes,
+    }),
+  };
+}
+
 export async function resolveRoutedScene(args: {
   start: GeoPoint;
   candidates: SceneCandidate[];
@@ -343,6 +471,7 @@ export async function resolveRoutedScene(args: {
   avoidRoutes?: GeoPoint[][];
 }): Promise<RoutedScene> {
   const routingStartedAt = Date.now();
+  const deadlineAt = routingStartedAt + TICKET_ROUTING_BUDGET_MS;
   const distanceScale = args.distanceScale ?? 1;
   const profile = routeDistanceProfile(args.minutes, distanceScale);
   const maxDistance = args.maxDistanceMeters ?? profile.max;
@@ -350,8 +479,6 @@ export async function resolveRoutedScene(args: {
   const avoidRoutes = args.avoidRoutes ?? [];
   const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
 
-  // Prewarm and ticket issue use the exact same order. Do not spend time on a
-  // second ranking pass that points the printer at routes it never warmed.
   const shortlist = routingShortlist(
     args.candidates,
     args.minutes,
@@ -361,14 +488,17 @@ export async function resolveRoutedScene(args: {
 
   let bestCached: RoutedScene | null = null;
   let bestCachedScore = Number.POSITIVE_INFINITY;
+  let bestEmergency: RoutedScene | null = null;
+  let bestEmergencyScore = Number.POSITIVE_INFINITY;
 
-  // Cache-first is the main fast path. Inspect all warmed shortlist routes
-  // synchronously before making any new network request.
+  // Finished prewarm data is free: inspect it synchronously before touching the
+  // network. Emergency cache results are kept too instead of being discarded.
   for (const scene of shortlist) {
     const route = getCachedWalkingRoute(args.start, scene.point);
     if (!route) continue;
 
-    const assessment = assessRoute({
+    const { routed, assessment } = assessRoutedScene({
+      scene,
       route,
       profile,
       maxDistance,
@@ -378,20 +508,20 @@ export async function resolveRoutedScene(args: {
       avoidRoutes,
     });
 
-    if (assessment.preferred) {
-      if (assessment.score < bestCachedScore) {
-        bestCached = { scene, route };
-        bestCachedScore = assessment.score;
-      }
-      continue;
+    if (
+      (assessment.preferred || assessment.fallback) &&
+      assessment.score < bestCachedScore
+    ) {
+      bestCached = routed;
+      bestCachedScore = assessment.score;
     }
 
     if (
-      assessment.fallback &&
-      assessment.score < bestCachedScore
+      assessment.emergency &&
+      assessment.score < bestEmergencyScore
     ) {
-      bestCached = { scene, route };
-      bestCachedScore = assessment.score;
+      bestEmergency = routed;
+      bestEmergencyScore = assessment.score;
     }
   }
 
@@ -402,33 +532,138 @@ export async function resolveRoutedScene(args: {
     return bestCached;
   }
 
-  let bestEmergency: RoutedScene | null = null;
-  let bestEmergencyScore = Number.POSITIVE_INFINITY;
+  // A running prewarm is only a hint. Give it one tiny grace window, then move
+  // on. The ticket never inherits the prewarm's longer timeout/promise lifetime.
+  const busySceneIds = new Set<string>();
+
+  for (const scene of shortlist) {
+    const inFlight = getInFlightWalkingRoute(args.start, scene.point);
+    if (!inFlight) continue;
+
+    const remaining = deadlineAt - Date.now();
+    const graceMs = Math.min(
+      PREWARM_TICKET_GRACE_MS,
+      Math.max(0, remaining - 700)
+    );
+
+    console.log(
+      `[DETOUR ROUTE] ${inFlight.purpose} in-flight; grace ${graceMs}ms`
+    );
+
+    const hintedRoute = await waitForInFlightWalkingRoute(
+      args.start,
+      scene.point,
+      graceMs
+    );
+
+    if (hintedRoute) {
+      const { routed, assessment } = assessRoutedScene({
+        scene,
+        route: hintedRoute,
+        profile,
+        maxDistance,
+        timeBudgetSeconds,
+        sideMissionCount,
+        minutes: args.minutes,
+        avoidRoutes,
+      });
+
+      if (assessment.preferred || assessment.fallback) {
+        console.log(
+          `[DETOUR ROUTE] in-flight hint won in ${Date.now() - routingStartedAt}ms`
+        );
+        return routed;
+      }
+
+      if (
+        assessment.emergency &&
+        assessment.score < bestEmergencyScore
+      ) {
+        bestEmergency = routed;
+        bestEmergencyScore = assessment.score;
+      }
+    } else {
+      busySceneIds.add(scene.id);
+    }
+
+    // Only one route is allowed to prewarm, so do not spend multiple grace
+    // windows on unrelated background work.
+    break;
+  }
+
   let networkAttempts = 0;
 
   for (const scene of shortlist) {
     if (networkAttempts >= MAX_TICKET_NETWORK_ATTEMPTS) break;
 
-    const elapsed = Date.now() - routingStartedAt;
-    const remaining = TICKET_ROUTING_BUDGET_MS - elapsed;
+    // If this exact leg is still being warmed, do not await it and do not fire
+    // a duplicate request. Move to another candidate instead.
+    if (
+      busySceneIds.has(scene.id) &&
+      getInFlightWalkingRoute(args.start, scene.point)
+    ) {
+      console.log('[DETOUR ROUTE] skipped busy prewarm candidate');
+      continue;
+    }
 
-    // Keep enough room for the router throttle itself. If there is not enough
-    // wall-clock budget left, stop instead of chaining another slow request.
-    if (remaining <= 700) break;
+    // The prewarm may have finished after the grace window. Re-check cache for
+    // free before spending a network attempt.
+    const newlyCached = getCachedWalkingRoute(args.start, scene.point);
+    if (newlyCached) {
+      const { routed, assessment } = assessRoutedScene({
+        scene,
+        route: newlyCached,
+        profile,
+        maxDistance,
+        timeBudgetSeconds,
+        sideMissionCount,
+        minutes: args.minutes,
+        avoidRoutes,
+      });
+
+      if (assessment.preferred || assessment.fallback) {
+        console.log(
+          `[DETOUR ROUTE] late cache hit in ${Date.now() - routingStartedAt}ms`
+        );
+        return routed;
+      }
+
+      if (
+        assessment.emergency &&
+        assessment.score < bestEmergencyScore
+      ) {
+        bestEmergency = routed;
+        bestEmergencyScore = assessment.score;
+      }
+
+      continue;
+    }
+
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 500) break;
 
     networkAttempts += 1;
+    const timeoutMs = Math.min(
+      TICKET_ROUTE_TIMEOUT_MS,
+      Math.max(300, remaining - 100)
+    );
+
+    console.log(
+      `[DETOUR ROUTE] network attempt ${networkAttempts} timeout=${timeoutMs}ms`
+    );
 
     try {
-      const timeoutMs = Math.min(
-        TICKET_ROUTE_TIMEOUT_MS,
-        Math.max(700, remaining - ROUTE_REQUEST_SPACING_MS)
-      );
       const route = await fetchWalkingRoute(
         args.start,
         scene.point,
-        timeoutMs
+        timeoutMs,
+        {
+          purpose: 'interactive',
+          deadlineAt,
+        }
       );
-      const assessment = assessRoute({
+      const { routed, assessment } = assessRoutedScene({
+        scene,
         route,
         profile,
         maxDistance,
@@ -438,33 +673,36 @@ export async function resolveRoutedScene(args: {
         avoidRoutes,
       });
 
-      // Speed is more important than comparing five mathematically similar
-      // routes. The first route inside the preferred envelope wins.
       if (assessment.preferred) {
         console.log(
-          `[DETOUR ROUTE] network hit ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
+          `[DETOUR ROUTE] preferred ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
         );
-        return { scene, route };
+        return routed;
       }
 
-      // Time is intentionally soft. A safe usable route should issue rather
-      // than blocking the printer while we hunt for a slightly nicer number.
       if (assessment.fallback) {
         console.log(
           `[DETOUR ROUTE] soft fallback ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
         );
-        return { scene, route };
+        return routed;
       }
 
       if (
         assessment.emergency &&
         assessment.score < bestEmergencyScore
       ) {
-        bestEmergency = { scene, route };
+        bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
-    } catch {
-      // Try at most one more candidate while the hard ticket budget remains.
+    } catch (error) {
+      const reason =
+        error instanceof Error
+          ? error.message
+          : 'unknown';
+
+      console.log(
+        `[DETOUR ROUTE] attempt ${networkAttempts} missed after ${Date.now() - routingStartedAt}ms: ${reason}`
+      );
     }
   }
 
@@ -474,6 +712,10 @@ export async function resolveRoutedScene(args: {
     );
     return bestEmergency;
   }
+
+  console.log(
+    `[DETOUR ROUTE] failed after ${Date.now() - routingStartedAt}ms; attempts=${networkAttempts}`
+  );
 
   throw new Error(
     '附近有可探索的方向，但步行路線服務這次沒有及時回應。請再印一次。'
