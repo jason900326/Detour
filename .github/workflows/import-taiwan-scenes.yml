@@ -1,0 +1,101 @@
+name: Import Taiwan Scenes
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Parse and classify only; do not write Supabase"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: import-taiwan-scenes
+  cancel-in-progress: false
+
+jobs:
+  import-scenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Supabase secrets
+        if: ${{ inputs.dry_run != true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_URL" || (echo "Missing repository secret SUPABASE_URL" && exit 1)
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing repository secret SUPABASE_SERVICE_ROLE_KEY" && exit 1)
+
+      - name: Install osmium-tool
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends osmium-tool
+          osmium --version
+
+      - name: Download Taiwan OSM extract
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 3 \
+            --output /tmp/taiwan-latest.osm.pbf \
+            https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+          ls -lh /tmp/taiwan-latest.osm.pbf
+
+      - name: Keep only Detour-relevant OSM objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          osmium tags-filter \
+            --overwrite \
+            --output /tmp/detour-scenes.osm.pbf \
+            /tmp/taiwan-latest.osm.pbf \
+            'nwr/tourism=artwork,viewpoint,museum,gallery' \
+            'nwr/place=square' \
+            'nwr/amenity=marketplace,fountain,public_bookcase,arts_centre,community_centre,restaurant,fast_food,cafe,food_court,ice_cream' \
+            'nwr/shop=bakery,confectionery,deli,pastry,beverages,coffee,tea' \
+            'nwr/leisure=park,garden' \
+            'nwr/historic'
+          ls -lh /tmp/detour-scenes.osm.pbf
+
+      - name: Export filtered objects as GeoJSON sequence
+        shell: bash
+        run: |
+          set -euo pipefail
+          osmium export \
+            --overwrite \
+            --output-format geojsonseq \
+            --format-option print_record_separator=false \
+            --attributes type,id,timestamp \
+            --output /tmp/detour-scenes.geojsonseq \
+            /tmp/detour-scenes.osm.pbf
+          wc -l /tmp/detour-scenes.geojsonseq
+          ls -lh /tmp/detour-scenes.geojsonseq
+
+      - name: Import normalized Scenes into Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            python scripts/import_osm_scenes.py \
+              --input /tmp/detour-scenes.geojsonseq \
+              --dry-run
+          else
+            python scripts/import_osm_scenes.py \
+              --input /tmp/detour-scenes.geojsonseq
+          fi
