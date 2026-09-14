@@ -186,6 +186,49 @@ def tags_from_properties(properties: dict[str, Any]) -> dict[str, str]:
     return tags
 
 
+def normalize_osm_timestamp(value: Any) -> str | None:
+    """Return an ISO-8601 timestamp for osmium's @timestamp attribute.
+
+    `osmium export --attributes ... timestamp` emits Unix epoch seconds in the
+    GeoJSON properties. Postgres `timestamptz` does not interpret a bare value
+    like `1735466949` as an epoch, so convert it before sending the batch.
+    Keep already-ISO timestamps usable for local fixtures or future osmium
+    output changes.
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        epoch = float(text)
+    except ValueError:
+        epoch = None
+
+    if epoch is not None:
+        try:
+            return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 def normalize_feature(feature: dict[str, Any], batch: str) -> dict[str, Any] | None:
     properties = feature.get("properties") or {}
     if not isinstance(properties, dict):
@@ -233,7 +276,7 @@ def normalize_feature(feature: dict[str, Any], batch: str) -> dict[str, Any] | N
         "quality_score": quality_score(kind, tags),
         "active": True,
         "import_batch": batch,
-        "source_updated_at": properties.get("@timestamp"),
+        "source_updated_at": normalize_osm_timestamp(properties.get("@timestamp")),
         "imported_at": datetime.now(timezone.utc).isoformat(),
     }
 
