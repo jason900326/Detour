@@ -52,9 +52,7 @@ import {
 } from '../lib/scene-engine';
 
 import {
-  generateJourneyWithAI,
   isAIEngineConfigured,
-  rankSceneCandidatesWithAI,
   testAIEngineConnection,
 } from '../lib/ai-engine';
 
@@ -1674,24 +1672,10 @@ export function useDetourHomeController() {
           Math.round(minutesLeft)
         );
 
-      const aiRanking =
-        recoveryMood === 'food' || recoveryMood === 'color'
-          ? { candidates, usedAI: false }
-          : await rankSceneCandidatesWithAI({
-              candidates,
-              moodId:
-                recoveryMood,
-              context:
-                recoveryContext,
-              minutes:
-                recoveryMinutes,
-            });
-
       const routed =
         await resolveRoutedScene({
           start: currentPoint,
-          candidates:
-            aiRanking.candidates,
+          candidates,
           minutes:
             recoveryMinutes,
           maxDistanceMeters:
@@ -1718,26 +1702,7 @@ export function useDetourHomeController() {
                 recoveryContext,
             });
 
-      const aiRecovery =
-        recoveryMood === 'color'
-          ? null
-          : await generateJourneyWithAI({
-              scene: routed.scene,
-              moodId:
-                recoveryMood,
-              context:
-                recoveryContext,
-              minutes:
-                recoveryMinutes,
-              sideMissionCount: 0,
-              routeDistanceMeters:
-                routed.route.distanceMeters,
-              routeDurationSeconds:
-                routed.route.durationSeconds,
-            });
-
       const nextArrivalMission =
-        aiRecovery?.arrivalMission ??
         fallbackArrival;
 
       const nextPlan = {
@@ -2143,30 +2108,6 @@ export function useDetourHomeController() {
         minutes,
         paceDistanceScale
       );
-
-      // Taste ranking is future preference data only; never block this ticket.
-      if (
-        isAIEngineConfigured() &&
-        candidates.length > 0 &&
-        targetMood !== 'food' &&
-        targetMood !== 'color'
-      ) {
-        void rankSceneCandidatesWithAI({
-          candidates,
-          moodId: targetMood,
-          context,
-          minutes,
-        })
-          .then((ranking) => {
-            const current = prewarmRef.current;
-            if (!current || current.createdAt !== createdAt) return;
-            current.rankedIdsByMood[targetMood] = ranking.candidates.map(
-              (candidate) => candidate.id
-            );
-            current.aiUsedByMood[targetMood] = ranking.usedAI;
-          })
-          .catch(() => undefined);
-      }
     } catch {
       // Prewarming is an optimization. Ticket issue remains available.
     } finally {
@@ -2482,37 +2423,6 @@ export function useDetourHomeController() {
       // Keep the exact same printer/ticket tree mounted while the stamp lands.
       // A normal screen transition would make the freshly printed ticket jump.
       setStage('ready');
-
-      // Arrival copy may get an AI polish later, but never blocks the ticket.
-      // Color Walk intentionally has no arrival task to rewrite.
-      if (isAIEngineConfigured() && finalMood !== 'color') {
-        void generateJourneyWithAI({
-          scene: routed.scene,
-          moodId: finalMood,
-          context,
-          minutes,
-          sideMissionCount: 0,
-          missionMilestones: [],
-          routeDistanceMeters: routed.route.distanceMeters,
-          routeDurationSeconds: routed.route.durationSeconds,
-        })
-          .then((aiJourney) => {
-            if (!aiJourney?.arrivalMission) return;
-            if (selectedSceneRef.current?.id !== routed.scene.id) return;
-
-            setPlan((current) => {
-              if (!current) return current;
-              const updated = {
-                ...current,
-                arrivalMission: aiJourney.arrivalMission,
-              };
-              planRef.current = updated;
-              return updated;
-            });
-            setLastAIResult('ai');
-          })
-          .catch(() => undefined);
-      }
     } catch (error) {
       stopLocationWatcher();
 

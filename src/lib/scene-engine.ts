@@ -180,9 +180,15 @@ function classifyScene(
   }
 
   if (
-    ['park', 'garden'].includes(tags.leisure ?? '')
+    ['park', 'garden', 'playground', 'pitch', 'sports_centre', 'track'].includes(
+      tags.leisure ?? ''
+    )
   ) {
-    return { kind: 'green-space', label: '綠地' };
+    return { kind: 'green-space', label: '戶外空間' };
+  }
+
+  if (tags.amenity === 'community_centre') {
+    return { kind: 'culture', label: '公共空間' };
   }
 
   if (tags.amenity === 'fountain') {
@@ -411,7 +417,7 @@ function generatedName(
     case 'culture':
       return '一個文化空間';
     case 'green-space':
-      return '一塊有名字的綠地';
+      return '一個戶外空間';
   }
 }
 
@@ -739,7 +745,7 @@ function buildQuery(
 
   if (moodId === 'food') {
     return `
-[out:json][timeout:18];
+[out:json][timeout:6];
 (
   nwr${around}["amenity"="marketplace"]["name"];
   nwr${around}["amenity"~"restaurant|fast_food|cafe|food_court|ice_cream"]["name"];
@@ -750,7 +756,7 @@ out center 180;
   }
 
   return `
-[out:json][timeout:18];
+[out:json][timeout:6];
 (
   nwr${around}["tourism"="artwork"];
   nwr${around}["tourism"="viewpoint"];
@@ -760,7 +766,8 @@ out center 180;
   nwr${around}["amenity"="public_bookcase"];
   nwr${around}["tourism"~"gallery|museum"]["name"];
   nwr${around}["amenity"="arts_centre"]["name"];
-  nwr${around}["leisure"~"park|garden"];
+  nwr${around}["leisure"~"park|garden|playground|pitch|sports_centre|track"];
+  nwr${around}["amenity"="community_centre"];
   nwr${around}["historic"];
   nwr${around}["historic"="memorial"]["memorial"~"statue|sculpture|bust"];
   nwr${around}["natural"="tree"]["heritage"];
@@ -806,53 +813,69 @@ async function fetchWithTimeout(
 }
 
 async function fetchOverpass(query: string) {
-  let lastError: unknown = null;
-
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const response = await fetchWithTimeout(
-        endpoint,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/x-www-form-urlencoded;charset=UTF-8',
-            Accept: 'application/json',
-          },
-          body: `data=${encodeURIComponent(query)}`,
-        },
-        21000
-      );
-
-      if (!response.ok) {
-        throw new Error(`Overpass ${response.status}`);
-      }
-
-      const data = (await response.json()) as OverpassResponse;
-
-      if (!Array.isArray(data.elements)) {
-        throw new Error('Overpass response missing elements');
-      }
-
-      return data.elements;
-    } catch (error) {
-      lastError = error;
+  const requestEndpoint = async (endpoint: string, delayMs: number) => {
+    if (delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }
-  }
 
-  if (
-    lastError instanceof Error &&
-    lastError.message ===
-      'Scene request timed out'
-  ) {
-    throw new Error(
-      'Scene 資料服務逾時，請再試一次。'
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/x-www-form-urlencoded;charset=UTF-8',
+          Accept: 'application/json',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+      },
+      5200
     );
-  }
 
-  throw new Error(
-    'Scene 資料服務暫時沒有回應，請再試一次。'
-  );
+    if (!response.ok) {
+      throw new Error(`Overpass ${response.status}`);
+    }
+
+    const data = (await response.json()) as OverpassResponse;
+
+    if (!Array.isArray(data.elements)) {
+      throw new Error('Overpass response missing elements');
+    }
+
+    return data.elements;
+  };
+
+  return await new Promise<OverpassElement[]>((resolve, reject) => {
+    let failures = 0;
+    let lastError: unknown = null;
+    let settled = false;
+
+    const fail = (error: unknown) => {
+      failures += 1;
+      lastError = error;
+      if (!settled && failures >= OVERPASS_ENDPOINTS.length) {
+        settled = true;
+        if (
+          lastError instanceof Error &&
+          lastError.message === 'Scene request timed out'
+        ) {
+          reject(new Error('Scene 資料服務逾時，請再試一次。'));
+        } else {
+          reject(new Error('Scene 資料服務暫時沒有回應，請再試一次。'));
+        }
+      }
+    };
+
+    OVERPASS_ENDPOINTS.forEach((endpoint, index) => {
+      void requestEndpoint(endpoint, index * 350)
+        .then((elements) => {
+          if (settled) return;
+          settled = true;
+          resolve(elements);
+        })
+        .catch(fail);
+    });
+  });
 }
 
 

@@ -153,19 +153,6 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
         onLoadEnd={markArtworkReady}
       />
 
-      <View pointerEvents="none" style={styles.v51TicketFeedHead}>
-        <View style={styles.v51TicketFeedBarcode}>
-          {Array.from({ length: 29 }).map((_, index) => (
-            <View
-              key={`feed-barcode-${index}`}
-              style={[
-                styles.v51TicketFeedBarcodeBar,
-                { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
 
       <View style={styles.v46ArtTicketHeader}>
         <Text style={styles.v46ArtTicketBrand}>DETOUR</Text>
@@ -205,6 +192,18 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
         <View style={[styles.v46ArtMiniDash, { left: 70, top: 22, transform: [{ rotate: '-17deg' }] }]} />
         <View style={styles.v46ArtMiniFlagPole} />
         <View style={styles.v46ArtMiniFlag} />
+      </View>
+
+      <View style={styles.v46ArtBarcode}>
+        {Array.from({ length: 29 }).map((_, index) => (
+          <View
+            key={`art-barcode-${index}`}
+            style={[
+              styles.v46ArtBarcodeBar,
+              { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+            ]}
+          />
+        ))}
       </View>
 
       {stamped && (
