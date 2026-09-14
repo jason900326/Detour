@@ -11,6 +11,23 @@ let ticketArtworkDecoded = false;
 const DETOUR_TICKET_BARS = [2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3];
 const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 50);
 
+export const DETOUR_TICKET_WIDTH = 310;
+export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');
+export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
+
+const MAIN_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
+const STUB_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_STUB_SOURCE);
+
+// Both artwork slices come from the same ticket export and keep their native
+// aspect ratios. We only choose one screen width; every vertical coordinate is
+// derived from the source pixels so the seam cannot drift across device sizes.
+export const DETOUR_TICKET_MAIN_HEIGHT =
+  DETOUR_TICKET_WIDTH * (MAIN_ARTWORK.height / MAIN_ARTWORK.width);
+export const DETOUR_TICKET_STUB_HEIGHT =
+  DETOUR_TICKET_WIDTH * (STUB_ARTWORK.height / STUB_ARTWORK.width);
+export const DETOUR_TICKET_TOTAL_HEIGHT =
+  DETOUR_TICKET_MAIN_HEIGHT + DETOUR_TICKET_STUB_HEIGHT;
+
 export type DetourTicketProps = {
   timeLabel: string;
   moodLabel: string;
@@ -137,6 +154,7 @@ type V45TicketProps = {
   stampProgress?: Animated.Value;
   artworkVisible?: boolean;
   showBarcode?: boolean;
+  showStubArtwork?: boolean;
 };
 
 export function V45Ticket({
@@ -148,6 +166,7 @@ export function V45Ticket({
   stampProgress,
   artworkVisible = true,
   showBarcode = true,
+  showStubArtwork = true,
 }: V45TicketProps) {
   const [artworkReady, setArtworkReady] = useState(
     artworkVisible ? ticketArtworkDecoded : true
@@ -245,18 +264,40 @@ export function V45Ticket({
     <Animated.View
       style={[
         styles.v46ArtTicket,
+        { height: DETOUR_TICKET_TOTAL_HEIGHT },
         artworkVisible && !artworkReady && styles.v49TicketArtworkPending,
         feedStyle,
       ]}
     >
       {artworkVisible && (
-        <Image
-          source={require('../../assets/detour/ticket-base.png')}
-          style={styles.v46ArtTicketBase}
-          resizeMode="stretch"
-          onLoad={markArtworkReady}
-          onLoadEnd={markArtworkReady}
-        />
+        <>
+          <Image
+            source={DETOUR_TICKET_MAIN_SOURCE}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: DETOUR_TICKET_WIDTH,
+              height: DETOUR_TICKET_MAIN_HEIGHT,
+            }}
+            resizeMode="contain"
+            onLoad={markArtworkReady}
+            onLoadEnd={markArtworkReady}
+          />
+          {showStubArtwork && (
+            <Image
+              source={DETOUR_TICKET_STUB_SOURCE}
+              style={{
+                position: 'absolute',
+                top: DETOUR_TICKET_MAIN_HEIGHT,
+                left: 0,
+                width: DETOUR_TICKET_WIDTH,
+                height: DETOUR_TICKET_STUB_HEIGHT,
+              }}
+              resizeMode="contain"
+            />
+          )}
+        </>
       )}
 
       <View style={styles.v46ArtTicketHeader}>
