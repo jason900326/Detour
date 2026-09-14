@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 60
     env:
       SUPABASE_URL: https://ldlhzyfubjbuumikrkuv.supabase.co
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
 
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing repository secret SUPABASE_SERVICE_ROLE_KEY" && exit 1)
+          test -n "$SUPABASE_SECRET_KEY" || (echo "Missing repository secret SUPABASE_SECRET_KEY" && exit 1)
 
       - name: Install osmium-tool
         shell: bash
