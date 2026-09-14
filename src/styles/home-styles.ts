@@ -4,6 +4,7 @@ import { journeyStyles } from './home/journey-styles';
 import { collectionStyles } from './home/collection-styles';
 import { legacyStyles } from './home/legacy-styles';
 import { ticketRecapStyles } from './home/ticket-recap-styles';
+import { printerOverrides } from './home/printer-overrides';
 
 export const styles = {
   ...baseStyles,
@@ -12,4 +13,5 @@ export const styles = {
   ...collectionStyles,
   ...legacyStyles,
   ...ticketRecapStyles,
+  ...printerOverrides,
 };
