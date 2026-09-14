@@ -128,14 +128,42 @@ export function DetourAccentStroke({
 
 // DETOUR V45 — ticket / mood / recap visual system
 
-export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = false, stampProgress }: { timeLabel: string; moodLabel: string; moodId: MoodId; serial: string; stamped?: boolean; stampProgress?: Animated.Value; }) {
-  const [artworkReady, setArtworkReady] = useState(ticketArtworkDecoded);
+type V45TicketProps = {
+  timeLabel: string;
+  moodLabel: string;
+  moodId: MoodId;
+  serial: string;
+  stamped?: boolean;
+  stampProgress?: Animated.Value;
+  artworkVisible?: boolean;
+  showBarcode?: boolean;
+};
+
+export function V45Ticket({
+  timeLabel,
+  moodLabel,
+  moodId,
+  serial,
+  stamped = false,
+  stampProgress,
+  artworkVisible = true,
+  showBarcode = true,
+}: V45TicketProps) {
+  const [artworkReady, setArtworkReady] = useState(
+    artworkVisible ? ticketArtworkDecoded : true
+  );
   const feedJitter = useRef(new Animated.Value(0)).current;
 
   const markArtworkReady = () => {
     ticketArtworkDecoded = true;
     setArtworkReady(true);
   };
+
+  useEffect(() => {
+    if (!artworkVisible) {
+      setArtworkReady(true);
+    }
+  }, [artworkVisible]);
 
   useEffect(() => {
     feedJitter.stopAnimation();
@@ -217,17 +245,19 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
     <Animated.View
       style={[
         styles.v46ArtTicket,
-        !artworkReady && styles.v49TicketArtworkPending,
+        artworkVisible && !artworkReady && styles.v49TicketArtworkPending,
         feedStyle,
       ]}
     >
-      <Image
-        source={require('../../assets/detour/ticket-base.png')}
-        style={styles.v46ArtTicketBase}
-        resizeMode="stretch"
-        onLoad={markArtworkReady}
-        onLoadEnd={markArtworkReady}
-      />
+      {artworkVisible && (
+        <Image
+          source={require('../../assets/detour/ticket-base.png')}
+          style={styles.v46ArtTicketBase}
+          resizeMode="stretch"
+          onLoad={markArtworkReady}
+          onLoadEnd={markArtworkReady}
+        />
+      )}
 
       <View style={styles.v46ArtTicketHeader}>
         <Text style={styles.v46ArtTicketBrand}>DETOUR</Text>
@@ -269,17 +299,19 @@ export function V45Ticket({ timeLabel, moodLabel, moodId, serial, stamped = fals
         <View style={styles.v46ArtMiniFlag} />
       </View>
 
-      <View style={styles.v46ArtBarcode}>
-        {Array.from({ length: 29 }).map((_, index) => (
-          <View
-            key={`art-barcode-${index}`}
-            style={[
-              styles.v46ArtBarcodeBar,
-              { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
-            ]}
-          />
-        ))}
-      </View>
+      {showBarcode && (
+        <View style={styles.v46ArtBarcode}>
+          {Array.from({ length: 29 }).map((_, index) => (
+            <View
+              key={`art-barcode-${index}`}
+              style={[
+                styles.v46ArtBarcodeBar,
+                { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+              ]}
+            />
+          ))}
+        </View>
+      )}
 
       {stamped && (
         <Animated.View
