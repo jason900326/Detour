@@ -13,13 +13,16 @@ const OVERPASS_UPSTREAMS = [
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 
-const UPSTREAM_HEDGE_DELAY_MS = 250;
-const UPSTREAM_REQUEST_TIMEOUT_MS = 5000;
+// Public Overpass is enrichment, not a ticket gate. Cold requests get a short
+// chance to return real OSM data; general Detours then fail open to route
+// anchors instead of making the user wait 5-7 seconds for a 503.
+const UPSTREAM_HEDGE_DELAY_MS = 180;
+const UPSTREAM_REQUEST_TIMEOUT_MS = 1800;
 const GENERAL_FRESH_MS = 6 * 60 * 60 * 1000;
 const GENERAL_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const FOOD_FRESH_MS = 60 * 60 * 1000;
 const FOOD_STALE_MS = 12 * 60 * 60 * 1000;
-const QUERY_VERSION = 2;
+const QUERY_VERSION = 3;
 
 type SceneFamily = "general" | "food";
 
@@ -290,7 +293,7 @@ async function refreshCache(
       console.log(`[DETOUR SCENE API] refresh stored ${descriptor.cacheKey}`);
     } catch (error) {
       console.log(
-        `[DETOUR SCENE API] refresh failed ${descriptor.cacheKey} · ${error instanceof Error ? error.message : "unknown"}`,
+        `[DETOUR SCENE API] refresh missed ${descriptor.cacheKey} · ${error instanceof Error ? error.message : "unknown"}`,
       );
     }
   })().finally(() => {
@@ -329,36 +332,147 @@ async function findNearestUsableCache(
   descriptor: QueryDescriptor,
 ) {
   const nowIso = new Date().toISOString();
+  const minRadius = Math.max(100, Math.floor(descriptor.radius * 0.72));
+  const maxRadius = Math.min(2000, Math.ceil(descriptor.radius * 1.35));
+
   const { data, error } = await admin
     .from("scene_discovery_cache")
     .select(
       "cache_key,family,grid_lat_e3,grid_lon_e3,radius_m,elements,upstream,fetched_at,expires_at,stale_until",
     )
     .eq("family", descriptor.family)
-    .eq("radius_m", descriptor.radius)
+    .gte("radius_m", minRadius)
+    .lte("radius_m", maxRadius)
     .gte("grid_lat_e3", descriptor.gridLatE3 - 2)
     .lte("grid_lat_e3", descriptor.gridLatE3 + 2)
     .gte("grid_lon_e3", descriptor.gridLonE3 - 2)
     .lte("grid_lon_e3", descriptor.gridLonE3 + 2)
     .gt("stale_until", nowIso)
     .order("fetched_at", { ascending: false })
-    .limit(12);
+    .limit(18);
 
   if (error || !Array.isArray(data) || data.length === 0) return null;
 
   const rows = data as CacheRow[];
   rows.sort((a, b) => {
-    const da =
+    const gridA =
       (a.grid_lat_e3 - descriptor.gridLatE3) ** 2 +
       (a.grid_lon_e3 - descriptor.gridLonE3) ** 2;
-    const db =
+    const gridB =
       (b.grid_lat_e3 - descriptor.gridLatE3) ** 2 +
       (b.grid_lon_e3 - descriptor.gridLonE3) ** 2;
-    if (da !== db) return da - db;
+    const radiusA = Math.abs(a.radius_m - descriptor.radius) / 250;
+    const radiusB = Math.abs(b.radius_m - descriptor.radius) / 250;
+    const scoreA = gridA + radiusA;
+    const scoreB = gridB + radiusB;
+
+    if (scoreA !== scoreB) return scoreA - scoreB;
     return Date.parse(b.fetched_at) - Date.parse(a.fetched_at);
   });
 
   return rows[0] ?? null;
+}
+
+function offsetPoint(
+  latitude: number,
+  longitude: number,
+  meters: number,
+  bearingDegrees: number,
+) {
+  const earthRadius = 6371000;
+  const bearing = bearingDegrees * Math.PI / 180;
+  const lat1 = latitude * Math.PI / 180;
+  const lon1 = longitude * Math.PI / 180;
+  const angularDistance = meters / earthRadius;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+    Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+  );
+
+  return {
+    latitude: lat2 * 180 / Math.PI,
+    longitude: lon2 * 180 / Math.PI,
+  };
+}
+
+function anchorDistanceForRadius(radius: number) {
+  if (radius <= 1150) return 500;
+  if (radius <= 1400) return 800;
+  if (radius <= 1600) return 1050;
+  if (radius <= 1725) return 1250;
+  return 1500;
+}
+
+function generatedRouteAnchors(descriptor: QueryDescriptor): OverpassElement[] {
+  // Food must remain truthful: never fabricate a cafe/market. General moods can
+  // use anonymous route anchors because their endpoint is intentionally hidden
+  // and the arrival task is a portable visual prompt, not a POI claim.
+  if (descriptor.family === "food") return [];
+
+  const baseDistance = anchorDistanceForRadius(descriptor.radius);
+  const baseBearing = Math.floor(Math.random() * 360);
+  const bearingOffsets = [0, 180, 90, 270, 45, 225, 135, 315];
+  const distanceScales = [1, 1, 0.96, 1.04, 0.9, 1.1, 0.94, 1.06];
+  const idBase =
+    1_700_000_000 +
+    Math.abs(descriptor.gridLatE3 * 31 + descriptor.gridLonE3 * 17) % 100_000;
+
+  return bearingOffsets.map((bearingOffset, index) => {
+    const point = offsetPoint(
+      descriptor.latitude,
+      descriptor.longitude,
+      baseDistance * distanceScales[index],
+      (baseBearing + bearingOffset) % 360,
+    );
+
+    return {
+      type: "node",
+      id: idBase + index,
+      lat: point.latitude,
+      lon: point.longitude,
+      tags: {
+        highway: "pedestrian",
+        name: "這趟 DETOUR 的收尾點",
+        "detour:generated": "route-anchor",
+      },
+    } satisfies OverpassElement;
+  });
+}
+
+function generatedResponse(descriptor: QueryDescriptor, startedAt: number) {
+  const elements = generatedRouteAnchors(descriptor);
+
+  if (elements.length === 0) {
+    return json(
+      {
+        error: "SCENE_UPSTREAM_UNAVAILABLE",
+        detail: "No truthful food fallback is available without upstream data.",
+      },
+      503,
+    );
+  }
+
+  console.log(
+    `[DETOUR SCENE API] fail-open route anchors ${Date.now() - startedAt}ms · ${elements.length} anchors`,
+  );
+
+  return json(
+    {
+      elements,
+      detourCache: {
+        status: "generated",
+        ageMs: 0,
+        upstream: "route-anchor",
+      },
+    },
+    200,
+    { "X-Detour-Scene-Cache": "generated" },
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -382,7 +496,12 @@ Deno.serve(async (req: Request) => {
     if (contentType.includes("application/json")) {
       const body = await req.json();
       if (body?.mode === "health") {
-        return json({ ok: true, cache: "scene_discovery_cache" });
+        return json({
+          ok: true,
+          cache: "scene_discovery_cache",
+          queryVersion: QUERY_VERSION,
+          failOpen: true,
+        });
       }
       return json({ error: "INVALID_PAYLOAD" }, 400);
     }
@@ -437,37 +556,49 @@ Deno.serve(async (req: Request) => {
         return cacheResponse(neighbor, "neighbor");
       }
     } else {
-      console.log("[DETOUR SCENE API] database admin key unavailable; using upstream only");
+      console.log("[DETOUR SCENE API] database admin key unavailable; using upstream/fail-open only");
     }
 
-    const fresh = await fetchUpstream(query);
+    try {
+      const fresh = await fetchUpstream(query);
 
-    if (admin) {
-      try {
-        await storeCache(admin, descriptor, fresh.elements, fresh.upstream);
-      } catch (error) {
-        console.log(
-          `[DETOUR SCENE API] cache write failed · ${error instanceof Error ? error.message : "unknown"}`,
-        );
+      if (admin) {
+        try {
+          await storeCache(admin, descriptor, fresh.elements, fresh.upstream);
+        } catch (error) {
+          console.log(
+            `[DETOUR SCENE API] cache write failed · ${error instanceof Error ? error.message : "unknown"}`,
+          );
+        }
       }
-    }
 
-    console.log(
-      `[DETOUR SCENE API] cold success ${Date.now() - requestStartedAt}ms · ${fresh.upstream}`,
-    );
+      console.log(
+        `[DETOUR SCENE API] cold success ${Date.now() - requestStartedAt}ms · ${fresh.upstream}`,
+      );
 
-    return json(
-      {
-        elements: fresh.elements,
-        detourCache: {
-          status: "miss",
-          ageMs: 0,
-          upstream: fresh.upstream,
+      return json(
+        {
+          elements: fresh.elements,
+          detourCache: {
+            status: "miss",
+            ageMs: 0,
+            upstream: fresh.upstream,
+          },
         },
-      },
-      200,
-      { "X-Detour-Scene-Cache": "miss" },
-    );
+        200,
+        { "X-Detour-Scene-Cache": "miss" },
+      );
+    } catch (error) {
+      console.log(
+        `[DETOUR SCENE API] upstream unavailable ${Date.now() - requestStartedAt}ms · ${error instanceof Error ? error.message : "unknown"}`,
+      );
+
+      if (admin) {
+        EdgeRuntime.waitUntil(refreshCache(admin, descriptor, query));
+      }
+
+      return generatedResponse(descriptor, requestStartedAt);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     console.log(
@@ -476,10 +607,10 @@ Deno.serve(async (req: Request) => {
 
     return json(
       {
-        error: "SCENE_UPSTREAM_UNAVAILABLE",
+        error: "SCENE_GATEWAY_FAILED",
         detail: message.slice(0, 300),
       },
-      503,
+      500,
     );
   }
 });
