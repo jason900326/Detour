@@ -17,14 +17,37 @@ export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-mai
 export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
 
 const TICKET_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
+const STUB_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_STUB_SOURCE);
 
-// ticket-main.png and ticket-stub.png are transparent layers exported from the
-// same source canvas. They always share one origin and one geometry.
 export const DETOUR_TICKET_HEIGHT =
   DETOUR_TICKET_WIDTH * (TICKET_ARTWORK.height / TICKET_ARTWORK.width);
 
-// The perforation lives in artwork coordinates, not device coordinates.
-export const DETOUR_TICKET_TEAR_SEAM_RATIO = 1050 / 1411;
+// Geometry measured from the artwork reference supplied with the corrected
+// stub. The main paper lives inside a larger transparent export canvas; the
+// detachable strip belongs in that lower transparent area rather than on top
+// of the printed content.
+const TICKET_REFERENCE_WIDTH = 1122;
+const TICKET_REFERENCE_HEIGHT = 1402;
+const MAIN_PAPER_LEFT = 35;
+const MAIN_PAPER_WIDTH = 1052;
+const MAIN_PAPER_BOTTOM = 1127;
+const TEAR_TOOTH_OVERLAP = 20;
+
+export const DETOUR_TICKET_STUB_LEFT =
+  DETOUR_TICKET_WIDTH * (MAIN_PAPER_LEFT / TICKET_REFERENCE_WIDTH);
+export const DETOUR_TICKET_STUB_WIDTH =
+  DETOUR_TICKET_WIDTH * (MAIN_PAPER_WIDTH / TICKET_REFERENCE_WIDTH);
+export const DETOUR_TICKET_STUB_HEIGHT =
+  DETOUR_TICKET_STUB_WIDTH * (STUB_ARTWORK.height / STUB_ARTWORK.width);
+export const DETOUR_TICKET_STUB_TOP =
+  DETOUR_TICKET_HEIGHT *
+  ((MAIN_PAPER_BOTTOM - TEAR_TOOTH_OVERLAP) / TICKET_REFERENCE_HEIGHT);
+
+// The gesture follows the actual bottom tear edge of the main ticket. The
+// stub itself overlaps behind that edge by one tooth depth so the two paper
+// pieces visually join without a background slit.
+export const DETOUR_TICKET_TEAR_SEAM_RATIO =
+  MAIN_PAPER_BOTTOM / TICKET_REFERENCE_HEIGHT;
 
 export type DetourTicketProps = {
   timeLabel: string;
@@ -144,7 +167,7 @@ export function DetourAccentStroke({
 function TearableTicketStub() {
   const { dragX, dragY, opacity } = useTicketTear();
   const rotate = dragX.interpolate({
-    inputRange: [-44, 0, 44],
+    inputRange: [-DETOUR_TICKET_WIDTH, 0, DETOUR_TICKET_WIDTH],
     outputRange: ['-9deg', '0deg', '9deg'],
     extrapolate: 'clamp',
   });
@@ -154,10 +177,10 @@ function TearableTicketStub() {
       pointerEvents="none"
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: DETOUR_TICKET_WIDTH,
-        height: DETOUR_TICKET_HEIGHT,
+        top: DETOUR_TICKET_STUB_TOP,
+        left: DETOUR_TICKET_STUB_LEFT,
+        width: DETOUR_TICKET_STUB_WIDTH,
+        height: DETOUR_TICKET_STUB_HEIGHT,
         opacity,
         transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
       }}
@@ -241,9 +264,6 @@ export function V45Ticket({
 
     if (stamped) return;
 
-    // Thermal/transport printers rarely move paper with a perfectly smooth
-    // tween. Short, asymmetric roller bites make the existing vertical feed
-    // read as a physical mechanism without turning the screen into a gimmick.
     const feedLoop = Animated.loop(
       Animated.sequence([
         Animated.delay(180),
@@ -324,6 +344,7 @@ export function V45Ticket({
     >
       {artworkVisible && (
         <>
+          {showStubArtwork && <TearableTicketStub />}
           <Image
             source={DETOUR_TICKET_MAIN_SOURCE}
             style={{
@@ -337,7 +358,6 @@ export function V45Ticket({
             onLoad={markArtworkReady}
             onLoadEnd={markArtworkReady}
           />
-          {showStubArtwork && <TearableTicketStub />}
         </>
       )}
 

@@ -135,10 +135,11 @@ function TicketTearGestureSurface({
           directionRef.current = direction || 1;
           const progress = Math.min(1, distance / requiredDistance);
 
-          // While the finger crosses the perforation, the strip only lifts a
-          // few points. The actual tear-away happens after the threshold.
-          dragX.setValue(directionRef.current * progress * 6);
-          dragY.setValue(progress * 4);
+          // Once the finger catches the tear seam, the detachable strip should
+          // visibly travel with it. Keeping a little resistance makes it feel
+          // like paper rather than a free-floating card.
+          dragX.setValue(gesture.dx * 0.82);
+          dragY.setValue(Math.min(8, progress * 8));
 
           const thresholds = [0.22, 0.48, 0.74];
           const nextTick = tickIndexRef.current;
@@ -180,29 +181,33 @@ function TicketTearGestureSurface({
           tornRef.current = true;
           const direction = gesture.dx === 0 ? directionRef.current : Math.sign(gesture.dx);
           directionRef.current = direction || 1;
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-          // Pull the perforated strip mostly sideways. A small drop and rotate
-          // sell the paper release without making it travel through the lower
-          // destination/barcode area.
+          // Continue from the user's release point and finish pulling the strip
+          // out in that same direction. The page transition does not begin
+          // until this physical release has completed.
           Animated.parallel([
             Animated.timing(dragX, {
-              toValue: directionRef.current * 44,
-              duration: 220,
+              toValue: directionRef.current * (bounds.width + 56),
+              duration: 260,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
             Animated.timing(dragY, {
               toValue: 18,
-              duration: 220,
+              duration: 260,
               easing: Easing.out(Easing.quad),
               useNativeDriver: true,
             }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 200,
-              easing: Easing.in(Easing.quad),
-              useNativeDriver: true,
-            }),
+            Animated.sequence([
+              Animated.delay(80),
+              Animated.timing(opacity, {
+                toValue: 0,
+                duration: 180,
+                easing: Easing.in(Easing.quad),
+                useNativeDriver: true,
+              }),
+            ]),
           ]).start(({ finished }) => {
             if (finished) onTorn();
           });
