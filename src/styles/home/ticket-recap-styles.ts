@@ -40,9 +40,9 @@ export const ticketRecapStyles = StyleSheet.create({
   },
   v48PaperViewport: {
     position: 'absolute',
-    top: 57,
+    top: 54,
     width: 310,
-    height: 399,
+    height: 402,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 2,
@@ -58,7 +58,9 @@ export const ticketRecapStyles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 78,
+    // Only mask through the slot lip. Below this point the paper must sit
+    // in front of the printer face so it visually exits the black slot.
+    height: 58,
     overflow: 'hidden',
     zIndex: 4,
   },
@@ -1144,7 +1146,7 @@ export const ticketRecapStyles = StyleSheet.create({
     position: 'absolute',
     left: '21%',
     right: '21%',
-    bottom: '6.8%',
+    bottom: '13%',
     height: 39,
     flexDirection: 'row',
     alignItems: 'stretch',
