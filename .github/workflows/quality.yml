@@ -33,15 +33,74 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import struct
+          import struct, zlib
 
-          for name in ('ticket-back.png', 'ticket-main.png', 'ticket-stub.png'):
-              path = Path('assets/detour') / name
+          def inspect_png(path: Path):
               data = path.read_bytes()
               if data[:8] != b'\x89PNG\r\n\x1a\n':
-                  raise SystemExit(f'{name}: not PNG')
-              width, height = struct.unpack('>II', data[16:24])
-              print(f'TICKET_ASSET {name}: {width}x{height} bytes={len(data)}')
+                  raise SystemExit(f'{path.name}: not PNG')
+              pos = 8
+              idat = bytearray()
+              width = height = bit_depth = color_type = None
+              while pos < len(data):
+                  length = struct.unpack('>I', data[pos:pos+4])[0]
+                  kind = data[pos+4:pos+8]
+                  payload = data[pos+8:pos+8+length]
+                  pos += 12 + length
+                  if kind == b'IHDR':
+                      width, height, bit_depth, color_type, _, _, _ = struct.unpack('>IIBBBBB', payload)
+                  elif kind == b'IDAT':
+                      idat.extend(payload)
+                  elif kind == b'IEND':
+                      break
+              print(f'TICKET_ASSET {path.name}: {width}x{height} bytes={len(data)} bit={bit_depth} color={color_type}')
+              if bit_depth != 8 or color_type not in (2, 6):
+                  return
+              bpp = 4 if color_type == 6 else 3
+              raw = zlib.decompress(bytes(idat))
+              stride = width * bpp
+              rows = []
+              offset = 0
+              prev = bytearray(stride)
+              for _ in range(height):
+                  f = raw[offset]
+                  scan = bytearray(raw[offset+1:offset+1+stride])
+                  offset += 1 + stride
+                  recon = bytearray(stride)
+                  for i, x in enumerate(scan):
+                      a = recon[i-bpp] if i >= bpp else 0
+                      b = prev[i]
+                      c = prev[i-bpp] if i >= bpp else 0
+                      if f == 0:
+                          val = x
+                      elif f == 1:
+                          val = (x + a) & 255
+                      elif f == 2:
+                          val = (x + b) & 255
+                      elif f == 3:
+                          val = (x + ((a + b) >> 1)) & 255
+                      elif f == 4:
+                          p = a + b - c
+                          pa, pb, pc = abs(p-a), abs(p-b), abs(p-c)
+                          pr = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                          val = (x + pr) & 255
+                      else:
+                          raise RuntimeError(f'unsupported PNG filter {f}')
+                      recon[i] = val
+                  rows.append(recon)
+                  prev = recon
+              if color_type == 6:
+                  xs = []
+                  ys = []
+                  for y, row in enumerate(rows):
+                      for x in range(width):
+                          if row[x*4+3] > 16:
+                              xs.append(x); ys.append(y)
+                  if xs:
+                      print(f'TICKET_ALPHA {path.name}: left={min(xs)} right={max(xs)} top={min(ys)} bottom={max(ys)} width={max(xs)-min(xs)+1} height={max(ys)-min(ys)+1}')
+
+          for name in ('ticket-back.png', 'ticket-main.png', 'ticket-stub.png'):
+              inspect_png(Path('assets/detour') / name)
           PY
 
       - name: Setup Node
