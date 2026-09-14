@@ -16,46 +16,50 @@ export const DETOUR_TICKET_WIDTH = 310;
 export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');
 export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
 
-const TICKET_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_MAIN_SOURCE);
-const STUB_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_STUB_SOURCE);
-
-export const DETOUR_TICKET_HEIGHT =
-  DETOUR_TICKET_WIDTH * (TICKET_ARTWORK.height / TICKET_ARTWORK.width);
-
-// Final artwork geometry measured from the actual authored PNGs. The two PNG
-// canvases have different pixel sizes, so they must share one visual paper
-// scale rather than one raw image width. These bounds align the visible paper
-// edges and the matching perforation exactly, without recoloring or resampling
-// the source files themselves.
+// These values come from decoding the actual PNG bytes committed in the repo,
+// not from chat previews or runtime asset metadata. The canvases differ in
+// pixel size, so layout is based on their real visible-alpha paper bounds.
+const MAIN_ARTWORK_SIZE = {
+  width: 1122,
+  height: 1402,
+} as const;
+const STUB_ARTWORK_SIZE = {
+  width: 2172,
+  height: 724,
+} as const;
 const MAIN_PAPER_BOUNDS = {
-  left: 31,
-  width: 1060,
+  left: 32,
+  width: 1058,
   bottom: 1319,
 } as const;
 const STUB_PAPER_BOUNDS = {
-  left: 33,
-  width: 1471,
-  top: 53,
+  left: 46,
+  width: 2081,
+  top: 70,
 } as const;
 
-const MAIN_ARTWORK_SCALE = DETOUR_TICKET_WIDTH / TICKET_ARTWORK.width;
+export const DETOUR_TICKET_HEIGHT =
+  DETOUR_TICKET_WIDTH * (MAIN_ARTWORK_SIZE.height / MAIN_ARTWORK_SIZE.width);
+
+const MAIN_ARTWORK_SCALE = DETOUR_TICKET_WIDTH / MAIN_ARTWORK_SIZE.width;
 const MAIN_PAPER_LEFT = MAIN_PAPER_BOUNDS.left * MAIN_ARTWORK_SCALE;
 const MAIN_PAPER_WIDTH = MAIN_PAPER_BOUNDS.width * MAIN_ARTWORK_SCALE;
 const MAIN_PAPER_BOTTOM = MAIN_PAPER_BOUNDS.bottom * MAIN_ARTWORK_SCALE;
 const STUB_ARTWORK_SCALE = MAIN_PAPER_WIDTH / STUB_PAPER_BOUNDS.width;
+const TEAR_JOIN_OVERLAP = 1;
 
 export const DETOUR_TICKET_STUB_LEFT =
   MAIN_PAPER_LEFT - STUB_PAPER_BOUNDS.left * STUB_ARTWORK_SCALE;
 export const DETOUR_TICKET_STUB_WIDTH =
-  STUB_ARTWORK.width * STUB_ARTWORK_SCALE;
+  STUB_ARTWORK_SIZE.width * STUB_ARTWORK_SCALE;
 export const DETOUR_TICKET_STUB_HEIGHT =
-  STUB_ARTWORK.height * STUB_ARTWORK_SCALE;
+  STUB_ARTWORK_SIZE.height * STUB_ARTWORK_SCALE;
 export const DETOUR_TICKET_STUB_TOP =
-  MAIN_PAPER_BOTTOM - STUB_PAPER_BOUNDS.top * STUB_ARTWORK_SCALE;
+  MAIN_PAPER_BOTTOM - STUB_PAPER_BOUNDS.top * STUB_ARTWORK_SCALE - TEAR_JOIN_OVERLAP;
 
-// The swipe hit area follows the real bottom perforation of ticket-main.png.
+// The swipe hit area follows the actual bottom perforation of ticket-main.png.
 export const DETOUR_TICKET_TEAR_SEAM_RATIO =
-  MAIN_PAPER_BOUNDS.bottom / TICKET_ARTWORK.height;
+  MAIN_PAPER_BOUNDS.bottom / MAIN_ARTWORK_SIZE.height;
 
 export type DetourTicketProps = {
   timeLabel: string;
