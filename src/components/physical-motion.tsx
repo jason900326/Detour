@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -12,11 +13,15 @@ import * as Haptics from 'expo-haptics';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
 import { styles } from '../styles/home-styles';
-import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
+import { MUTED } from '../theme/detour-theme';
 import { ticketSerial } from '../lib/detour-formatters';
 import { DetourAccentStroke, V45Ticket } from './ticket-visuals';
 
 type Controller = ReturnType<typeof useDetourHomeController>;
+
+const TICKET_BACK = require('../../assets/detour/ticket-back.png');
+const TICKET_MAIN = require('../../assets/detour/ticket-main.png');
+const TICKET_STUB = require('../../assets/detour/ticket-stub.png');
 
 function lightImpact() {
   return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -140,13 +145,27 @@ export function PrinterPhysicalHaptics({ controller }: { controller: Controller 
   return null;
 }
 
+function StubBarcode() {
+  return (
+    <View pointerEvents="none" style={styles.v46ArtBarcode}>
+      {Array.from({ length: 29 }).map((_, index) => (
+        <View
+          key={`tear-barcode-${index}`}
+          style={[
+            styles.v46ArtBarcodeBar,
+            { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 function TicketStub({
   enabled,
-  serial,
   onTorn,
 }: {
   enabled: boolean;
-  serial: string;
   onTorn: () => void;
 }) {
   const dragX = useRef(new Animated.Value(0)).current;
@@ -169,7 +188,7 @@ function TicketStub({
       PanResponder.create({
         onStartShouldSetPanResponder: () => enabled,
         onMoveShouldSetPanResponder: (_event, gesture) =>
-          enabled && Math.abs(gesture.dx) > 3,
+          enabled && gesture.dy > 3 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.72,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           if (!enabled || tornRef.current) return;
@@ -179,16 +198,16 @@ function TicketStub({
         onPanResponderMove: (_event, gesture) => {
           if (!enabled || tornRef.current) return;
 
-          const positiveX = Math.max(0, gesture.dx);
-          const resistedX = positiveX <= 28
-            ? positiveX * 0.48
-            : 13.4 + (positiveX - 28) * 0.72;
-          const resistedY = Math.max(-14, Math.min(28, gesture.dy * 0.22));
+          const positiveY = Math.max(0, gesture.dy);
+          const resistedY = positiveY <= 28
+            ? positiveY * 0.48
+            : 13.4 + (positiveY - 28) * 0.72;
+          const resistedX = Math.max(-18, Math.min(18, gesture.dx * 0.2));
 
           dragX.setValue(resistedX);
           dragY.setValue(resistedY);
 
-          if (positiveX >= 30 && !tensionFiredRef.current) {
+          if (positiveY >= 30 && !tensionFiredRef.current) {
             tensionFiredRef.current = true;
             void softImpact();
           }
@@ -197,7 +216,7 @@ function TicketStub({
           if (!enabled || tornRef.current) return;
 
           const shouldTear =
-            gesture.dx >= 88 || (gesture.dx >= 58 && gesture.vx >= 0.62);
+            gesture.dy >= 88 || (gesture.dy >= 58 && gesture.vy >= 0.62);
 
           if (!shouldTear) {
             tensionFiredRef.current = false;
@@ -224,15 +243,16 @@ function TicketStub({
           // impact becomes the actual perforation snap instead of double buzz.
           onTorn();
 
+          const releaseX = Math.max(-34, Math.min(34, gesture.dx * 0.42));
           Animated.parallel([
             Animated.timing(dragX, {
-              toValue: 176,
+              toValue: releaseX,
               duration: 270,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
             Animated.timing(dragY, {
-              toValue: 64,
+              toValue: 184,
               duration: 270,
               easing: Easing.in(Easing.quad),
               useNativeDriver: true,
@@ -267,45 +287,44 @@ function TicketStub({
     [dragX, dragY, enabled, onTorn, opacity]
   );
 
-  const rotate = dragX.interpolate({
-    inputRange: [0, 24, 90, 176],
-    outputRange: ['0deg', '0.8deg', '4deg', '13deg'],
+  const rotate = dragY.interpolate({
+    inputRange: [0, 28, 90, 184],
+    outputRange: ['0deg', '0.5deg', '2.6deg', '8deg'],
     extrapolate: 'clamp',
   });
 
   return (
-    <Animated.View
-      {...responder.panHandlers}
-      style={[
-        motionStyles.stub,
-        {
-          opacity,
-          transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
-        },
-      ]}
-    >
-      <View pointerEvents="none" style={motionStyles.stubPerforation}>
-        {Array.from({ length: 8 }).map((_, index) => (
-          <View key={index} style={motionStyles.stubHole} />
-        ))}
-      </View>
-      <Text pointerEvents="none" style={motionStyles.stubBrand}>DETOUR</Text>
-      <Text pointerEvents="none" style={motionStyles.stubSerial}>{serial.slice(-6)}</Text>
-      <View pointerEvents="none" style={motionStyles.stubArrowWrap}>
-        <Text style={motionStyles.stubArrow}>→</Text>
-      </View>
-    </Animated.View>
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          motionStyles.ticketLayer,
+          motionStyles.stubLayer,
+          {
+            opacity,
+            transform: [{ translateX: dragX }, { translateY: dragY }, { rotate }],
+          },
+        ]}
+      >
+        <Image source={TICKET_STUB} style={motionStyles.ticketImage} resizeMode="stretch" />
+        <StubBarcode />
+      </Animated.View>
+
+      <View
+        {...responder.panHandlers}
+        accessible
+        accessibilityLabel="撕下票根，開始旅程"
+        style={motionStyles.stubHitArea}
+      />
+    </>
   );
 }
 
 /**
- * Full ready-state overlay so the existing printer stays untouched while the
- * old CTA is replaced by a physical tear gesture. It intentionally mirrors the
- * current ready layout, which keeps preparing -> ready visually continuous.
- *
- * The repo does not yet contain ticket-main.png / ticket-stub.png /
- * ticket-back.png, so the detachable piece is a native paper fallback. Once
- * those PNGs are committed, only this component needs an artwork swap.
+ * Ready state uses the user's final three-layer PNG set. The back layer stays
+ * still, the main body stays attached, and only the transparent stub layer is
+ * draggable. All three PNGs share the same canvas, so the perforation remains
+ * pixel-aligned while the stub moves away.
  */
 export function ReadyTicketTearOverlay({ controller }: { controller: Controller }) {
   const hintOpacity = useRef(new Animated.Value(0)).current;
@@ -364,17 +383,29 @@ export function ReadyTicketTearOverlay({ controller }: { controller: Controller 
           <View style={[styles.v48PaperViewport, motionStyles.readyPaperViewport]}>
             <View style={styles.v48PaperTrack}>
               <View style={motionStyles.ticketGestureStage}>
-                <V45Ticket
-                  timeLabel={controller.selectedTime ?? '15'}
-                  moodId={moodId}
-                  moodLabel={moodLabel}
-                  serial={serial}
-                  stamped
-                  stampProgress={controller.ticketStamp}
-                />
+                <View pointerEvents="none" style={[motionStyles.ticketLayer, motionStyles.backLayer]}>
+                  <Image source={TICKET_BACK} style={motionStyles.ticketImage} resizeMode="stretch" />
+                </View>
+
+                <View pointerEvents="none" style={[motionStyles.ticketLayer, motionStyles.mainLayer]}>
+                  <Image source={TICKET_MAIN} style={motionStyles.ticketImage} resizeMode="stretch" />
+                </View>
+
+                <View pointerEvents="none" style={motionStyles.contentLayer}>
+                  <V45Ticket
+                    timeLabel={controller.selectedTime ?? '15'}
+                    moodId={moodId}
+                    moodLabel={moodLabel}
+                    serial={serial}
+                    stamped
+                    stampProgress={controller.ticketStamp}
+                    artworkVisible={false}
+                    showBarcode={false}
+                  />
+                </View>
+
                 <TicketStub
                   enabled={controller.ticketReadyUnlocked}
-                  serial={serial}
                   onTorn={handleTorn}
                 />
               </View>
@@ -449,77 +480,49 @@ const motionStyles = StyleSheet.create({
   },
   ticketGestureStage: {
     width: 310,
+    aspectRatio: 1115 / 1411,
     position: 'relative',
   },
-  stub: {
+  ticketLayer: {
     position: 'absolute',
-    right: -2,
-    top: 248,
-    width: 78,
-    height: 118,
-    borderTopLeftRadius: 5,
-    borderBottomLeftRadius: 5,
-    borderTopRightRadius: 8,
-    borderBottomRightRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CFC6B8',
-    backgroundColor: '#FBF5E9',
-    paddingLeft: 16,
-    paddingRight: 8,
-    paddingTop: 13,
+    top: 0,
+    left: 0,
+    width: 310,
+    aspectRatio: 1115 / 1411,
+  },
+  ticketImage: {
+    width: '100%',
+    height: '100%',
+  },
+  backLayer: {
+    zIndex: 1,
+  },
+  mainLayer: {
+    zIndex: 2,
+  },
+  contentLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 310,
+    aspectRatio: 1115 / 1411,
+    zIndex: 3,
+  },
+  stubLayer: {
+    zIndex: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.13,
-    shadowRadius: 9,
-    shadowOffset: { width: 4, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 1, height: 6 },
     elevation: 7,
-    zIndex: 12,
   },
-  stubPerforation: {
+  stubHitArea: {
     position: 'absolute',
-    left: -5,
-    top: 5,
-    bottom: 5,
-    width: 10,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  stubHole: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: BONE,
-    borderWidth: 1,
-    borderColor: '#CFC6B8',
-  },
-  stubBrand: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-    color: INK,
-  },
-  stubSerial: {
-    marginTop: 8,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: MUTED,
-  },
-  stubArrowWrap: {
-    position: 'absolute',
-    right: 8,
-    bottom: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: SIGNAL,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stubArrow: {
-    marginTop: -2,
-    fontSize: 19,
-    fontWeight: '900',
-    color: BONE,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 106,
+    zIndex: 5,
   },
   hintWrap: {
     position: 'absolute',
