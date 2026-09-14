@@ -76,7 +76,11 @@ export function usePhysicalController(
         return controller.openPassportEntry(...args);
       }) as Controller['openPassportEntry'],
       openCamera: ((...args: Parameters<Controller['openCamera']>) => {
-        void lightImpact();
+        if (controller.photos.length >= controller.rollCapacity) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } else {
+          void lightImpact();
+        }
         return controller.openCamera(...args);
       }) as Controller['openCamera'],
       replaceFailedDestination: ((...args: Parameters<Controller['replaceFailedDestination']>) => {
@@ -123,8 +127,6 @@ export function PrinterPhysicalHaptics({ controller }: { controller: Controller 
       const nextIndex = nextTickRef.current;
       if (nextIndex >= thresholds.length || value < thresholds[nextIndex]) return;
 
-      // Animated.Value can jump across more than one threshold in a single
-      // frame. Emit one tactile bite per frame rather than a machine-gun burst.
       nextTickRef.current = nextIndex + 1;
       const now = Date.now();
       if (now - lastTickAtRef.current < 70) return;
@@ -177,7 +179,6 @@ function TicketStub({
         onPanResponderMove: (_event, gesture) => {
           if (!enabled || tornRef.current) return;
 
-          // Paper should feel held by perforations rather than freely draggable.
           const positiveX = Math.max(0, gesture.dx);
           const resistedX = positiveX <= 28
             ? positiveX * 0.48
@@ -195,7 +196,8 @@ function TicketStub({
         onPanResponderRelease: (_event, gesture) => {
           if (!enabled || tornRef.current) return;
 
-          const shouldTear = gesture.dx >= 88 || (gesture.dx >= 58 && gesture.vx >= 0.62);
+          const shouldTear =
+            gesture.dx >= 88 || (gesture.dx >= 58 && gesture.vx >= 0.62);
 
           if (!shouldTear) {
             tensionFiredRef.current = false;
@@ -218,9 +220,8 @@ function TicketStub({
           }
 
           tornRef.current = true;
-          // startDetour's first action is the medium impact. Calling onTorn now
-          // makes that single impact the actual perforation "snap" while this
-          // visual piece continues flying out of the hand.
+          // startDetour starts with the existing medium impact, so that single
+          // impact becomes the actual perforation snap instead of double buzz.
           onTorn();
 
           Animated.parallel([
@@ -248,8 +249,18 @@ function TicketStub({
           if (!enabled || tornRef.current) return;
           tensionFiredRef.current = false;
           Animated.parallel([
-            Animated.spring(dragX, { toValue: 0, speed: 24, bounciness: 5, useNativeDriver: true }),
-            Animated.spring(dragY, { toValue: 0, speed: 24, bounciness: 5, useNativeDriver: true }),
+            Animated.spring(dragX, {
+              toValue: 0,
+              speed: 24,
+              bounciness: 5,
+              useNativeDriver: true,
+            }),
+            Animated.spring(dragY, {
+              toValue: 0,
+              speed: 24,
+              bounciness: 5,
+              useNativeDriver: true,
+            }),
           ]).start();
         },
       }),
@@ -376,7 +387,10 @@ export function ReadyTicketTearOverlay({ controller }: { controller: Controller 
         </View>
 
         {controller.ticketReadyUnlocked && (
-          <Animated.View pointerEvents="none" style={[motionStyles.hintWrap, { opacity: hintOpacity }]}>
+          <Animated.View
+            pointerEvents="none"
+            style={[motionStyles.hintWrap, { opacity: hintOpacity }]}
+          >
             <View style={motionStyles.hintRule} />
             <Text style={motionStyles.hintText}>撕下票根，開始旅程</Text>
           </Animated.View>
@@ -422,7 +436,11 @@ export function useJourneyStageMotion(stage: Controller['stage']) {
 
 const motionStyles = StyleSheet.create({
   readyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     zIndex: 100,
     elevation: 100,
   },
