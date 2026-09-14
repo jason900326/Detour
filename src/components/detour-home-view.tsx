@@ -1082,11 +1082,12 @@ export function DetourHomeView({
             </View>
 
             <View style={styles.v48PrinterAssembly}>
-              <Image
-                source={require('../../assets/detour/printer-front.png')}
-                style={styles.v48PrinterBase}
-                resizeMode="contain"
-              />
+              <View pointerEvents="none" style={styles.v50PrinterBody}>
+                <View style={styles.v50PrinterHighlight} />
+                <View style={styles.v50PrinterSlotShell}>
+                  <View style={styles.v50PrinterSlot} />
+                </View>
+              </View>
 
               <View style={styles.v48PaperViewport} pointerEvents="none">
                 <Animated.View
@@ -1115,12 +1116,8 @@ export function DetourHomeView({
                 </Animated.View>
               </View>
 
-              <View pointerEvents="none" style={styles.v48PrinterLipMask}>
-                <Image
-                  source={require('../../assets/detour/printer-front.png')}
-                  style={styles.v48PrinterMaskImage}
-                  resizeMode="contain"
-                />
+              <View pointerEvents="none" style={styles.v50PrinterFrontLip}>
+                <View style={styles.v50PrinterFrontLipHighlight} />
               </View>
             </View>
 
