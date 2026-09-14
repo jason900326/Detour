@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_URL: https://ldlhzyfubjbuumikrkuv.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
@@ -33,12 +33,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify Supabase secrets
+      - name: Verify Supabase secret
         if: ${{ inputs.dry_run != true }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_URL" || (echo "Missing repository secret SUPABASE_URL" && exit 1)
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing repository secret SUPABASE_SERVICE_ROLE_KEY" && exit 1)
 
       - name: Install osmium-tool
