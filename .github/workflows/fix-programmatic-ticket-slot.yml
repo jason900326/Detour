@@ -4,28 +4,30 @@ on:
   push:
     branches:
       - fix/programmatic-ticket-slot
+    paths:
+      - ".github/workflows/fix-programmatic-ticket-slot.yml"
+      - "scripts/fix_programmatic_ticket_slot.py"
 
 permissions:
   contents: write
 
 jobs:
   patch-and-verify:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Apply slot patch
         run: python scripts/fix_programmatic_ticket_slot.py
