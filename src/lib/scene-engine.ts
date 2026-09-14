@@ -62,14 +62,22 @@ type OverpassResponse = {
   elements?: OverpassElement[];
 };
 
+type OverpassInFlight = {
+  promise: Promise<OverpassElement[]>;
+  startedAt: number;
+};
+
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
 const OVERPASS_CACHE_TTL = 10 * 60 * 1000;
+const OVERPASS_QUERY_TIMEOUT_SECONDS = 5;
+const OVERPASS_REQUEST_TIMEOUT_MS = 6200;
+const OVERPASS_HEDGE_DELAY_MS = 300;
 const overpassCache = new Map<string, { expiresAt: number; elements: OverpassElement[] }>();
-const overpassInFlight = new Map<string, Promise<OverpassElement[]>>();
+const overpassInFlight = new Map<string, OverpassInFlight>();
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
@@ -728,54 +736,74 @@ function scoreDistance(
   return Math.max(-30, 26 - difference / 9);
 }
 
+function discoveryRadius(
+  moodId: MoodId,
+  minutes: number
+) {
+  const safeMinutes = Math.max(15, Math.min(90, Math.round(minutes / 15) * 15));
+
+  if (moodId === 'food') {
+    if (safeMinutes <= 15) return 900;
+    if (safeMinutes <= 30) return 1100;
+    if (safeMinutes <= 45) return 1300;
+    if (safeMinutes <= 60) return 1500;
+    return 1700;
+  }
+
+  if (safeMinutes <= 15) return 1100;
+  if (safeMinutes <= 30) return 1350;
+  if (safeMinutes <= 45) return 1550;
+  if (safeMinutes <= 60) return 1700;
+  return 1800;
+}
+
 function buildQuery(
   start: GeoPoint,
-  moodId: MoodId
+  moodId: MoodId,
+  minutes: number
 ) {
-  // The real walking limit is much smaller than discovery radius.
-  // Food is especially dense in Taipei, so don't query unrelated
-  // artwork/parks/steps that will be rejected by the food gate anyway.
-  const radius =
-    moodId === 'food'
-      ? 1700
-      : 1800;
+  // Keep the query proportional to the selected journey. A 15-minute ticket
+  // should not scan the same dense 1.8 km OSM area as a 90-minute ticket.
+  const radius = discoveryRadius(moodId, minutes);
 
+  // Bucket the query origin to roughly a city block. Candidate scoring still
+  // uses the real GPS point, but tiny GPS drift no longer defeats the 10-minute
+  // Overpass cache or causes Retry to issue an almost-identical query.
+  const queryLatitude = Number(start.latitude.toFixed(3));
+  const queryLongitude = Number(start.longitude.toFixed(3));
   const around =
-    `(around:${radius},${start.latitude},${start.longitude})`;
+    `(around:${radius},${queryLatitude},${queryLongitude})`;
 
   if (moodId === 'food') {
     return `
-[out:json][timeout:6];
+[out:json][timeout:${OVERPASS_QUERY_TIMEOUT_SECONDS}];
 (
   nwr${around}["amenity"="marketplace"]["name"];
   nwr${around}["amenity"~"restaurant|fast_food|cafe|food_court|ice_cream"]["name"];
   nwr${around}["shop"~"bakery|confectionery|deli|pastry|beverages|coffee|tea"]["name"];
 );
-out center 180;
+out center 140;
 `;
   }
 
+  // The old query mixed high-value destinations with broad fallback
+  // infrastructure (all historic objects, sports grounds, steps, bridges and
+  // pedestrian ways). In dense cities that made discovery expensive before we
+  // even reached routing. Keep only categories that are useful enough to earn
+  // a network scan; route history/time can do the rest of the selection work.
   return `
-[out:json][timeout:6];
+[out:json][timeout:${OVERPASS_QUERY_TIMEOUT_SECONDS}];
 (
   nwr${around}["tourism"="artwork"];
   nwr${around}["tourism"="viewpoint"];
   nwr${around}["place"="square"];
-  nwr${around}["amenity"="marketplace"];
-  nwr${around}["amenity"="fountain"];
-  nwr${around}["amenity"="public_bookcase"];
+  nwr${around}["amenity"~"marketplace|fountain|public_bookcase|arts_centre|community_centre"];
   nwr${around}["tourism"~"gallery|museum"]["name"];
-  nwr${around}["amenity"="arts_centre"]["name"];
-  nwr${around}["leisure"~"park|garden|playground|pitch|sports_centre|track"];
-  nwr${around}["amenity"="community_centre"];
-  nwr${around}["historic"];
+  nwr${around}["leisure"~"park|garden"];
+  nwr${around}["historic"]["name"];
   nwr${around}["historic"="memorial"]["memorial"~"statue|sculpture|bust"];
-  nwr${around}["natural"="tree"]["heritage"];
-  way${around}["highway"="steps"];
-  way${around}["highway"~"footway|pedestrian|path"]["bridge"="yes"];
-  way${around}["highway"="pedestrian"];
 );
-out center 180;
+out center 140;
 `;
 }
 
@@ -812,65 +840,113 @@ async function fetchWithTimeout(
   }
 }
 
+function overpassEndpointLabel(endpoint: string) {
+  return endpoint
+    .replace(/^https?:\/\//, '')
+    .split('/')[0];
+}
+
 async function fetchOverpass(query: string) {
+  const overallStartedAt = Date.now();
+
   const requestEndpoint = async (endpoint: string, delayMs: number) => {
     if (delayMs > 0) {
       await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }
 
-    const response = await fetchWithTimeout(
-      endpoint,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type':
-            'application/x-www-form-urlencoded;charset=UTF-8',
-          Accept: 'application/json',
+    const endpointStartedAt = Date.now();
+    const endpointLabel = overpassEndpointLabel(endpoint);
+
+    try {
+      const response = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/x-www-form-urlencoded;charset=UTF-8',
+            Accept: 'application/json',
+          },
+          body: `data=${encodeURIComponent(query)}`,
         },
-        body: `data=${encodeURIComponent(query)}`,
-      },
-      5200
-    );
+        OVERPASS_REQUEST_TIMEOUT_MS
+      );
 
-    if (!response.ok) {
-      throw new Error(`Overpass ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Overpass ${response.status}`);
+      }
+
+      const data = (await response.json()) as OverpassResponse;
+
+      if (!Array.isArray(data.elements)) {
+        throw new Error('Overpass response missing elements');
+      }
+
+      console.log(
+        `[DETOUR SCENE] ${endpointLabel} success ${Date.now() - endpointStartedAt}ms · ${data.elements.length} elements`
+      );
+
+      return data.elements;
+    } catch (error) {
+      const reason =
+        error instanceof Error
+          ? error.message
+          : 'unknown error';
+
+      console.log(
+        `[DETOUR SCENE] ${endpointLabel} failed ${Date.now() - endpointStartedAt}ms · ${reason}`
+      );
+
+      throw error;
     }
-
-    const data = (await response.json()) as OverpassResponse;
-
-    if (!Array.isArray(data.elements)) {
-      throw new Error('Overpass response missing elements');
-    }
-
-    return data.elements;
   };
 
   return await new Promise<OverpassElement[]>((resolve, reject) => {
+    const errors: Error[] = [];
     let failures = 0;
-    let lastError: unknown = null;
     let settled = false;
 
     const fail = (error: unknown) => {
       failures += 1;
-      lastError = error;
+      errors.push(
+        error instanceof Error
+          ? error
+          : new Error('Unknown Overpass error')
+      );
+
       if (!settled && failures >= OVERPASS_ENDPOINTS.length) {
         settled = true;
-        if (
-          lastError instanceof Error &&
-          lastError.message === 'Scene request timed out'
-        ) {
-          reject(new Error('Scene 資料服務逾時，請再試一次。'));
-        } else {
-          reject(new Error('Scene 資料服務暫時沒有回應，請再試一次。'));
-        }
+        const allTimedOut =
+          errors.length > 0 &&
+          errors.every((item) => item.message === 'Scene request timed out');
+
+        console.log(
+          `[DETOUR SCENE] discovery failed ${Date.now() - overallStartedAt}ms · ${errors.map((item) => item.message).join(' | ')}`
+        );
+
+        reject(
+          new Error(
+            allTimedOut
+              ? 'Scene 資料服務逾時，請再試一次。'
+              : 'Scene 資料服務暫時沒有回應，請再試一次。'
+          )
+        );
       }
     };
 
     OVERPASS_ENDPOINTS.forEach((endpoint, index) => {
-      void requestEndpoint(endpoint, index * 350)
+      void requestEndpoint(
+        endpoint,
+        index * OVERPASS_HEDGE_DELAY_MS
+      )
         .then((elements) => {
           if (settled) return;
           settled = true;
+
+          console.log(
+            `[DETOUR SCENE] discovery ready ${Date.now() - overallStartedAt}ms`
+          );
+
           resolve(elements);
         })
         .catch(fail);
@@ -878,18 +954,30 @@ async function fetchOverpass(query: string) {
   });
 }
 
-
 async function fetchOverpassCached(query: string) {
   const cached = overpassCache.get(query);
 
   if (cached && cached.expiresAt > Date.now()) {
+    console.log('[DETOUR SCENE] cache hit');
     return cached.elements;
   }
 
-  const inFlight = overpassInFlight.get(query);
-  if (inFlight) return inFlight;
+  if (cached) {
+    overpassCache.delete(query);
+  }
 
-  const request = fetchOverpass(query)
+  const inFlight = overpassInFlight.get(query);
+  if (inFlight) {
+    console.log(
+      `[DETOUR SCENE] joined in-flight request · ${Date.now() - inFlight.startedAt}ms old`
+    );
+    return inFlight.promise;
+  }
+
+  const startedAt = Date.now();
+  let request!: Promise<OverpassElement[]>;
+
+  request = fetchOverpass(query)
     .then((elements) => {
       overpassCache.set(query, {
         expiresAt: Date.now() + OVERPASS_CACHE_TTL,
@@ -898,10 +986,17 @@ async function fetchOverpassCached(query: string) {
       return elements;
     })
     .finally(() => {
-      overpassInFlight.delete(query);
+      const current = overpassInFlight.get(query);
+      if (current?.promise === request) {
+        overpassInFlight.delete(query);
+      }
     });
 
-  overpassInFlight.set(query, request);
+  overpassInFlight.set(query, {
+    promise: request,
+    startedAt,
+  });
+
   return request;
 }
 
@@ -921,7 +1016,7 @@ export async function findSceneCandidates(args: {
   distanceScale?: number;
 }) {
   const elements = await fetchOverpassCached(
-    buildQuery(args.start, args.moodId)
+    buildQuery(args.start, args.moodId, args.minutes)
   );
 
   const excluded = new Set(args.excludeSceneIds ?? []);
