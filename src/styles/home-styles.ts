@@ -5,6 +5,7 @@ import { collectionStyles } from './home/collection-styles';
 import { legacyStyles } from './home/legacy-styles';
 import { ticketRecapStyles } from './home/ticket-recap-styles';
 import { printerOverrides } from './home/printer-overrides';
+import { recapOverrides } from './home/recap-overrides';
 
 export const styles = {
   ...baseStyles,
@@ -14,4 +15,5 @@ export const styles = {
   ...legacyStyles,
   ...ticketRecapStyles,
   ...printerOverrides,
+  ...recapOverrides,
 };
