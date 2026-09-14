@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { BONE, INK, MUTED, SIGNAL, SOFT } from '../../theme/detour-theme';
+import { INK, MUTED, SIGNAL, SOFT } from '../../theme/detour-theme';
 
 export const recapOverrides = StyleSheet.create({
   v45FinishScroll: {
@@ -258,7 +258,7 @@ export const recapOverrides = StyleSheet.create({
     marginTop: 9,
     fontSize: 18,
     lineHeight: 29,
-    fontWeight: '650',
+    fontWeight: '600',
     color: INK,
   },
   v45ShareButton: {
