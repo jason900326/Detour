@@ -367,6 +367,36 @@ export function DetourHomeView({
     completeDetour,
   } = controller;
 
+  const fateRoll = useRef(new Animated.Value(0)).current;
+  const [fateRolling, setFateRolling] = useState(false);
+
+  function rollRandomMood() {
+    if (fateRolling) return;
+
+    const choices = MOODS.filter((item) => item.id !== 'surprise');
+    const picked = choices[Math.floor(Math.random() * choices.length)];
+    if (!picked) return;
+
+    setFateRolling(true);
+    setSelectedMood(null);
+    fateRoll.stopAnimation();
+    fateRoll.setValue(0);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    Animated.timing(fateRoll, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      fateRoll.setValue(0);
+      setFateRolling(false);
+      if (finished) {
+        void chooseMood(picked.id);
+      }
+    });
+  }
+
   return (
     <View
       style={[
@@ -1025,7 +1055,7 @@ export function DetourHomeView({
             </View>
 
             <View style={styles.v45MoodGrid}>
-              {MOODS.map((item) => {
+              {MOODS.filter((item) => item.id !== 'surprise').map((item) => {
                 const active = selectedMood === item.id;
                 return (
                   <Pressable
@@ -1042,6 +1072,38 @@ export function DetourHomeView({
                   </Pressable>
                 );
               })}
+
+              <Pressable
+                accessibilityLabel="隨機選一個心情"
+                disabled={fateRolling}
+                onPress={rollRandomMood}
+                style={({ pressed }) => [
+                  styles.v45MoodCard,
+                  fateRolling && styles.v45MoodCardActive,
+                  pressed && !fateRolling && styles.v45MoodCardPressed,
+                ]}
+              >
+                <Animated.View
+                  style={{
+                    transform: [
+                      {
+                        rotate: fateRoll.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '540deg'],
+                        }),
+                      },
+                      {
+                        scale: fateRoll.interpolate({
+                          inputRange: [0, 0.45, 1],
+                          outputRange: [1, 0.82, 1],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <V45MoodIcon moodId="surprise" size={88} />
+                </Animated.View>
+              </Pressable>
             </View>
 
             <Pressable
