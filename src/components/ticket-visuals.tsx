@@ -22,10 +22,8 @@ const STUB_ARTWORK = Image.resolveAssetSource(DETOUR_TICKET_STUB_SOURCE);
 export const DETOUR_TICKET_HEIGHT =
   DETOUR_TICKET_WIDTH * (TICKET_ARTWORK.height / TICKET_ARTWORK.width);
 
-// Geometry measured from the artwork reference supplied with the corrected
-// stub. The main paper lives inside a larger transparent export canvas; the
-// detachable strip belongs in that lower transparent area rather than on top
-// of the printed content.
+// Geometry measured from the final ticket artwork. The detachable stub is a
+// separate authored PNG and is rendered without runtime tinting or recoloring.
 const TICKET_REFERENCE_WIDTH = 1122;
 const TICKET_REFERENCE_HEIGHT = 1402;
 const MAIN_PAPER_LEFT = 35;
@@ -188,19 +186,6 @@ function TearableTicketStub() {
       <Image
         source={DETOUR_TICKET_STUB_SOURCE}
         style={{ width: '100%', height: '100%' }}
-        resizeMode="contain"
-      />
-      <Image
-        source={DETOUR_TICKET_STUB_SOURCE}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          tintColor: '#D28A54',
-          opacity: 0.18,
-        }}
         resizeMode="contain"
       />
     </Animated.View>
