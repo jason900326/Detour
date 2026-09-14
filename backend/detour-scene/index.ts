@@ -290,6 +290,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const requestStartedAt = Date.now();
+  let activeDescriptor: QueryDescriptor | null = null;
 
   try {
     const contentType = req.headers.get("content-type") ?? "";
@@ -310,19 +311,19 @@ Deno.serve(async (req: Request) => {
 
     const bodyText = await req.text();
     const query = new URLSearchParams(bodyText).get("data") ?? "";
-    const descriptor = parseQueryDescriptor(query);
+    activeDescriptor = parseQueryDescriptor(query);
 
-    if (!descriptor) {
+    if (!activeDescriptor) {
       return json({ error: "INVALID_SCENE_QUERY" }, 400);
     }
 
     const admin = getAdminClient();
     if (!admin) {
       console.log("[DETOUR SCENE API] database admin key unavailable");
-      return generatedResponse(descriptor, requestStartedAt);
+      return generatedResponse(activeDescriptor, requestStartedAt);
     }
 
-    const databaseElements = await findDatabaseScenes(admin, descriptor);
+    const databaseElements = await findDatabaseScenes(admin, activeDescriptor);
     if (databaseElements && databaseElements.length > 0) {
       console.log(
         `[DETOUR SCENE API] database response ${Date.now() - requestStartedAt}ms`,
@@ -342,20 +343,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return generatedResponse(descriptor, requestStartedAt);
+    return generatedResponse(activeDescriptor, requestStartedAt);
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     console.log(
       `[DETOUR SCENE API] request failed ${Date.now() - requestStartedAt}ms · ${message}`,
     );
 
-    // General Detours must remain playable even if the database itself has a
-    // temporary fault. Food still refuses to invent a restaurant.
-    const fallbackBody = await req.clone().text().catch(() => "");
-    const fallbackQuery = new URLSearchParams(fallbackBody).get("data") ?? "";
-    const fallbackDescriptor = parseQueryDescriptor(fallbackQuery);
-    if (fallbackDescriptor) {
-      return generatedResponse(fallbackDescriptor, requestStartedAt);
+    if (activeDescriptor) {
+      return generatedResponse(activeDescriptor, requestStartedAt);
     }
 
     return json(
