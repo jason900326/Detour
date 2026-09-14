@@ -28,13 +28,39 @@ const FOOT_ROUTER =
   'https://routing.openstreetmap.de/routed-foot/route/v1/driving';
 
 let lastRoutingRequestAt = 0;
-const WALKING_ROUTE_CACHE_TTL = 2 * 60 * 1000;
-const walkingRouteCache = new Map<string, { expiresAt: number; route: WalkingRoute }>();
+const WALKING_ROUTE_CACHE_TTL = 5 * 60 * 1000;
+const ROUTE_REQUEST_SPACING_MS = 1100;
+const PREWARM_ROUTE_TIMEOUT_MS = 2600;
+const TICKET_ROUTING_BUDGET_MS = 3600;
+const TICKET_ROUTE_TIMEOUT_MS = 2200;
+const MAX_TICKET_NETWORK_ATTEMPTS = 2;
+
+const walkingRouteCache = new Map<
+  string,
+  { expiresAt: number; route: WalkingRoute }
+>();
 const walkingRouteInFlight = new Map<string, Promise<WalkingRoute>>();
 
 function walkingRouteCacheKey(start: GeoPoint, destination: GeoPoint) {
   const round = (value: number) => value.toFixed(5);
   return `${round(start.latitude)},${round(start.longitude)}>${round(destination.latitude)},${round(destination.longitude)}`;
+}
+
+function getCachedWalkingRoute(
+  start: GeoPoint,
+  destination: GeoPoint
+): WalkingRoute | null {
+  const cacheKey = walkingRouteCacheKey(start, destination);
+  const cached = walkingRouteCache.get(cacheKey);
+
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    walkingRouteCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.route;
 }
 
 function wait(ms: number) {
@@ -43,7 +69,7 @@ function wait(ms: number) {
 
 async function throttleRouter() {
   const elapsed = Date.now() - lastRoutingRequestAt;
-  const waitFor = Math.max(0, 1100 - elapsed);
+  const waitFor = Math.max(0, ROUTE_REQUEST_SPACING_MS - elapsed);
 
   if (waitFor > 0) await wait(waitFor);
   lastRoutingRequestAt = Date.now();
@@ -69,8 +95,8 @@ export async function fetchWalkingRoute(
   timeoutMs = 12000
 ): Promise<WalkingRoute> {
   const cacheKey = walkingRouteCacheKey(start, destination);
-  const cached = walkingRouteCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.route;
+  const cached = getCachedWalkingRoute(start, destination);
+  if (cached) return cached;
 
   // Prewarm and ticket issue often ask for the exact same leg at nearly the
   // same time. Share that request instead of queueing a duplicate behind the
@@ -123,32 +149,6 @@ export async function fetchWalkingRoute(
   return request;
 }
 
-export async function prewarmWalkingRoutes(
-  start: GeoPoint,
-  candidates: SceneCandidate[],
-  limit = 2,
-  minutes = 15,
-  distanceScale = 1
-) {
-  const straightTarget = targetDistance(minutes) * distanceScale * 0.74;
-  const likely = candidates
-    .slice(0, 7)
-    .sort(
-      (a, b) =>
-        Math.abs(a.straightDistanceMeters - straightTarget) -
-        Math.abs(b.straightDistanceMeters - straightTarget)
-    )
-    .slice(0, Math.max(0, limit));
-
-  for (const scene of likely) {
-    try {
-      await fetchWalkingRoute(start, scene.point, 3200);
-    } catch {
-      // Prewarming is opportunistic; ticket issue can still try another route.
-    }
-  }
-}
-
 function targetDistance(minutes: number) {
   const safeMinutes = Math.max(5, Math.min(90, Math.round(minutes / 5) * 5));
 
@@ -172,6 +172,60 @@ function routeDistanceProfile(minutes: number, distanceScale = 1) {
     min: Math.max(120, target * 0.68),
     max: target * 1.28,
   };
+}
+
+function routingShortlist(
+  candidates: SceneCandidate[],
+  minutes: number,
+  distanceScale: number,
+  limit: number
+) {
+  const straightTarget = targetDistance(minutes) * distanceScale * 0.74;
+
+  return candidates
+    .slice(0, 18)
+    .sort(
+      (a, b) =>
+        Math.abs(a.straightDistanceMeters - straightTarget) -
+        Math.abs(b.straightDistanceMeters - straightTarget)
+    )
+    .slice(0, Math.max(0, limit));
+}
+
+export async function prewarmWalkingRoutes(
+  start: GeoPoint,
+  candidates: SceneCandidate[],
+  limit = 2,
+  minutes = 15,
+  distanceScale = 1
+) {
+  const startedAt = Date.now();
+  const likely = routingShortlist(
+    candidates,
+    minutes,
+    distanceScale,
+    Math.min(2, Math.max(0, limit))
+  );
+
+  let warmed = 0;
+
+  for (const scene of likely) {
+    if (getCachedWalkingRoute(start, scene.point)) {
+      warmed += 1;
+      continue;
+    }
+
+    try {
+      await fetchWalkingRoute(start, scene.point, PREWARM_ROUTE_TIMEOUT_MS);
+      warmed += 1;
+    } catch {
+      // Prewarming is opportunistic; ticket issue can still try the route.
+    }
+  }
+
+  console.log(
+    `[DETOUR PREWARM] routes ${warmed}/${likely.length} ready in ${Date.now() - startedAt}ms`
+  );
 }
 
 function distanceBetweenPoints(a: GeoPoint, b: GeoPoint) {
@@ -231,6 +285,54 @@ function estimatedJourneySeconds(
   return cityWalking + findAndPhoto + arrival;
 }
 
+type RouteAssessment = {
+  score: number;
+  preferred: boolean;
+  fallback: boolean;
+  emergency: boolean;
+};
+
+function assessRoute(args: {
+  route: WalkingRoute;
+  profile: ReturnType<typeof routeDistanceProfile>;
+  maxDistance: number;
+  timeBudgetSeconds: number;
+  sideMissionCount: number;
+  minutes: number;
+  avoidRoutes: GeoPoint[][];
+}): RouteAssessment {
+  const overlap = routeOverlapRatio(args.route.coordinates, args.avoidRoutes);
+  const estimatedSeconds = estimatedJourneySeconds(
+    args.route,
+    args.sideMissionCount,
+    args.minutes
+  );
+  const overtimeSeconds = Math.max(0, estimatedSeconds - args.timeBudgetSeconds);
+  const distanceDelta = Math.abs(args.route.distanceMeters - args.profile.target);
+
+  // History overlap is a preference, never a blocker. A repeated route should
+  // lose against an equally fast fresh route, but it must not stop ticket issue.
+  const noveltyPenalty = overlap * args.profile.target * 0.95;
+  const overtimePenalty = overtimeSeconds * 1.4;
+  const score = distanceDelta + noveltyPenalty + overtimePenalty;
+
+  const distanceFits =
+    args.route.distanceMeters >= args.profile.min &&
+    args.route.distanceMeters <= args.maxDistance;
+  const timeFits = estimatedSeconds <= args.timeBudgetSeconds;
+
+  return {
+    score,
+    preferred: distanceFits && timeFits,
+    fallback:
+      args.route.distanceMeters >= 70 &&
+      estimatedSeconds <= args.timeBudgetSeconds * 1.12,
+    emergency:
+      args.route.distanceMeters >= 70 &&
+      estimatedSeconds <= args.timeBudgetSeconds * 1.3,
+  };
+}
+
 export async function resolveRoutedScene(args: {
   start: GeoPoint;
   candidates: SceneCandidate[];
@@ -240,92 +342,140 @@ export async function resolveRoutedScene(args: {
   sideMissionCount?: number;
   avoidRoutes?: GeoPoint[][];
 }): Promise<RoutedScene> {
-  const profile = routeDistanceProfile(
-    args.minutes,
-    args.distanceScale ?? 1
-  );
+  const routingStartedAt = Date.now();
+  const distanceScale = args.distanceScale ?? 1;
+  const profile = routeDistanceProfile(args.minutes, distanceScale);
   const maxDistance = args.maxDistanceMeters ?? profile.max;
-  const straightTarget = profile.target * 0.74;
   const sideMissionCount = args.sideMissionCount ?? 0;
   const avoidRoutes = args.avoidRoutes ?? [];
   const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
-  const routingStartedAt = Date.now();
-  const TICKET_ROUTING_BUDGET_MS = 4800;
 
-  // Search a broader quality window, then try the candidates closest to the
-  // requested time first. This avoids throwing away perfectly walkable nearby
-  // places just because they ranked 8th or 9th on POI quality.
-  const shortlist = args.candidates
-    .slice(0, 18)
-    .sort(
-      (a, b) =>
-        Math.abs(a.straightDistanceMeters - straightTarget) -
-        Math.abs(b.straightDistanceMeters - straightTarget)
-    )
-    .slice(0, 5);
+  // Prewarm and ticket issue use the exact same order. Do not spend time on a
+  // second ranking pass that points the printer at routes it never warmed.
+  const shortlist = routingShortlist(
+    args.candidates,
+    args.minutes,
+    distanceScale,
+    3
+  );
 
-  let bestFallback: RoutedScene | null = null;
-  let bestFallbackScore = Number.POSITIVE_INFINITY;
+  let bestCached: RoutedScene | null = null;
+  let bestCachedScore = Number.POSITIVE_INFINITY;
 
+  // Cache-first is the main fast path. Inspect all warmed shortlist routes
+  // synchronously before making any new network request.
   for (const scene of shortlist) {
-    if (Date.now() - routingStartedAt > TICKET_ROUTING_BUDGET_MS && bestFallback) {
-      break;
+    const route = getCachedWalkingRoute(args.start, scene.point);
+    if (!route) continue;
+
+    const assessment = assessRoute({
+      route,
+      profile,
+      maxDistance,
+      timeBudgetSeconds,
+      sideMissionCount,
+      minutes: args.minutes,
+      avoidRoutes,
+    });
+
+    if (assessment.preferred) {
+      if (assessment.score < bestCachedScore) {
+        bestCached = { scene, route };
+        bestCachedScore = assessment.score;
+      }
+      continue;
     }
 
-    try {
-      const route = await fetchWalkingRoute(args.start, scene.point, 3200);
-      const overlap = routeOverlapRatio(route.coordinates, avoidRoutes);
-      const estimatedSeconds = estimatedJourneySeconds(
-        route,
-        sideMissionCount,
-        args.minutes
-      );
-      const overtimeSeconds = Math.max(0, estimatedSeconds - timeBudgetSeconds);
-      const distanceDelta = Math.abs(route.distanceMeters - profile.target);
-      const noveltyPenalty = overlap * profile.target * 0.95;
-      const overtimePenalty = overtimeSeconds * 1.4;
-      const score = distanceDelta + noveltyPenalty + overtimePenalty;
-
-      if (
-        route.distanceMeters >= 70 &&
-        estimatedSeconds <= timeBudgetSeconds * 1.12 &&
-        score < bestFallbackScore
-      ) {
-        bestFallback = { scene, route };
-        bestFallbackScore = score;
-      }
-
-      // A route that is safely inside the time/distance envelope is already
-      // good enough for a fast ticket, even if it misses the ideal-distance
-      // band or repeats a little more history than preferred.
-      const fastFallbackFits =
-        route.distanceMeters >= 70 &&
-        estimatedSeconds <= timeBudgetSeconds * 1.06 &&
-        overlap <= 0.85;
-
-      const distanceFits =
-        route.distanceMeters >= profile.min &&
-        route.distanceMeters <= maxDistance;
-      const timeFits = estimatedSeconds <= timeBudgetSeconds;
-      const noveltyFits = overlap <= 0.62;
-
-      // Fast path: a route that clears all product gates is good enough. Do not
-      // make the user wait while we compare mathematically nicer alternatives.
-      if (distanceFits && timeFits && noveltyFits) {
-        return { scene, route };
-      }
-
-      if (fastFallbackFits) {
-        return { scene, route };
-      }
-    } catch {
-      // Try the next Scene while the small routing budget remains.
+    if (
+      assessment.fallback &&
+      assessment.score < bestCachedScore
+    ) {
+      bestCached = { scene, route };
+      bestCachedScore = assessment.score;
     }
   }
 
-  if (bestFallback) return bestFallback;
+  if (bestCached) {
+    console.log(
+      `[DETOUR ROUTE] cache hit in ${Date.now() - routingStartedAt}ms`
+    );
+    return bestCached;
+  }
+
+  let bestEmergency: RoutedScene | null = null;
+  let bestEmergencyScore = Number.POSITIVE_INFINITY;
+  let networkAttempts = 0;
+
+  for (const scene of shortlist) {
+    if (networkAttempts >= MAX_TICKET_NETWORK_ATTEMPTS) break;
+
+    const elapsed = Date.now() - routingStartedAt;
+    const remaining = TICKET_ROUTING_BUDGET_MS - elapsed;
+
+    // Keep enough room for the router throttle itself. If there is not enough
+    // wall-clock budget left, stop instead of chaining another slow request.
+    if (remaining <= 700) break;
+
+    networkAttempts += 1;
+
+    try {
+      const timeoutMs = Math.min(
+        TICKET_ROUTE_TIMEOUT_MS,
+        Math.max(700, remaining - ROUTE_REQUEST_SPACING_MS)
+      );
+      const route = await fetchWalkingRoute(
+        args.start,
+        scene.point,
+        timeoutMs
+      );
+      const assessment = assessRoute({
+        route,
+        profile,
+        maxDistance,
+        timeBudgetSeconds,
+        sideMissionCount,
+        minutes: args.minutes,
+        avoidRoutes,
+      });
+
+      // Speed is more important than comparing five mathematically similar
+      // routes. The first route inside the preferred envelope wins.
+      if (assessment.preferred) {
+        console.log(
+          `[DETOUR ROUTE] network hit ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
+        );
+        return { scene, route };
+      }
+
+      // Time is intentionally soft. A safe usable route should issue rather
+      // than blocking the printer while we hunt for a slightly nicer number.
+      if (assessment.fallback) {
+        console.log(
+          `[DETOUR ROUTE] soft fallback ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
+        );
+        return { scene, route };
+      }
+
+      if (
+        assessment.emergency &&
+        assessment.score < bestEmergencyScore
+      ) {
+        bestEmergency = { scene, route };
+        bestEmergencyScore = assessment.score;
+      }
+    } catch {
+      // Try at most one more candidate while the hard ticket budget remains.
+    }
+  }
+
+  if (bestEmergency) {
+    console.log(
+      `[DETOUR ROUTE] emergency fallback in ${Date.now() - routingStartedAt}ms`
+    );
+    return bestEmergency;
+  }
 
   throw new Error(
-    `附近有 Scene，但目前找不到符合 ${args.minutes} 分鐘節奏的步行主線。`
+    '附近有可探索的方向，但步行路線服務這次沒有及時回應。請再印一次。'
   );
 }
