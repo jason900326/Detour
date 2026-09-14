@@ -79,7 +79,7 @@ export const ticketRecapStyles = StyleSheet.create({
   v48PaperViewport: {
     position: 'absolute',
     top: 47,
-    width: 318,
+    width: 288,
     height: 409,
     overflow: 'hidden',
     alignItems: 'center',
@@ -88,7 +88,7 @@ export const ticketRecapStyles = StyleSheet.create({
   v48PaperTrack: {
     position: 'absolute',
     top: 0,
-    width: 318,
+    width: 288,
     alignItems: 'center',
   },
   v50PrinterFrontLip: {
@@ -1021,7 +1021,7 @@ export const ticketRecapStyles = StyleSheet.create({
     height: '100%',
   },
   v46ArtTicket: {
-    width: 310,
+    width: 280,
     aspectRatio: 1115 / 1411,
     position: 'relative',
   },
