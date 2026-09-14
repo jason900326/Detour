@@ -180,8 +180,7 @@ function classifyScene(
   }
 
   if (
-    ['park', 'garden'].includes(tags.leisure ?? '') &&
-    Boolean(tags.name)
+    ['park', 'garden'].includes(tags.leisure ?? '')
   ) {
     return { kind: 'green-space', label: '綠地' };
   }
@@ -310,19 +309,21 @@ function destinationTier(
     return null;
   }
 
-  // Never resurrect anonymous generic infrastructure as a destination.
+  // Discovery should be permissive. Anonymous public infrastructure is
+  // fallback material rather than an automatic rejection; routing and the
+  // public-access gates still decide whether it can become a real ticket.
   if (
     ['steps', 'footbridge', 'pedestrian'].includes(kind) &&
     !hasStrongIdentity(tags)
   ) {
-    return null;
+    return 'fallback';
   }
 
   if (
     kind === 'historic' &&
     !hasStrongIdentity(tags)
   ) {
-    return null;
+    return 'fallback';
   }
 
   // Visual objects can stand on their own even without a formal name.
@@ -331,7 +332,9 @@ function destinationTier(
   ) {
     return qualityScore >= 30
       ? 'primary'
-      : null;
+      : qualityScore >= 18
+        ? 'fallback'
+        : null;
   }
 
   // Named culture / markets / public bookcases / heritage objects are
@@ -346,7 +349,7 @@ function destinationTier(
   ) {
     return qualityScore >= 26
       ? 'primary'
-      : qualityScore >= 20
+      : qualityScore >= 14
         ? 'fallback'
         : null;
   }
@@ -354,16 +357,14 @@ function destinationTier(
   // Parks/gardens are explicitly fallback material: they keep the app
   // playable in sparse OSM areas, but should never outrank richer scenes.
   if (kind === 'green-space') {
-    return Boolean(tags.name)
-      ? 'fallback'
-      : null;
+    return 'fallback';
   }
 
   if (qualityScore >= 24) {
     return 'primary';
   }
 
-  if (qualityScore >= 16) {
+  if (qualityScore >= 10) {
     return 'fallback';
   }
 
@@ -707,7 +708,10 @@ function scoreDistance(
     distanceScale
   );
 
-  if (distanceMeters > profile.max * 1.18) return -999;
+  // Candidate discovery should not reject a place just because the
+  // straight-line estimate is imperfect. The routed-walk stage is the
+  // authority on whether the trip actually fits the selected time.
+  if (distanceMeters > profile.max * 1.55) return -999;
 
   if (distanceMeters < 55) return -34;
 
@@ -741,7 +745,7 @@ function buildQuery(
   nwr${around}["amenity"~"restaurant|fast_food|cafe|food_court|ice_cream"]["name"];
   nwr${around}["shop"~"bakery|confectionery|deli|pastry|beverages|coffee|tea"]["name"];
 );
-out center 100;
+out center 180;
 `;
   }
 
@@ -756,15 +760,15 @@ out center 100;
   nwr${around}["amenity"="public_bookcase"];
   nwr${around}["tourism"~"gallery|museum"]["name"];
   nwr${around}["amenity"="arts_centre"]["name"];
-  nwr${around}["leisure"~"park|garden"]["name"];
-  nwr${around}["historic"]["name"];
+  nwr${around}["leisure"~"park|garden"];
+  nwr${around}["historic"];
   nwr${around}["historic"="memorial"]["memorial"~"statue|sculpture|bust"];
   nwr${around}["natural"="tree"]["heritage"];
   way${around}["highway"="steps"];
   way${around}["highway"~"footway|pedestrian|path"]["bridge"="yes"];
-  way${around}["highway"="pedestrian"]["name"];
+  way${around}["highway"="pedestrian"];
 );
-out center 100;
+out center 180;
 `;
 }
 
@@ -1095,7 +1099,7 @@ export async function findSceneCandidates(args: {
 
       return b.score - a.score;
     })
-    .slice(0, 24);
+    .slice(0, 40);
 }
 
 export function buildSceneArrivalMission(args: {
