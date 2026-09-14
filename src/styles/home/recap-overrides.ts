@@ -1,7 +1,12 @@
 import { StyleSheet } from 'react-native';
-import { BONE, INK, LINE, MUTED, SIGNAL, SOFT } from '../../theme/detour-theme';
+import { INK, MUTED, SIGNAL, SOFT } from '../../theme/detour-theme';
 
 export const recapOverrides = StyleSheet.create({
+  v45FinishScroll: {
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 104,
+  },
   v45FinishTitleWrap: {
     alignSelf: 'center',
     alignItems: 'center',
@@ -13,159 +18,265 @@ export const recapOverrides = StyleSheet.create({
     right: 0,
     bottom: -8,
   },
-
-  v51CompleteCard: {
-    width: '100%',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#D3CCBF',
-    borderRadius: 18,
-    backgroundColor: '#FBF8EF',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  v51CompleteTopInfo: {
-    minHeight: 68,
-    paddingHorizontal: 18,
+  v45FinishPrimary: {
+    height: 64,
+    marginTop: 26,
+    backgroundColor: SIGNAL,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#D9D2C6',
+    justifyContent: 'center',
+    gap: 14,
+    borderRadius: 4,
   },
-  v51CompleteTopBrand: {
-    flex: 1.2,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1.4,
+  v45FinishPrimaryArrow: {
+    fontSize: 28,
     color: INK,
   },
-  v51CompleteTopMeta: {
-    flex: 0.9,
-    fontSize: 13,
+  v45FinishPrimaryText: {
+    fontSize: 22,
     fontWeight: '900',
-    textAlign: 'center',
     color: INK,
   },
-  v51CompleteTopDate: {
-    flex: 1.3,
-    fontSize: 12,
+  v45FinishSecondary: {
+    height: 50,
+    marginTop: 10,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  v45FinishSecondaryText: {
+    fontSize: 17,
     fontWeight: '800',
-    textAlign: 'right',
     color: MUTED,
   },
-  v51CompleteMedia: {
+
+  v52CompleteStory: {
     width: '100%',
-    height: 306,
-    backgroundColor: '#E8E2D7',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  v52ReviewStory: {
+    width: '100%',
+  },
+  v52HeroStage: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#E4DED4',
+  },
+  v52HeroPhoto: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E4DED4',
+  },
+  v52ThumbRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 7,
+  },
+  v52ThumbPress: {
+    flex: 1,
+    height: 56,
+    borderRadius: 9,
     overflow: 'hidden',
   },
-  v51CompleteHeroPhoto: {
+  v52Thumb: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E8E2D7',
-  },
-  v51CompleteMediaFallback: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  v51CompleteMediaFallbackText: {
-    fontSize: 19,
-    fontWeight: '900',
-    color: MUTED,
-  },
-  v51CompleteThumbRow: {
-    minHeight: 72,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    flexDirection: 'row',
-    gap: 6,
-    backgroundColor: '#F5F0E6',
-    borderTopWidth: 1,
-    borderTopColor: '#D9D2C6',
-    borderBottomWidth: 1,
-    borderBottomColor: '#D9D2C6',
-  },
-  v51CompleteThumbPress: {
-    flex: 1,
-    height: 54,
-  },
-  v51CompleteThumb: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-    borderWidth: 2,
+    borderRadius: 9,
+    borderWidth: 1,
     borderColor: 'transparent',
     backgroundColor: SOFT,
+    opacity: 0.68,
   },
-  v51CompleteThumbActive: {
+  v52ThumbActive: {
     borderColor: SIGNAL,
+    opacity: 1,
   },
-  v51CompleteCopy: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 20,
+  v52CompleteCopy: {
+    paddingTop: 20,
+    paddingBottom: 4,
   },
-  v51CompleteKicker: {
+  v52ReviewCopy: {
+    paddingTop: 20,
+  },
+  v52Eyebrow: {
     fontSize: 14,
-    fontWeight: '800',
-    color: MUTED,
-  },
-  v51CompleteDestination: {
-    marginTop: 5,
-    fontSize: 28,
-    lineHeight: 33,
+    lineHeight: 19,
     fontWeight: '900',
-    letterSpacing: -0.8,
+    color: SIGNAL,
+  },
+  v52Destination: {
+    marginTop: 5,
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: '900',
+    letterSpacing: -1.1,
     color: INK,
   },
-  v51CompleteMeta: {
-    marginTop: 8,
+  v52TripFacts: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  v52TripFact: {
     fontSize: 14,
+    lineHeight: 19,
     fontWeight: '800',
     color: MUTED,
   },
-  v51CompleteBand: {
-    minHeight: 58,
-    paddingHorizontal: 20,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    backgroundColor: SIGNAL,
-  },
-  v51CompleteBandText: {
-    fontSize: 21,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: BONE,
+  v52TripFactDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#A49E94',
   },
 
-  v51RouteTrace: {
+  v52RouteSection: {
+    marginTop: 30,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#D8D1C5',
+  },
+  v52SectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 13,
+  },
+  v52SectionTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '900',
+    color: INK,
+  },
+  v52SectionMeta: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  v52RouteStage: {
+    width: '100%',
+    height: 190,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#EAE4D9',
+  },
+  v52RouteTrace: {
     width: '100%',
     height: '100%',
     position: 'relative',
     backgroundColor: '#EAE4D9',
     overflow: 'hidden',
   },
-  v51RouteTraceLabel: {
+  v52RouteTraceLabel: {
     position: 'absolute',
     left: 14,
     bottom: 13,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: 'rgba(245,241,232,0.92)',
-    borderWidth: 1,
-    borderColor: '#CFC7BA',
   },
-  v51RouteTraceLabelText: {
+  v52RouteTraceLabelText: {
     fontSize: 12,
+    fontWeight: '900',
+    color: INK,
+  },
+  v52RouteMissing: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 34,
+    backgroundColor: '#EAE4D9',
+  },
+  v52RouteMissingTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '900',
+    textAlign: 'center',
+    color: INK,
+  },
+  v52RouteMissingBody: {
+    marginTop: 7,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: MUTED,
+  },
+
+  v45DetailScreen: {
+    flex: 1,
+    backgroundColor: '#F5F1E8',
+    paddingTop: 58,
+    overflow: 'hidden',
+  },
+  v45DetailTop: {
+    height: 64,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  v45DetailTitle: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
+    letterSpacing: -1.3,
+    color: INK,
+  },
+  v45DetailScroll: {
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    paddingBottom: 76,
+  },
+  v45DetailThumbRow: {
+    display: 'none',
+  },
+  v45RouteStrip: {
+    display: 'none',
+  },
+  v45NoteCard: {
+    marginTop: 30,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
+  v45NoteTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    color: MUTED,
+  },
+  v45NoteBody: {
+    marginTop: 9,
+    fontSize: 18,
+    lineHeight: 29,
+    fontWeight: '600',
+    color: INK,
+  },
+  v45ShareButton: {
+    height: 66,
+    marginTop: 30,
+    backgroundColor: SIGNAL,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    borderRadius: 4,
+  },
+  v45ShareIcon: {
+    fontSize: 27,
+    color: INK,
+  },
+  v45ShareText: {
+    fontSize: 21,
     fontWeight: '900',
     color: INK,
   },
@@ -187,8 +298,7 @@ export const recapOverrides = StyleSheet.create({
     height: 300,
     borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#D2CBBD',
+    backgroundColor: '#EAE4D9',
   },
   v51PosterHomeRoute: {
     width: '100%',
@@ -196,20 +306,72 @@ export const recapOverrides = StyleSheet.create({
     marginTop: 10,
   },
 
-  v51ReviewHeroStage: {
-    position: 'absolute',
-    left: '10.2%',
-    top: '17.1%',
-    width: '79.2%',
-    height: '38.4%',
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#E8E2D7',
+  v45Poster: {
+    width: 360,
+    height: 640,
+    backgroundColor: '#F5F1E8',
+    padding: 22,
   },
-  v46ReviewHeroPhoto: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-    backgroundColor: '#E8E2D7',
+  v45PosterTop: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  v45PosterBrand: {
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    color: INK,
+  },
+  v45PosterDate: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  v45PosterCopy: {
+    paddingTop: 18,
+  },
+  v45PosterMood: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+    letterSpacing: -1.3,
+    color: INK,
+  },
+  v45PosterDestination: {
+    marginTop: 3,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: '800',
+    color: INK,
+  },
+  v45PosterOrangeRule: {
+    width: 94,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 10,
+    backgroundColor: SIGNAL,
+    transform: [{ rotate: '-3deg' }],
+  },
+  v45PosterFacts: {
+    marginTop: 13,
+    flexDirection: 'row',
+    gap: 18,
+  },
+  v45PosterFact: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: MUTED,
+  },
+
+  v51CompleteCard: {
+    display: 'none',
+  },
+  v51ReviewHeroStage: {
+    display: 'none',
+  },
+  v46ReviewArtwork: {
+    display: 'none',
   },
 });

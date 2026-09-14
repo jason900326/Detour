@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import Svg, {
   Circle as SvgCircle,
-  Line as SvgLine,
   Polyline as SvgPolyline,
   Rect as SvgRect,
 } from 'react-native-svg';
@@ -12,7 +11,7 @@ import { styles } from '../styles/home-styles';
 
 const ROUTE_VIEW_WIDTH = 320;
 const ROUTE_VIEW_HEIGHT = 210;
-const ROUTE_PADDING = 28;
+const ROUTE_PADDING = 26;
 
 type RoutePoint = {
   latitude: number;
@@ -74,86 +73,88 @@ function projectedRoute(points: RoutePoint[]) {
   };
 }
 
-function JourneyRouteTrace({ entry }: { entry: PassportEntry }) {
+function JourneyRouteTrace({
+  entry,
+  showLabel = false,
+}: {
+  entry: PassportEntry;
+  showLabel?: boolean;
+}) {
   const route = projectedRoute(routeForEntry(entry));
 
+  if (!route) {
+    return (
+      <View style={styles.v52RouteMissing}>
+        <Text style={styles.v52RouteMissingTitle}>這趟沒有留下完整路徑</Text>
+        <Text style={styles.v52RouteMissingBody}>照片和旅程紀錄仍然會保留。</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.v51RouteTrace}>
+    <View style={styles.v52RouteTrace}>
       <Svg
         width="100%"
         height="100%"
         viewBox={`0 0 ${ROUTE_VIEW_WIDTH} ${ROUTE_VIEW_HEIGHT}`}
       >
-        {[64, 128, 192, 256].map((x) => (
-          <SvgLine
-            key={`grid-x-${x}`}
-            x1={x}
-            y1={0}
-            x2={x}
-            y2={ROUTE_VIEW_HEIGHT}
-            stroke="#D8D1C5"
-            strokeWidth={1}
-            strokeDasharray="4 8"
-          />
-        ))}
-        {[52, 104, 156].map((y) => (
-          <SvgLine
-            key={`grid-y-${y}`}
-            x1={0}
-            y1={y}
-            x2={ROUTE_VIEW_WIDTH}
-            y2={y}
-            stroke="#D8D1C5"
-            strokeWidth={1}
-            strokeDasharray="4 8"
-          />
-        ))}
-
-        {route ? (
-          <>
-            <SvgPolyline
-              points={route.points}
-              fill="none"
-              stroke="#11110F"
-              strokeWidth={7}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <SvgCircle
-              cx={route.start.x}
-              cy={route.start.y}
-              r={8}
-              fill="#FF5A35"
-              stroke="#F5F1E8"
-              strokeWidth={3}
-            />
-            <SvgRect
-              x={route.end.x - 8}
-              y={route.end.y - 8}
-              width={16}
-              height={16}
-              rx={2}
-              fill="#FF5A35"
-              stroke="#F5F1E8"
-              strokeWidth={3}
-            />
-          </>
-        ) : (
-          <SvgLine
-            x1={62}
-            y1={145}
-            x2={258}
-            y2={67}
-            stroke="#11110F"
-            strokeWidth={7}
-            strokeLinecap="round"
-          />
-        )}
+        <SvgPolyline
+          points={route.points}
+          fill="none"
+          stroke="#11110F"
+          strokeWidth={6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <SvgCircle
+          cx={route.start.x}
+          cy={route.start.y}
+          r={7}
+          fill="#FF5A35"
+          stroke="#F5F1E8"
+          strokeWidth={3}
+        />
+        <SvgRect
+          x={route.end.x - 7}
+          y={route.end.y - 7}
+          width={14}
+          height={14}
+          rx={2}
+          fill="#FF5A35"
+          stroke="#F5F1E8"
+          strokeWidth={3}
+        />
       </Svg>
 
-      <View style={styles.v51RouteTraceLabel}>
-        <Text style={styles.v51RouteTraceLabelText}>這趟走過的路</Text>
-      </View>
+      {showLabel && (
+        <View style={styles.v52RouteTraceLabel}>
+          <Text style={styles.v52RouteTraceLabelText}>這趟走過的路</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TripFacts({
+  minutes,
+  distanceKm,
+  photoCount,
+}: {
+  minutes: number;
+  distanceKm?: string;
+  photoCount: number;
+}) {
+  return (
+    <View style={styles.v52TripFacts}>
+      <Text style={styles.v52TripFact}>{minutes} 分鐘</Text>
+      {distanceKm !== undefined && (
+        <>
+          <View style={styles.v52TripFactDot} />
+          <Text style={styles.v52TripFact}>{distanceKm} 公里</Text>
+        </>
+      )}
+      <View style={styles.v52TripFactDot} />
+      <Text style={styles.v52TripFact}>{photoCount} 張照片</Text>
     </View>
   );
 }
@@ -186,7 +187,7 @@ export function V45SharePoster({
         </View>
       ) : (
         <View style={styles.v51PosterRouteStage}>
-          <JourneyRouteTrace entry={entry} />
+          <JourneyRouteTrace entry={entry} showLabel />
         </View>
       )}
 
@@ -231,45 +232,42 @@ export function V46CompleteArtwork({
   const minutes = entry?.actualDurationMinutes ?? entry?.minutes ?? fallbackMinutes;
   const activeIndex = Math.min(photoIndex, Math.max(0, photos.length - 1));
   const activePhoto = photos[activeIndex];
+  const distanceKm = entry
+    ? ((entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000).toFixed(1)
+    : undefined;
 
   return (
-    <View style={styles.v51CompleteCard}>
-      <View style={styles.v51CompleteTopInfo}>
-        <Text style={styles.v51CompleteTopBrand}>DETOUR</Text>
-        <Text style={styles.v51CompleteTopMeta}>{entry?.moodLabel ?? '旅程'}</Text>
-        <Text style={styles.v51CompleteTopMeta}>{minutes} 分</Text>
-        <Text style={styles.v51CompleteTopDate}>{formatPassportDate(completedAt)}</Text>
-      </View>
-
-      <View style={styles.v51CompleteMedia}>
+    <View style={styles.v52CompleteStory}>
+      <View style={styles.v52HeroStage}>
         {activePhoto ? (
           <Image
             source={{ uri: activePhoto.uri }}
-            style={styles.v51CompleteHeroPhoto}
+            style={styles.v52HeroPhoto}
             resizeMode="contain"
           />
         ) : entry ? (
-          <JourneyRouteTrace entry={entry} />
+          <JourneyRouteTrace entry={entry} showLabel />
         ) : (
-          <View style={styles.v51CompleteMediaFallback}>
-            <Text style={styles.v51CompleteMediaFallbackText}>這趟走過的路</Text>
+          <View style={styles.v52RouteMissing}>
+            <Text style={styles.v52RouteMissingTitle}>這趟已經完成</Text>
+            <Text style={styles.v52RouteMissingBody}>旅程紀錄正在整理。</Text>
           </View>
         )}
       </View>
 
       {photos.length > 1 && (
-        <View style={styles.v51CompleteThumbRow}>
+        <View style={styles.v52ThumbRow}>
           {photos.slice(0, 6).map((photo, index) => (
             <Pressable
               key={photo.id}
               onPress={() => setPhotoIndex(index)}
-              style={styles.v51CompleteThumbPress}
+              style={styles.v52ThumbPress}
             >
               <Image
                 source={{ uri: photo.uri }}
                 style={[
-                  styles.v51CompleteThumb,
-                  index === activeIndex && styles.v51CompleteThumbActive,
+                  styles.v52Thumb,
+                  index === activeIndex && styles.v52ThumbActive,
                 ]}
                 resizeMode="cover"
               />
@@ -278,18 +276,18 @@ export function V46CompleteArtwork({
         </View>
       )}
 
-      <View style={styles.v51CompleteCopy}>
-        <Text style={styles.v51CompleteKicker}>這趟走到了</Text>
-        <Text style={styles.v51CompleteDestination} numberOfLines={2}>
+      <View style={styles.v52CompleteCopy}>
+        <Text style={styles.v52Eyebrow}>
+          {entry?.moodLabel ?? '旅程'} · {formatPassportDate(completedAt)}
+        </Text>
+        <Text style={styles.v52Destination} numberOfLines={2}>
           {destination}
         </Text>
-        <Text style={styles.v51CompleteMeta}>
-          {photos.length} 張照片 · {minutes} 分鐘
-        </Text>
-      </View>
-
-      <View style={styles.v51CompleteBand}>
-        <Text style={styles.v51CompleteBandText}>旅程完成</Text>
+        <TripFacts
+          minutes={minutes}
+          distanceKm={distanceKm}
+          photoCount={photos.length}
+        />
       </View>
     </View>
   );
@@ -307,58 +305,68 @@ export function V46ReviewArtwork({
   const photos = entry.photos ?? [];
   const activeIndex = Math.min(photoIndex, Math.max(0, photos.length - 1));
   const activePhoto = photos[activeIndex];
-  const distanceKm = ((entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000).toFixed(1);
+  const minutes = entry.actualDurationMinutes ?? entry.minutes;
+  const distanceKm = (
+    (entry.distanceMeters ?? entry.plannedRouteDistanceMeters ?? 0) / 1000
+  ).toFixed(1);
 
   return (
-    <View style={styles.v46ReviewArtwork}>
-      <Image
-        source={require('../../assets/detour/journey-review-template.png')}
-        style={styles.v46ArtworkBase}
-        resizeMode="stretch"
-      />
-
-      <View style={styles.v46ReviewHeader}>
-        <Text style={styles.v46ReviewBrand}>DETOUR</Text>
-        <Text style={styles.v46ReviewDate}>{formatPassportDate(entry.completedAt)}</Text>
-      </View>
-
-      {activePhoto ? (
-        <View style={styles.v51ReviewHeroStage}>
+    <View style={styles.v52ReviewStory}>
+      <View style={styles.v52HeroStage}>
+        {activePhoto ? (
           <Image
             source={{ uri: activePhoto.uri }}
-            style={styles.v46ReviewHeroPhoto}
+            style={styles.v52HeroPhoto}
             resizeMode="contain"
           />
-        </View>
-      ) : null}
+        ) : (
+          <JourneyRouteTrace entry={entry} showLabel />
+        )}
+      </View>
 
-      <View style={styles.v46ReviewThumbRow}>
-        {Array.from({ length: 3 }).map((_, index) => {
-          const photo = photos[index];
-          if (!photo) return <View key={`empty-review-${index}`} style={styles.v46ReviewThumbEmpty} />;
-          return (
-            <Pressable key={photo.id} onPress={() => onPhotoIndex(index)} style={styles.v46ReviewThumbPress}>
+      {photos.length > 1 && (
+        <View style={styles.v52ThumbRow}>
+          {photos.slice(0, 6).map((photo, index) => (
+            <Pressable
+              key={photo.id}
+              onPress={() => onPhotoIndex(index)}
+              style={styles.v52ThumbPress}
+            >
               <Image
                 source={{ uri: photo.uri }}
-                style={[styles.v46ReviewThumb, index === activeIndex && styles.v46ReviewThumbActive]}
+                style={[
+                  styles.v52Thumb,
+                  index === activeIndex && styles.v52ThumbActive,
+                ]}
                 resizeMode="cover"
               />
             </Pressable>
-          );
-        })}
-      </View>
+          ))}
+        </View>
+      )}
 
-      <View style={styles.v46ReviewCopyLeft}>
-        <Text style={styles.v46ReviewKicker}>{entry.moodLabel}</Text>
-        <Text style={styles.v46ReviewDestination} numberOfLines={2}>
+      <View style={styles.v52ReviewCopy}>
+        <Text style={styles.v52Eyebrow}>
+          {entry.moodLabel} · {formatPassportDate(entry.completedAt)}
+        </Text>
+        <Text style={styles.v52Destination} numberOfLines={2}>
           {entry.sceneName ?? `${entry.city}的一趟 DETOUR`}
         </Text>
+        <TripFacts
+          minutes={minutes}
+          distanceKm={distanceKm}
+          photoCount={entry.photoCount ?? photos.length}
+        />
       </View>
 
-      <View style={styles.v46ReviewCopyRight}>
-        <Text style={styles.v46ReviewFact}>{entry.actualDurationMinutes ?? entry.minutes} 分鐘</Text>
-        <Text style={styles.v46ReviewFact}>{distanceKm} 公里</Text>
-        <Text style={styles.v46ReviewFact}>{entry.photoCount ?? photos.length} 張照片</Text>
+      <View style={styles.v52RouteSection}>
+        <View style={styles.v52SectionHeader}>
+          <Text style={styles.v52SectionTitle}>這趟走過的路</Text>
+          <Text style={styles.v52SectionMeta}>{distanceKm} 公里</Text>
+        </View>
+        <View style={styles.v52RouteStage}>
+          <JourneyRouteTrace entry={entry} />
+        </View>
       </View>
     </View>
   );
