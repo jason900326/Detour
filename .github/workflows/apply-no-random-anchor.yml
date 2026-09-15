@@ -1,0 +1,44 @@
+name: Remove unsafe synthetic Scene anchors
+
+on:
+  push:
+    branches:
+      - fix/safe-scenes-fresh-routes
+    paths:
+      - "scripts/apply-no-random-anchor.py"
+      - ".github/workflows/apply-no-random-anchor.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/safe-scenes-fresh-routes
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python scripts/apply-no-random-anchor.py
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npx expo export --platform ios --output-dir /tmp/detour-anchor-export
+      - run: git diff --check
+      - name: Commit patch and remove temporary machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm scripts/apply-no-random-anchor.py .github/workflows/apply-no-random-anchor.yml
+          git config user.name "detour-safety-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: reject unverified synthetic destinations"
+          git push origin HEAD:fix/safe-scenes-fresh-routes
