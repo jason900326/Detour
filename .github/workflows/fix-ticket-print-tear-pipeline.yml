@@ -1,0 +1,181 @@
+name: Fix ticket print and tear pipeline
+
+on:
+  push:
+    branches:
+      - fix/ticket-print-tear-pipeline
+    paths:
+      - .github/workflows/fix-ticket-print-tear-pipeline.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: fix/ticket-print-tear-pipeline
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Apply coordinated ticket pipeline fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Ticket visual: use one Skia artwork path for printing + tearing,
+          # hide overlays until the Skia image is decoded, and notify the
+          # controller when the whole visual unit is ready.
+          path = Path('src/components/ticket-visuals.tsx')
+          text = path.read_text()
+
+          text = text.replace('let ticketArtworkDecoded = false;\n\n', '', 1)
+
+          old_props = """  showStubArtwork?: boolean;\n  renderWidth?: number;\n};"""
+          new_props = """  showStubArtwork?: boolean;\n  renderWidth?: number;\n  onVisualReady?: () => void;\n};"""
+          if old_props not in text:
+              raise SystemExit('V45 props anchor not found')
+          text = text.replace(old_props, new_props, 1)
+
+          old_destructure = """  showBarcode = false,\n  renderWidth = DETOUR_TICKET_WIDTH,\n}: V45TicketProps) {\n  const [artworkReady, setArtworkReady] = useState(\n    artworkVisible ? ticketArtworkDecoded : true\n  );"""
+          new_destructure = """  showBarcode = false,\n  renderWidth = DETOUR_TICKET_WIDTH,\n  onVisualReady,\n}: V45TicketProps) {\n  const [artworkReady, setArtworkReady] = useState(!artworkVisible);"""
+          if old_destructure not in text:
+              raise SystemExit('V45 destructure anchor not found')
+          text = text.replace(old_destructure, new_destructure, 1)
+
+          old_refs = """  const frameRef = useRef<number | null>(null);\n  const activeDragRef = useRef<ActiveDrag>({"""
+          new_refs = """  const frameRef = useRef<number | null>(null);\n  const visualReadyNotifiedRef = useRef(false);\n  const activeDragRef = useRef<ActiveDrag>({"""
+          if old_refs not in text:
+              raise SystemExit('visual ready ref anchor not found')
+          text = text.replace(old_refs, new_refs, 1)
+
+          old_ready = """  const markArtworkReady = () => {\n    ticketArtworkDecoded = true;\n    setArtworkReady(true);\n  };\n\n  const clearTear = () => {"""
+          new_ready = """  const clearTear = () => {"""
+          if old_ready not in text:
+              raise SystemExit('markArtworkReady anchor not found')
+          text = text.replace(old_ready, new_ready, 1)
+
+          old_effect = """  useEffect(() => {\n    if (!artworkVisible) setArtworkReady(true);\n  }, [artworkVisible]);\n\n  useEffect(() => {\n    if (!tearEnabled) clearTear();"""
+          new_effect = """  useEffect(() => {\n    const ready = !artworkVisible || Boolean(ticketImage);\n    setArtworkReady(ready);\n\n    if (ready && !visualReadyNotifiedRef.current) {\n      visualReadyNotifiedRef.current = true;\n      onVisualReady?.();\n    }\n  }, [artworkVisible, onVisualReady, ticketImage]);\n\n  useEffect(() => {\n    if (!tearEnabled) clearTear();"""
+          if old_effect not in text:
+              raise SystemExit('artwork ready effect anchor not found')
+          text = text.replace(old_effect, new_effect, 1)
+
+          old_skia = """  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;\n\n  return ("""
+          new_skia = """  // Printing and tearing always use the same decoded Skia image. This avoids\n  // swapping from a React Native Image to Canvas at the ready-state boundary.\n  const skiaArtworkReady = artworkVisible && !!ticketImage;\n  const ticketVisualReady = !artworkVisible || skiaArtworkReady;\n\n  return ("""
+          if old_skia not in text:
+              raise SystemExit('Skia readiness anchor not found')
+          text = text.replace(old_skia, new_skia, 1)
+
+          old_pending = """        artworkVisible && !artworkReady && !ticketImage && styles.v49TicketArtworkPending,"""
+          new_pending = """        artworkVisible && !ticketVisualReady && styles.v49TicketArtworkPending,"""
+          if old_pending not in text:
+              raise SystemExit('pending style anchor not found')
+          text = text.replace(old_pending, new_pending, 1)
+
+          old_fallback = """      {artworkVisible && !skiaArtworkReady && (\n        <Image\n          source={DETOUR_TICKET_BASE_SOURCE}\n          style={StyleSheet.absoluteFill}\n          resizeMode=\"contain\"\n          onLoad={markArtworkReady}\n          onLoadEnd={markArtworkReady}\n        />\n      )}\n\n"""
+          if old_fallback not in text:
+              raise SystemExit('RN artwork fallback anchor not found')
+          text = text.replace(old_fallback, '', 1)
+
+          old_overlay = """      <View pointerEvents=\"none\" style={StyleSheet.absoluteFill}>"""
+          new_overlay = """      <View\n        pointerEvents=\"none\"\n        style={[\n          StyleSheet.absoluteFill,\n          !ticketVisualReady && { opacity: 0 },\n        ]}\n      >"""
+          if old_overlay not in text:
+              raise SystemExit('overlay anchor not found')
+          text = text.replace(old_overlay, new_overlay, 1)
+
+          path.write_text(text)
+
+          # 2) Controller: make artwork readiness part of the same print state
+          # pipeline. Paper cannot start moving until the Skia ticket visual is
+          # decoded and ready as one unit.
+          path = Path('src/hooks/use-detour-home-controller.ts')
+          text = path.read_text()
+
+          old_refs = """  const routeProgress = useRef(new Animated.Value(0)).current;\n  const printerPulse = useRef(new Animated.Value(0)).current;"""
+          new_refs = """  const routeProgress = useRef(new Animated.Value(0)).current;\n  const ticketVisualReadyRef = useRef(false);\n  const ticketVisualReadyResolverRef = useRef<(() => void) | null>(null);\n  const printerPulse = useRef(new Animated.Value(0)).current;"""
+          if old_refs not in text:
+              raise SystemExit('controller ticket refs anchor not found')
+          text = text.replace(old_refs, new_refs, 1)
+
+          old_after_motion = """  const homeRouteMotion = useRef(new Animated.Value(0)).current;\n\n  const mood = useMemo("""
+          new_after_motion = """  const homeRouteMotion = useRef(new Animated.Value(0)).current;\n\n  const resetTicketVisualReady = useCallback(() => {\n    ticketVisualReadyRef.current = false;\n    ticketVisualReadyResolverRef.current = null;\n  }, []);\n\n  const markTicketVisualReady = useCallback(() => {\n    if (ticketVisualReadyRef.current) return;\n\n    ticketVisualReadyRef.current = true;\n    const resolve = ticketVisualReadyResolverRef.current;\n    ticketVisualReadyResolverRef.current = null;\n    resolve?.();\n  }, []);\n\n  const waitForTicketVisualReady = useCallback(() => {\n    if (ticketVisualReadyRef.current) return Promise.resolve();\n\n    return new Promise<void>((resolve) => {\n      ticketVisualReadyResolverRef.current = resolve;\n    });\n  }, []);\n\n  const mood = useMemo("""
+          if old_after_motion not in text:
+              raise SystemExit('controller readiness callbacks anchor not found')
+          text = text.replace(old_after_motion, new_after_motion, 1)
+
+          old_continue = """  async function continueFromMood() {\n    if (!selectedMood) return;\n\n    await Haptics.impactAsync("""
+          new_continue = """  async function continueFromMood() {\n    if (!selectedMood) return;\n\n    // Reset the visual gate before the printing screen mounts. The ticket\n    // component will reopen it only after ticket-base is decoded by Skia.\n    resetTicketVisualReady();\n    routeProgress.stopAnimation();\n    routeProgress.setValue(0);\n\n    await Haptics.impactAsync("""
+          if old_continue not in text:
+              raise SystemExit('continueFromMood anchor not found')
+          text = text.replace(old_continue, new_continue, 1)
+
+          old_prepare = """    // Never show a dead printer. Feed the leading ticket-stub edge immediately\n    // while data is prepared, then hold here until the real route is ready.\n    routeProgress.stopAnimation();\n    Animated.timing(routeProgress, {\n      toValue: 0.13,\n      duration: 420,\n      easing: Easing.out(Easing.cubic),\n      useNativeDriver: false,\n    }).start();\n\n    let permission = await Location.getForegroundPermissionsAsync();"""
+          new_prepare = """    // Ticket artwork, overlay copy and printer motion are one pipeline. Do not\n    // move paper until the bundled ticket-base has decoded in Skia; otherwise\n    // text can emerge before paper or the renderer can visibly swap mid-print.\n    routeProgress.stopAnimation();\n    routeProgress.setValue(0);\n    await waitForTicketVisualReady();\n\n    Animated.timing(routeProgress, {\n      toValue: 0.13,\n      duration: 420,\n      easing: Easing.out(Easing.cubic),\n      useNativeDriver: false,\n    }).start();\n\n    let permission = await Location.getForegroundPermissionsAsync();"""
+          if old_prepare not in text:
+              raise SystemExit('prepare visual gate anchor not found')
+          text = text.replace(old_prepare, new_prepare, 1)
+
+          old_return_refs = """    routeProgress,\n    printerPulse,"""
+          new_return_refs = """    routeProgress,\n    markTicketVisualReady,\n    printerPulse,"""
+          if old_return_refs not in text:
+              raise SystemExit('controller return anchor not found')
+          text = text.replace(old_return_refs, new_return_refs, 1)
+
+          path.write_text(text)
+
+          # 3) View: wire visual readiness into the controller and only unlock
+          # descendant pointer events once the sheet is in ready state, so the
+          # existing Skia GestureDetector can actually receive the tear gesture.
+          path = Path('src/components/detour-home-view.tsx')
+          text = path.read_text()
+
+          old_destructure = """    routeProgress,\n    printerPulse,"""
+          new_destructure = """    routeProgress,\n    markTicketVisualReady,\n    printerPulse,"""
+          if old_destructure not in text:
+              raise SystemExit('home view controller destructure anchor not found')
+          text = text.replace(old_destructure, new_destructure, 1)
+
+          old_pointer = """                ]}\n                pointerEvents=\"none\"\n              >\n                <Animated.View"""
+          new_pointer = """                ]}\n                pointerEvents={stage === 'ready' ? 'box-none' : 'none'}\n              >\n                <Animated.View"""
+          if old_pointer not in text:
+              raise SystemExit('paper viewport pointerEvents anchor not found')
+          text = text.replace(old_pointer, new_pointer, 1)
+
+          old_ticket = """                    stampProgress={ticketStamp}\n                    renderWidth={printingLayout.ticketWidth}\n                  />"""
+          new_ticket = """                    stampProgress={ticketStamp}\n                    renderWidth={printingLayout.ticketWidth}\n                    onVisualReady={markTicketVisualReady}\n                  />"""
+          if old_ticket not in text:
+              raise SystemExit('V45Ticket callback anchor not found')
+          text = text.replace(old_ticket, new_ticket, 1)
+
+          path.write_text(text)
+          PY
+
+          git diff --check
+          git diff -- src/components/ticket-visuals.tsx src/hooks/use-detour-home-controller.ts src/components/detour-home-view.tsx
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-ticket-pipeline-export
+
+      - name: Commit verified fix
+        run: |
+          rm .github/workflows/fix-ticket-print-tear-pipeline.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ticket-visuals.tsx src/hooks/use-detour-home-controller.ts src/components/detour-home-view.tsx .github/workflows/fix-ticket-print-tear-pipeline.yml
+          git commit -m "fix: unify ticket print and tear pipeline"
+          git push origin HEAD:fix/ticket-print-tear-pipeline
