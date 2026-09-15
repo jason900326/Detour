@@ -1,48 +1,9 @@
-import { useCallback, useRef } from 'react';
-import { Animated } from 'react-native';
+import { TearLab } from '../components/tear-lab';
 
-import { DetourHomeView } from '../components/detour-home-view';
-import { FreeformTicketTearPrototype } from '../components/freeform-ticket-tear-prototype';
-import {
-  PrinterPhysicalHaptics,
-  useJourneyStageMotion,
-  usePhysicalController,
-} from '../components/physical-motion';
-import { useDetourHomeController } from '../hooks/use-detour-home-controller';
-
+// This branch is intentionally a tear-interaction lab.
+// It no longer swaps the production ready screen out from under the user.
+// Once the paper interaction is approved, it will be integrated back into
+// the existing printer/ready screen without unmounting that scene.
 export default function HomeScreen() {
-  const controller = useDetourHomeController();
-  const shellScale = useRef(new Animated.Value(1)).current;
-  const stageX = useJourneyStageMotion(controller.stage);
-  const motionController = usePhysicalController(controller, shellScale);
-  const tearEnabled =
-    controller.stage === 'ready' && controller.ticketReadyUnlocked;
-
-  const handleTicketTorn = useCallback(() => {
-    void motionController.startDetour();
-  }, [motionController]);
-
-  // Keep the experiment isolated from the production ready screen. This also
-  // removes the page-level swipe-back responder while the user is tearing, so
-  // the horizontal gesture belongs entirely to the ticket.
-  if (tearEnabled) {
-    return (
-      <FreeformTicketTearPrototype
-        onBack={controller.goBack}
-        onTorn={handleTicketTorn}
-      />
-    );
-  }
-
-  return (
-    <Animated.View
-      style={{
-        flex: 1,
-        transform: [{ translateX: stageX }, { scale: shellScale }],
-      }}
-    >
-      <DetourHomeView controller={motionController} />
-      <PrinterPhysicalHaptics controller={controller} />
-    </Animated.View>
-  );
+  return <TearLab />;
 }
