@@ -2380,9 +2380,9 @@ export function useDetourHomeController() {
 
       setTicketBuildStatus('車票完成');
 
-      // The printer has already shown a small paper edge while searching.
-      // Once routing is real, finish the physical feed quickly instead of
-      // adding another full second of perceived loading.
+      // The printer has already shown the leading ticket-stub edge while searching.
+      // Once routing is real, let the sheet feed at a readable mechanical pace
+      // so the stub, destination, trip details, and DETOUR header emerge in order.
       const minimumPrintMs = 300;
       const remainingPrintMs = Math.max(
         0,
@@ -2399,8 +2399,8 @@ export function useDetourHomeController() {
       await new Promise<void>((resolve) => {
         Animated.timing(routeProgress, {
           toValue: 1,
-          duration: 650,
-          easing: Easing.out(Easing.cubic),
+          duration: 1900,
+          easing: Easing.inOut(Easing.quad),
           useNativeDriver: false,
         }).start(() => resolve());
       });
