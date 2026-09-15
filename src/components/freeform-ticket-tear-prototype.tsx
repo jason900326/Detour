@@ -25,7 +25,11 @@ import { INK, SIGNAL } from '../theme/detour-theme';
 type Point = { x: number; y: number };
 type TearDirection = -1 | 0 | 1;
 
-const TICKET_SOURCE = require('../../assets/detour/ticket-full.png');
+// ticket-base.png is already a single, full ticket in the repository, so the
+// interaction prototype can be tested immediately without adding a new native
+// dependency or reusing the old main+stub composition. Once the gesture feels
+// right this source can be replaced 1:1 by the supplied final transparent art.
+const TICKET_SOURCE = require('../../assets/detour/ticket-base.png');
 const ARTWORK_WIDTH = 1122;
 const ARTWORK_HEIGHT = 1402;
 // Measured from the supplied final transparent ticket artwork. Keeping the
@@ -136,7 +140,10 @@ export function FreeformTicketTearPrototype({
           const y = event.nativeEvent.locationY;
           return Math.abs(y - seamY) <= 34;
         },
-        onMoveShouldSetPanResponder: () => true,
+        // Only a touch that begins on the perforation can claim this responder.
+        // This prevents an unrelated drag elsewhere on the ticket from turning
+        // into a tear halfway through the gesture.
+        onMoveShouldSetPanResponder: () => false,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event) => {
           if (completingRef.current) return;
