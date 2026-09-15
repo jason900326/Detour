@@ -1,0 +1,23 @@
+{
+  "name": "Detour iPad Expo Go",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-24-bookworm",
+  "postCreateCommand": "npm ci --no-audit --no-fund && npm install -g @expo/ngrok",
+  "forwardPorts": [8081],
+  "portsAttributes": {
+    "8081": {
+      "label": "Expo Metro",
+      "onAutoForward": "silent"
+    }
+  },
+  "secrets": {
+    "EXPO_PUBLIC_DETOUR_AI_URL": {
+      "description": "Detour AI Edge Function URL from your local .env"
+    },
+    "EXPO_PUBLIC_DETOUR_SCENE_URL": {
+      "description": "Detour Scene Edge Function URL from your local .env"
+    },
+    "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": {
+      "description": "Supabase publishable key from your local .env"
+    }
+  }
+}
