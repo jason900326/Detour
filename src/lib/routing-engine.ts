@@ -43,6 +43,14 @@ const PREWARM_TICKET_GRACE_MS = 200;
 const TICKET_ROUTING_BUDGET_MS = 3600;
 const TICKET_ROUTE_TIMEOUT_MS = 2200;
 const MAX_TICKET_NETWORK_ATTEMPTS = 2;
+const ROUTE_REPEAT_MATCH_METERS = 18;
+const ROUTE_REPEAT_START_IGNORE_METERS = 55;
+const ROUTE_OVERLAP_PREFERRED_MAX = 0.12;
+const ROUTE_OVERLAP_FALLBACK_MAX = 0.22;
+const ROUTE_OVERLAP_EMERGENCY_MAX = 0.42;
+const ROUTE_DIRECTNESS_PREFERRED_MAX = 1.85;
+const ROUTE_DIRECTNESS_FALLBACK_MAX = 2.2;
+const ROUTE_DIRECTNESS_EMERGENCY_MAX = 2.7;
 
 const walkingRouteCache = new Map<
   string,
@@ -342,22 +350,41 @@ function distanceBetweenPoints(a: GeoPoint, b: GeoPoint) {
   return radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+function routeAfterInitialMeters(route: GeoPoint[], ignoreMeters: number) {
+  if (route.length < 2 || ignoreMeters <= 0) return route;
+
+  let walked = 0;
+  for (let index = 1; index < route.length; index += 1) {
+    walked += distanceBetweenPoints(route[index - 1], route[index]);
+    if (walked >= ignoreMeters) {
+      return route.slice(index);
+    }
+  }
+
+  return route.slice(-1);
+}
+
 function routeOverlapRatio(route: GeoPoint[], avoidRoutes: GeoPoint[][]) {
   if (route.length < 4 || avoidRoutes.length === 0) return 0;
 
-  // Every Detour from the same starting point naturally shares its first few
-  // metres. Novelty matters after the route has actually left the origin.
-  const startIndex = Math.min(route.length - 1, Math.floor(route.length * 0.18));
-  const usable = route.slice(startIndex);
-  const step = Math.max(1, Math.floor(usable.length / 20));
-  const samples = usable.filter((_, index) => index % step === 0).slice(0, 24);
+  // The first few metres out of the user's current position are often
+  // unavoidable. Ignore a fixed walking distance, not a percentage of points,
+  // then treat actual same-street reuse as expensive.
+  const usable = routeAfterInitialMeters(
+    route,
+    ROUTE_REPEAT_START_IGNORE_METERS
+  );
+  const step = Math.max(1, Math.floor(usable.length / 24));
+  const samples = usable
+    .filter((_, index) => index % step === 0)
+    .slice(0, 28);
   if (samples.length === 0) return 0;
 
   const historical = avoidRoutes
     .filter((item) => item.length >= 2)
     .slice(0, 6)
     .flatMap((item) => {
-      const historyStep = Math.max(1, Math.floor(item.length / 90));
+      const historyStep = Math.max(1, Math.floor(item.length / 110));
       return item.filter((_, index) => index % historyStep === 0);
     });
 
@@ -365,7 +392,12 @@ function routeOverlapRatio(route: GeoPoint[], avoidRoutes: GeoPoint[][]) {
 
   let overlapping = 0;
   for (const point of samples) {
-    if (historical.some((oldPoint) => distanceBetweenPoints(point, oldPoint) <= 35)) {
+    if (
+      historical.some(
+        (oldPoint) =>
+          distanceBetweenPoints(point, oldPoint) <= ROUTE_REPEAT_MATCH_METERS
+      )
+    ) {
       overlapping += 1;
     }
   }
@@ -391,6 +423,8 @@ type RouteAssessment = {
   preferred: boolean;
   fallback: boolean;
   emergency: boolean;
+  overlapRatio: number;
+  directnessRatio: number;
 };
 
 function assessRoute(args: {
@@ -401,6 +435,7 @@ function assessRoute(args: {
   sideMissionCount: number;
   minutes: number;
   avoidRoutes: GeoPoint[][];
+  straightDistanceMeters: number;
 }): RouteAssessment {
   const overlap = routeOverlapRatio(args.route.coordinates, args.avoidRoutes);
   const estimatedSeconds = estimatedJourneySeconds(
@@ -410,12 +445,18 @@ function assessRoute(args: {
   );
   const overtimeSeconds = Math.max(0, estimatedSeconds - args.timeBudgetSeconds);
   const distanceDelta = Math.abs(args.route.distanceMeters - args.profile.target);
+  const directnessRatio =
+    args.route.distanceMeters / Math.max(80, args.straightDistanceMeters);
 
-  // History overlap is a preference, never a blocker. A repeated route should
-  // lose against an equally fast fresh route, but it must not stop ticket issue.
-  const noveltyPenalty = overlap * args.profile.target * 0.95;
+  // Detour should come from the destination, not from deliberately inefficient
+  // routing. OSRM supplies the shortest foot leg; if that leg substantially
+  // repeats recent walking or is very circuitous, prefer another Scene.
+  const noveltyPenalty = overlap * args.profile.target * 2.4;
+  const circuitPenalty =
+    Math.max(0, directnessRatio - 1.45) * args.profile.target * 0.9;
   const overtimePenalty = overtimeSeconds * 1.4;
-  const score = distanceDelta + noveltyPenalty + overtimePenalty;
+  const score =
+    distanceDelta + noveltyPenalty + circuitPenalty + overtimePenalty;
 
   const distanceFits =
     args.route.distanceMeters >= args.profile.min &&
@@ -424,13 +465,23 @@ function assessRoute(args: {
 
   return {
     score,
-    preferred: distanceFits && timeFits,
+    preferred:
+      distanceFits &&
+      timeFits &&
+      overlap <= ROUTE_OVERLAP_PREFERRED_MAX &&
+      directnessRatio <= ROUTE_DIRECTNESS_PREFERRED_MAX,
     fallback:
       args.route.distanceMeters >= 70 &&
-      estimatedSeconds <= args.timeBudgetSeconds * 1.12,
+      estimatedSeconds <= args.timeBudgetSeconds * 1.12 &&
+      overlap <= ROUTE_OVERLAP_FALLBACK_MAX &&
+      directnessRatio <= ROUTE_DIRECTNESS_FALLBACK_MAX,
     emergency:
       args.route.distanceMeters >= 70 &&
-      estimatedSeconds <= args.timeBudgetSeconds * 1.3,
+      estimatedSeconds <= args.timeBudgetSeconds * 1.3 &&
+      overlap <= ROUTE_OVERLAP_EMERGENCY_MAX &&
+      directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX,
+    overlapRatio: overlap,
+    directnessRatio,
   };
 }
 
@@ -457,6 +508,8 @@ function assessRoutedScene(args: {
       sideMissionCount: args.sideMissionCount,
       minutes: args.minutes,
       avoidRoutes: args.avoidRoutes,
+      straightDistanceMeters:
+        args.scene.straightDistanceMeters,
     }),
   };
 }
@@ -483,11 +536,13 @@ export async function resolveRoutedScene(args: {
     args.candidates,
     args.minutes,
     distanceScale,
-    3
+    4
   );
 
   let bestCached: RoutedScene | null = null;
   let bestCachedScore = Number.POSITIVE_INFINITY;
+  let bestFallback: RoutedScene | null = null;
+  let bestFallbackScore = Number.POSITIVE_INFINITY;
   let bestEmergency: RoutedScene | null = null;
   let bestEmergencyScore = Number.POSITIVE_INFINITY;
 
@@ -509,11 +564,19 @@ export async function resolveRoutedScene(args: {
     });
 
     if (
-      (assessment.preferred || assessment.fallback) &&
+      assessment.preferred &&
       assessment.score < bestCachedScore
     ) {
       bestCached = routed;
       bestCachedScore = assessment.score;
+    }
+
+    if (
+      assessment.fallback &&
+      assessment.score < bestFallbackScore
+    ) {
+      bestFallback = routed;
+      bestFallbackScore = assessment.score;
     }
 
     if (
@@ -568,11 +631,19 @@ export async function resolveRoutedScene(args: {
         avoidRoutes,
       });
 
-      if (assessment.preferred || assessment.fallback) {
+      if (assessment.preferred) {
         console.log(
-          `[DETOUR ROUTE] in-flight hint won in ${Date.now() - routingStartedAt}ms`
+          `[DETOUR ROUTE] fresh in-flight hint won in ${Date.now() - routingStartedAt}ms`
         );
         return routed;
+      }
+
+      if (
+        assessment.fallback &&
+        assessment.score < bestFallbackScore
+      ) {
+        bestFallback = routed;
+        bestFallbackScore = assessment.score;
       }
 
       if (
@@ -621,11 +692,19 @@ export async function resolveRoutedScene(args: {
         avoidRoutes,
       });
 
-      if (assessment.preferred || assessment.fallback) {
+      if (assessment.preferred) {
         console.log(
-          `[DETOUR ROUTE] late cache hit in ${Date.now() - routingStartedAt}ms`
+          `[DETOUR ROUTE] fresh late cache hit in ${Date.now() - routingStartedAt}ms`
         );
         return routed;
+      }
+
+      if (
+        assessment.fallback &&
+        assessment.score < bestFallbackScore
+      ) {
+        bestFallback = routed;
+        bestFallbackScore = assessment.score;
       }
 
       if (
@@ -680,11 +759,15 @@ export async function resolveRoutedScene(args: {
         return routed;
       }
 
-      if (assessment.fallback) {
+      if (
+        assessment.fallback &&
+        assessment.score < bestFallbackScore
+      ) {
+        bestFallback = routed;
+        bestFallbackScore = assessment.score;
         console.log(
-          `[DETOUR ROUTE] soft fallback ${networkAttempts} in ${Date.now() - routingStartedAt}ms`
+          `[DETOUR ROUTE] kept fallback ${networkAttempts}; checking for a fresher shortest leg`
         );
-        return routed;
       }
 
       if (
@@ -704,6 +787,13 @@ export async function resolveRoutedScene(args: {
         `[DETOUR ROUTE] attempt ${networkAttempts} missed after ${Date.now() - routingStartedAt}ms: ${reason}`
       );
     }
+  }
+
+  if (bestFallback) {
+    console.log(
+      `[DETOUR ROUTE] best acceptable fallback in ${Date.now() - routingStartedAt}ms`
+    );
+    return bestFallback;
   }
 
   if (bestEmergency) {

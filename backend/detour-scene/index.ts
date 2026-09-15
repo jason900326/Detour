@@ -8,7 +8,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const QUERY_VERSION = 4;
+const QUERY_VERSION = 5;
 const DATABASE_LIMIT = 180;
 
 type SceneFamily = "general" | "food";
@@ -126,6 +126,100 @@ function parseQueryDescriptor(query: string): QueryDescriptor | null {
   };
 }
 
+function normalizedSceneText(tags: Record<string, string>) {
+  return [
+    tags.name,
+    tags["name:zh"],
+    tags.official_name,
+    tags.operator,
+    tags.description,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function hasAnySceneKeyword(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isClearlyPublicDestination(tags: Record<string, string>) {
+  return (
+    ["museum", "gallery"].includes(tags.tourism ?? "") ||
+    [
+      "arts_centre",
+      "community_centre",
+      "library",
+      "marketplace",
+      "public_bookcase",
+    ].includes(tags.amenity ?? "") ||
+    ["park", "garden"].includes(tags.leisure ?? "") ||
+    tags.place === "square"
+  );
+}
+
+function isUnsafeOrRestrictedScene(tags: Record<string, string>) {
+  if (["private", "no"].includes(tags.access ?? "")) return true;
+
+  const amenity = tags.amenity ?? "";
+  const building = tags.building ?? "";
+  const healthcare = tags.healthcare ?? "";
+  const emergency = tags.emergency ?? "";
+  const office = tags.office ?? "";
+  const text = normalizedSceneText(tags);
+
+  if (
+    ["hospital", "clinic", "doctors", "dentist"].includes(amenity) ||
+    ["hospital", "clinic", "doctor", "dentist", "centre", "center"].includes(healthcare) ||
+    building === "hospital" ||
+    emergency === "emergency_ward" ||
+    hasAnySceneKeyword(text, [
+      "醫院", "醫學中心", "醫療中心", "診所",
+      " hospital", "hospital ", "medical center", "medical centre",
+      " clinic", "clinic ",
+    ])
+  ) {
+    return true;
+  }
+
+  const policeOrFire =
+    ["police", "fire_station"].includes(amenity) ||
+    ["police", "fire_station"].includes(building) ||
+    ["fire_station", "ambulance_station"].includes(emergency) ||
+    hasAnySceneKeyword(text, [
+      "警察局", "派出所", "分局", "警察隊",
+      "消防局", "消防隊", "消防分隊",
+      "police station", "fire station",
+    ]);
+
+  if (policeOrFire && !["museum", "gallery"].includes(tags.tourism ?? "")) {
+    return true;
+  }
+
+  if (
+    amenity === "prison" ||
+    tags.landuse === "military" ||
+    tags.military !== undefined ||
+    building === "military"
+  ) {
+    return true;
+  }
+
+  const government =
+    office === "government" ||
+    tags.government !== undefined ||
+    ["townhall", "courthouse", "embassy"].includes(amenity) ||
+    ["government", "civic"].includes(building) ||
+    hasAnySceneKeyword(text, [
+      "市政府", "縣政府", "區公所", "鄉公所", "鎮公所",
+      "戶政事務所", "地政事務所", "稅捐處", "稅務局",
+      "法院", "檢察署", "government office", "city hall",
+      "district office", "courthouse",
+    ]);
+
+  return government && !isClearlyPublicDestination(tags);
+}
+
 function sceneRowsToElements(rows: SceneRow[]): OverpassElement[] {
   const elements: OverpassElement[] = [];
 
@@ -135,12 +229,15 @@ function sceneRowsToElements(rows: SceneRow[]): OverpassElement[] {
     const id = Number(row.osm_id);
     if (!Number.isFinite(id)) continue;
 
+    const tags = row.tags ?? {};
+    if (isUnsafeOrRestrictedScene(tags)) continue;
+
     elements.push({
       type: row.osm_type,
       id,
       lat: Number(row.latitude),
       lon: Number(row.longitude),
-      tags: row.tags ?? {},
+      tags,
     });
   }
 
