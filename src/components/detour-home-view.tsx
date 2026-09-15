@@ -6,6 +6,7 @@ import {
   Image,
   Modal,
   PanResponder,
+  PixelRatio,
   Pressable,
   ScrollView,
   Share,
@@ -389,23 +390,27 @@ export function DetourHomeView({
     const availableWidth = Math.max(1, windowWidth - leftPadding - rightPadding);
     const printerWidth = Math.min(availableWidth, 420);
 
-    // The native slot is the source of truth for paper width. The paper keeps
-    // visible mechanical clearance on both sides instead of chasing px values.
+    // The slot is only a physical ceiling. The intended ticket size comes
+    // from ticket-base itself: 1122px rendered at the requested ~75%, then
+    // converted from physical image pixels to React Native layout units.
+    // No paper-to-slot tuning ratio is used.
     const slotWidth = Math.max(1, printerWidth - 6);
-    // Restore the previously-good paper-to-slot proportion. This is a
-    // design ratio, not a guessed device px width. The slot remains the
-    // source of truth and the paper is always derived from it.
-    const ticketSlotFillRatio = 0.72;
-    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
+    const ticketArtworkWidthPx = 1122;
+    const ticketArtworkRenderScale = 0.75;
+    const ticketWidthFromArtwork =
+      (ticketArtworkWidthPx * ticketArtworkRenderScale) / PixelRatio.get();
 
-    // The width rule normally wins. Short screens can only shrink the same
-    // authored ticket proportionally; they never distort or crop it.
+    // The artwork target normally wins. The slot and available vertical
+    // space may only shrink the same aspect ratio; they never enlarge it.
     const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
     const tearHintReserve = 52 + bottomPadding;
     const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve);
     const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
     const ticketWidthFromHeight = maxPaperHeight / ticketAspect;
-    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
+    const ticketWidth = Math.max(
+      1,
+      Math.min(ticketWidthFromArtwork, slotWidth, ticketWidthFromHeight)
+    );
     // ticketWidth is the single final rendered paper width. V45Ticket
     // derives its one visual scale from this value; the page does not
     // apply another ticket scale on top of it.
@@ -1188,6 +1193,7 @@ export function DetourHomeView({
                     styles.v48PaperTrack,
                     {
                       width: printingLayout.slotWidth,
+                      alignItems: 'center',
                       transform: [
                         {
                           translateY: routeProgress.interpolate({
