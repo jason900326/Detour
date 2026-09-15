@@ -22,11 +22,17 @@ export default function HomeScreen() {
     void motionController.startDetour();
   }, [motionController]);
 
-  // DetourHomeView still contains the legacy ready CTA. During the tear-ready
-  // state we only mask that one flag; the printed V45Ticket itself stays in the
-  // exact same React tree from preparing through ready.
+  // During the ready-to-tear state the horizontal gesture belongs to the
+  // ticket, not to the page-level back swipe. The visible back button still
+  // works normally.
   const viewController = tearEnabled
-    ? ({ ...motionController, ticketReadyUnlocked: false } as typeof motionController)
+    ? ({
+        ...motionController,
+        ticketReadyUnlocked: false,
+        edgeBackResponder: {
+          panHandlers: {},
+        } as typeof motionController.edgeBackResponder,
+      } as typeof motionController)
     : motionController;
 
   return (
@@ -68,7 +74,7 @@ export default function HomeScreen() {
                 color: '#77736B',
               }}
             >
-              沿齒孔滑開票根，開始旅程
+              沿齒孔撕過中線，開始旅程
             </Text>
           </View>
         )}
