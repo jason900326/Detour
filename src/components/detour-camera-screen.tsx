@@ -16,10 +16,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   CameraView,
   useCameraPermissions,
+  type CameraCapturedPicture,
   type CameraType,
   type FlashMode,
 } from 'expo-camera';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import {
   Album,
   Asset,
@@ -54,6 +56,17 @@ function getParam(value: string | string[] | undefined, fallback = '') {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cropCaptureToSquare(capture: CameraCapturedPicture) {
+  const side = Math.min(capture.width, capture.height);
+  const originX = Math.max(0, Math.round((capture.width - side) / 2));
+  const originY = Math.max(0, Math.round((capture.height - side) / 2));
+  return ImageManipulator.manipulateAsync(
+    capture.uri,
+    [{ crop: { originX, originY, width: side, height: side } }],
+    { compress: 0.84, format: ImageManipulator.SaveFormat.JPEG }
+  );
 }
 
 const MAX_DIGITAL_ZOOM = 0.48;
@@ -258,10 +271,13 @@ export default function DetourCameraScreen() {
       // captured frame replaces CameraView.
       await delay(45);
 
-      const capture = await cameraRef.current.takePictureAsync({ quality: 0.84 });
+      // Capture once at source quality, then create the canonical 1:1 file.
+      // Review, session storage and Photos all use this exact square result.
+      const capture = await cameraRef.current.takePictureAsync({ quality: 1 });
       if (!capture?.uri) throw new Error('No photo URI');
 
-      setPendingCaptureUri(capture.uri);
+      const squareCapture = await cropCaptureToSquare(capture);
+      setPendingCaptureUri(squareCapture.uri);
       setTakingPhoto(false);
 
       await delay(45);
@@ -389,11 +405,15 @@ export default function DetourCameraScreen() {
         flash={facing === 'back' ? flashMode : 'off'}
         zoom={zoom}
         selectedLens={Platform.OS === 'ios' && facing === 'back' ? selectedLens : undefined}
-        autofocus="on"
+        autofocus="off"
         responsiveOrientationWhenOrientationLocked
         onCameraReady={() => { setZoom(0); setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
         onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
       />
+
+      <View pointerEvents="none" style={styles.squareGuideWrap}>
+        <View style={styles.squareGuide} />
+      </View>
 
       <Animated.View pointerEvents="none" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
 
@@ -492,6 +512,8 @@ const styles = StyleSheet.create({
   cancelPermissionText: { textAlign: 'center', fontSize: 13, color: '#706C64' },
   cameraScreen: { flex: 1, backgroundColor: '#000' },
   cameraView: { flex: 1 },
+  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
   shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
   cameraOverlay: { ...ABSOLUTE_FILL, paddingTop: 58, paddingHorizontal: 18, paddingBottom: 28, justifyContent: 'space-between', zIndex: 5 },
   cameraTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
