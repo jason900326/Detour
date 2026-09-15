@@ -2138,8 +2138,8 @@ export function useDetourHomeController() {
     setTicketBuildError(null);
     const ticketStartedAt = Date.now();
 
-    // Never show a dead printer. Feed the top edge immediately while data is
-    // being prepared, then hold here until the real route is ready.
+    // Never show a dead printer. Feed the leading ticket-stub edge immediately
+    // while data is prepared, then hold here until the real route is ready.
     routeProgress.stopAnimation();
     Animated.timing(routeProgress, {
       toValue: 0.13,

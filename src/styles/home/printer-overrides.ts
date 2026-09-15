@@ -38,14 +38,11 @@ export const printerOverrides = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
-  // The final authored stub extends below the main artwork canvas after its
-  // perforation is aligned. Keep the clipping window tall enough to show the
-  // entire physical ticket instead of forcing the stub upward to fit.
+  // Width and height are supplied by the responsive printer geometry so the
+  // clipping window always matches the native slot and the scaled full ticket.
   v48PaperViewport: {
     position: 'absolute',
     top: 47,
-    width: 318,
-    height: 470,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 3,
