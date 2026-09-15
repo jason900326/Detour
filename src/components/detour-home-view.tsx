@@ -12,6 +12,7 @@ import {
   StatusBar,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Circle, Polyline } from 'react-native-maps';
 import { captureRef } from 'react-native-view-shot';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   buildJourneyPlan,
@@ -115,7 +117,12 @@ import {
 import { styles } from '../styles/home-styles';
 import { BONE, INK, LINE, MUTED, SIGNAL, SOFT } from '../theme/detour-theme';
 import { MoodGlyph, V45MoodIcon, V45Skyline } from '../components/mood-visuals';
-import { DetourAccentStroke, DetourTicket, V45Ticket } from '../components/ticket-visuals';
+import {
+  DetourAccentStroke,
+  DetourTicket,
+  V45Ticket,
+  getDetourTicketGeometry,
+} from '../components/ticket-visuals';
 import {
   V45SharePoster,
   V46CompleteArtwork,
@@ -366,6 +373,57 @@ export function DetourHomeView({
     handleCameraRouteResult,
     completeDetour,
   } = controller;
+
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
+
+  const printingLayout = useMemo(() => {
+    // Printer geometry is derived synchronously from the current window. The
+    // artwork never needs to load or measure before the first frame can size it.
+    const baseSidePadding = 30;
+    const leftPadding = baseSidePadding + safeAreaInsets.left;
+    const rightPadding = baseSidePadding + safeAreaInsets.right;
+    const topPadding = Math.max(24, safeAreaInsets.top + 10);
+    const bottomPadding = Math.max(24, safeAreaInsets.bottom + 12);
+    const availableWidth = Math.max(1, windowWidth - leftPadding - rightPadding);
+    const printerWidth = Math.min(availableWidth, 420);
+
+    // The native slot is the source of truth for paper width. The paper keeps
+    // visible mechanical clearance on both sides instead of chasing px values.
+    const slotWidth = Math.max(1, printerWidth - 6);
+    const ticketSlotFillRatio = 0.72;
+    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
+
+    // The width rule normally wins. Short screens can only shrink the same
+    // authored ticket proportionally; they never distort or crop it.
+    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
+    const departButtonReserve = 68 + bottomPadding + 20;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);
+    const unitGeometry = getDetourTicketGeometry(1);
+    const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;
+    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
+    const ticketGeometry = getDetourTicketGeometry(ticketWidth);
+
+    return {
+      leftPadding,
+      rightPadding,
+      topPadding,
+      bottomPadding,
+      printerWidth,
+      slotWidth,
+      ticketWidth,
+      ticketGeometry,
+      paperViewportHeight: ticketGeometry.physicalHeight + 2,
+      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,
+    };
+  }, [
+    safeAreaInsets.bottom,
+    safeAreaInsets.left,
+    safeAreaInsets.right,
+    safeAreaInsets.top,
+    windowHeight,
+    windowWidth,
+  ]);
 
   return (
     <View
@@ -1067,7 +1125,16 @@ export function DetourHomeView({
         )}
 
         {(stage === 'preparing' || stage === 'ready') && (
-          <View style={styles.v45PrintingScreen}>
+          <View
+            style={[
+              styles.v45PrintingScreen,
+              {
+                paddingTop: printingLayout.topPadding,
+                paddingLeft: printingLayout.leftPadding,
+                paddingRight: printingLayout.rightPadding,
+              },
+            ]}
+          >
             <View style={styles.v48PrintingTopBar}>
               <Pressable onPress={goBack} hitSlop={16} style={styles.v48PrintingBack}>
                 <Text style={styles.v48PrintingBackText}>‹</Text>
@@ -1082,7 +1149,16 @@ export function DetourHomeView({
               <DetourAccentStroke width={180} style={styles.v45PrintingUnderline} />
             </View>
 
-            <View style={styles.v48PrinterAssembly}>
+            <View
+              style={[
+                styles.v48PrinterAssembly,
+                {
+                  width: printingLayout.printerWidth,
+                  height: printingLayout.assemblyHeight,
+                  alignSelf: 'center',
+                },
+              ]}
+            >
               <View pointerEvents="none" style={styles.v50PrinterBody}>
                 <View style={styles.v50PrinterHighlight} />
                 <View style={styles.v50PrinterSlotShell}>
@@ -1090,16 +1166,26 @@ export function DetourHomeView({
                 </View>
               </View>
 
-              <View style={styles.v48PaperViewport} pointerEvents="none">
+              <View
+                style={[
+                  styles.v48PaperViewport,
+                  {
+                    width: printingLayout.slotWidth,
+                    height: printingLayout.paperViewportHeight,
+                  },
+                ]}
+                pointerEvents="none"
+              >
                 <Animated.View
                   style={[
                     styles.v48PaperTrack,
                     {
+                      width: printingLayout.slotWidth,
                       transform: [
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-405, 0],
+                            outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],
                           }),
                         },
                       ],
@@ -1113,6 +1199,7 @@ export function DetourHomeView({
                     serial={ticketSerial(selectedTime, selectedMood)}
                     stamped={stage === 'ready'}
                     stampProgress={ticketStamp}
+                    renderWidth={printingLayout.ticketWidth}
                   />
                 </Animated.View>
               </View>
@@ -1127,6 +1214,11 @@ export function DetourHomeView({
                 onPress={startDetour}
                 style={({ pressed }) => [
                   styles.v48DepartButton,
+                  {
+                    left: printingLayout.leftPadding,
+                    right: printingLayout.rightPadding,
+                    bottom: printingLayout.bottomPadding,
+                  },
                   pressed && styles.v48DepartButtonPressed,
                 ]}
               >

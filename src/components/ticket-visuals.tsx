@@ -12,7 +12,8 @@ let ticketArtworkDecoded = false;
 const DETOUR_TICKET_BARS = [2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3];
 const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 50);
 
-export const DETOUR_TICKET_WIDTH = 280;
+export const DETOUR_TICKET_DESIGN_WIDTH = 310;
+export const DETOUR_TICKET_WIDTH = DETOUR_TICKET_DESIGN_WIDTH;
 export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');
 export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
 
@@ -39,9 +40,9 @@ const STUB_PAPER_BOUNDS = {
 } as const;
 
 export const DETOUR_TICKET_HEIGHT =
-  DETOUR_TICKET_WIDTH * (MAIN_ARTWORK_SIZE.height / MAIN_ARTWORK_SIZE.width);
+  DETOUR_TICKET_DESIGN_WIDTH * (MAIN_ARTWORK_SIZE.height / MAIN_ARTWORK_SIZE.width);
 
-const MAIN_ARTWORK_SCALE = DETOUR_TICKET_WIDTH / MAIN_ARTWORK_SIZE.width;
+const MAIN_ARTWORK_SCALE = DETOUR_TICKET_DESIGN_WIDTH / MAIN_ARTWORK_SIZE.width;
 const MAIN_PAPER_LEFT = MAIN_PAPER_BOUNDS.left * MAIN_ARTWORK_SCALE;
 const MAIN_PAPER_WIDTH = MAIN_PAPER_BOUNDS.width * MAIN_ARTWORK_SCALE;
 const MAIN_PAPER_BOTTOM = MAIN_PAPER_BOUNDS.bottom * MAIN_ARTWORK_SCALE;
@@ -56,6 +57,33 @@ export const DETOUR_TICKET_STUB_HEIGHT =
   STUB_ARTWORK_SIZE.height * STUB_ARTWORK_SCALE;
 export const DETOUR_TICKET_STUB_TOP =
   MAIN_PAPER_BOTTOM - STUB_PAPER_BOUNDS.top * STUB_ARTWORK_SCALE - TEAR_JOIN_OVERLAP;
+export const DETOUR_TICKET_PHYSICAL_HEIGHT = Math.max(
+  DETOUR_TICKET_HEIGHT,
+  DETOUR_TICKET_STUB_TOP + DETOUR_TICKET_STUB_HEIGHT
+);
+
+export type DetourTicketGeometry = {
+  scale: number;
+  mainWidth: number;
+  mainHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  stubHeight: number;
+};
+
+export function getDetourTicketGeometry(renderWidth: number): DetourTicketGeometry {
+  const mainWidth = Math.max(1, renderWidth);
+  const scale = mainWidth / DETOUR_TICKET_DESIGN_WIDTH;
+
+  return {
+    scale,
+    mainWidth,
+    mainHeight: DETOUR_TICKET_HEIGHT * scale,
+    physicalWidth: Math.max(MAIN_PAPER_WIDTH, DETOUR_TICKET_STUB_WIDTH) * scale,
+    physicalHeight: DETOUR_TICKET_PHYSICAL_HEIGHT * scale,
+    stubHeight: DETOUR_TICKET_STUB_HEIGHT * scale,
+  };
+}
 
 // The swipe hit area follows the actual bottom perforation of ticket-main.png.
 export const DETOUR_TICKET_TEAR_SEAM_RATIO =
@@ -218,6 +246,7 @@ type V45TicketProps = {
   artworkVisible?: boolean;
   showBarcode?: boolean;
   showStubArtwork?: boolean;
+  renderWidth?: number;
 };
 
 export function V45Ticket({
@@ -230,6 +259,7 @@ export function V45Ticket({
   artworkVisible = true,
   showBarcode = false,
   showStubArtwork = true,
+  renderWidth = DETOUR_TICKET_DESIGN_WIDTH,
 }: V45TicketProps) {
   const [artworkReady, setArtworkReady] = useState(
     artworkVisible ? ticketArtworkDecoded : true
@@ -319,6 +349,9 @@ export function V45Ticket({
     ? stampProgress.interpolate({ inputRange: [0, 1], outputRange: [1.28, 1] })
     : 1;
   const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
+  const safeRenderWidth = Math.max(1, renderWidth);
+  const renderScale = safeRenderWidth / DETOUR_TICKET_DESIGN_WIDTH;
+  const renderedMainHeight = DETOUR_TICKET_HEIGHT * renderScale;
 
   const feedStyle = {
     transform: [
@@ -348,12 +381,26 @@ export function V45Ticket({
       ref={ticketRef}
       onLayout={measureTicket}
       style={[
-        styles.v46ArtTicket,
-        { height: DETOUR_TICKET_HEIGHT },
+        {
+          width: safeRenderWidth,
+          height: renderedMainHeight,
+          overflow: 'visible',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
         artworkVisible && !artworkReady && styles.v49TicketArtworkPending,
         feedStyle,
       ]}
     >
+      <View
+        style={[
+          styles.v46ArtTicket,
+          {
+            height: DETOUR_TICKET_HEIGHT,
+            transform: [{ scale: renderScale }],
+          },
+        ]}
+      >
       {artworkVisible && (
         <>
           {showStubArtwork && <TearableTicketStub />}
@@ -440,6 +487,7 @@ export function V45Ticket({
           <Text style={styles.v46ArtSecretStampText}>終點保密</Text>
         </Animated.View>
       )}
+      </View>
     </Animated.View>
   );
 }
