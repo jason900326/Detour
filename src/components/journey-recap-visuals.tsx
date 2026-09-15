@@ -256,21 +256,20 @@ function PhotoStrip({
     <View style={styles.v54FilmStrip}>
       <View style={styles.v54FilmPhotos}>
         {photos.slice(0, 6).map((photo, index) => (
-          <PlacedPhoto key={photo.id} delay={90 + index * 70}>
-            <Pressable
-              onPress={() => onPhotoIndex(index)}
-              style={styles.v54FilmPress}
-            >
-              <Image
-                source={{ uri: photo.uri }}
-                style={[
-                  styles.v54FilmPhoto,
-                  index === activeIndex && styles.v54FilmPhotoActive,
-                ]}
-                resizeMode="cover"
-              />
-            </Pressable>
-          </PlacedPhoto>
+          <Pressable
+            key={photo.id}
+            onPress={() => onPhotoIndex(index)}
+            style={styles.v54FilmPress}
+          >
+            <Image
+              source={{ uri: photo.uri }}
+              style={[
+                styles.v54FilmPhoto,
+                index === activeIndex && styles.v54FilmPhotoActive,
+              ]}
+              resizeMode="cover"
+            />
+          </Pressable>
         ))}
       </View>
     </View>
