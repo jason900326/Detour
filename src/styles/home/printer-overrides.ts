@@ -62,12 +62,12 @@ export const printerOverrides = StyleSheet.create({
     backgroundColor: '#77746E',
     borderTopWidth: 1,
     borderTopColor: '#96938C',
-    zIndex: 2,
+    zIndex: 4,
     shadowColor: '#000',
     shadowOpacity: 0.14,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
+    elevation: 4,
   },
   // V45Ticket still owns the barcode view structurally, but the current ticket
   // design intentionally omits it. Overriding the shared style keeps all

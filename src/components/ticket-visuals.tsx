@@ -12,7 +12,7 @@ let ticketArtworkDecoded = false;
 const DETOUR_TICKET_BARS = [2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3];
 const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 50);
 
-export const DETOUR_TICKET_WIDTH = 310;
+export const DETOUR_TICKET_WIDTH = 280;
 export const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');
 export const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');
 
