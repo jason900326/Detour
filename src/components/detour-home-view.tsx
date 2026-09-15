@@ -1099,7 +1099,7 @@ export function DetourHomeView({
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-405, 0],
+                            outputRange: [-340, 0],
                           }),
                         },
                       ],

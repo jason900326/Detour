@@ -30,7 +30,7 @@ let ticketArtworkDecoded = false;
 const DETOUR_TICKET_BARS = [2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3];
 const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 50);
 
-export const DETOUR_TICKET_WIDTH = 310;
+export const DETOUR_TICKET_WIDTH = 260;
 export const DETOUR_TICKET_BASE_SOURCE = require('../../assets/detour/ticket-base.png');
 
 const TICKET_ARTWORK_WIDTH = 1122;
@@ -44,10 +44,11 @@ export const DETOUR_TICKET_HEIGHT =
 export const DETOUR_TICKET_TEAR_SEAM_RATIO =
   TICKET_TEAR_Y / TICKET_ARTWORK_HEIGHT;
 
-const TEAR_EDGE_START_PX = 104;
-const TEAR_HIT_HEIGHT = 92;
-const TEAR_WANDER_PX = 18;
-const TEAR_SAMPLE_PX = 5;
+const TICKET_INTERACTION_SCALE = DETOUR_TICKET_WIDTH / 310;
+const TEAR_EDGE_START_PX = 104 * TICKET_INTERACTION_SCALE;
+const TEAR_HIT_HEIGHT = 92 * TICKET_INTERACTION_SCALE;
+const TEAR_WANDER_PX = 18 * TICKET_INTERACTION_SCALE;
+const TEAR_SAMPLE_PX = 5 * TICKET_INTERACTION_SCALE;
 const TEAR_AUTOFINISH_PROGRESS = 0.5;
 const TEAR_EXTENSION_MS = 190;
 const TEAR_DROP_MS = 430;
@@ -634,7 +635,7 @@ export function V45Ticket({
     ],
   };
 
-  const useSkiaArtwork = artworkVisible && tearEnabled && !!ticketImage;
+  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;
 
   return (
     <Animated.View
@@ -645,7 +646,7 @@ export function V45Ticket({
         feedStyle,
       ]}
     >
-      {artworkVisible && !useSkiaArtwork && (
+      {artworkVisible && (!hasTear || !ticketImage) && (
         <Image
           source={DETOUR_TICKET_BASE_SOURCE}
           style={StyleSheet.absoluteFill}
@@ -655,8 +656,8 @@ export function V45Ticket({
         />
       )}
 
-      {useSkiaArtwork && (
-        <Canvas style={StyleSheet.absoluteFill}>
+      {skiaArtworkReady && (
+        <Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>
           {!hasTear && (
             <SkiaImage
               image={ticketImage}
@@ -769,7 +770,7 @@ export function V45Ticket({
         >
           <Text style={styles.v46ArtTicketLabel}>此趟心情</Text>
           <View style={styles.v46ArtTicketMoodRow}>
-            <V45MoodIcon moodId={moodId} size={36} />
+            <V45MoodIcon moodId={moodId} size={30} />
             <Text style={styles.v46ArtTicketMoodText}>{moodLabel}</Text>
           </View>
         </View>
@@ -805,9 +806,9 @@ export function V45Ticket({
           ]}
         >
           <View style={styles.v46ArtMiniStart} />
-          <View style={[styles.v46ArtMiniDash, { left: 15, top: 28, transform: [{ rotate: '12deg' }] }]} />
+          <View style={[styles.v46ArtMiniDash, { left: 13, top: 23, transform: [{ rotate: '12deg' }] }]} />
           <View style={styles.v46ArtMiniTree} />
-          <View style={[styles.v46ArtMiniDash, { left: 70, top: 22, transform: [{ rotate: '-17deg' }] }]} />
+          <View style={[styles.v46ArtMiniDash, { left: 59, top: 18, transform: [{ rotate: '-17deg' }] }]} />
           <View style={styles.v46ArtMiniFlagPole} />
           <View style={styles.v46ArtMiniFlag} />
         </View>
