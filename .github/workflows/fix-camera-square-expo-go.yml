@@ -10,10 +10,12 @@ permissions:
 
 jobs:
   fix-and-verify:
+    name: Patch and validate camera
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: fix/camera-square-expo-go
           fetch-depth: 0
@@ -31,57 +33,59 @@ jobs:
         run: npx expo install expo-image-manipulator
 
       - name: Apply square capture and continuous autofocus
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           path = Path('src/components/detour-camera-screen.tsx')
-          s = path.read_text()
+          s = path.read_text(encoding='utf-8')
 
           s = s.replace(
-          "  type CameraType,\n  type FlashMode,\n} from 'expo-camera';",
-          "  type CameraCapturedPicture,\n  type CameraType,\n  type FlashMode,\n} from 'expo-camera';")
-
+              "  type CameraType,\n  type FlashMode,\n} from 'expo-camera';",
+              "  type CameraCapturedPicture,\n  type CameraType,\n  type FlashMode,\n} from 'expo-camera';",
+          )
           s = s.replace(
-          "import { Directory, File, Paths } from 'expo-file-system';",
-          "import { Directory, File, Paths } from 'expo-file-system';\nimport * as ImageManipulator from 'expo-image-manipulator';")
+              "import { Directory, File, Paths } from 'expo-file-system';",
+              "import { Directory, File, Paths } from 'expo-file-system';\nimport * as ImageManipulator from 'expo-image-manipulator';",
+          )
 
           anchor = "function delay(ms: number) {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n"
-          helper = """function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function cropCaptureToSquare(capture: CameraCapturedPicture) {
-  const side = Math.min(capture.width, capture.height);
-  const originX = Math.max(0, Math.round((capture.width - side) / 2));
-  const originY = Math.max(0, Math.round((capture.height - side) / 2));
-  const context = ImageManipulator.manipulate(capture.uri);
-  context.crop({ originX, originY, width: side, height: side });
-  const rendered = await context.renderAsync();
-  return rendered.saveAsync({
-    compress: 0.84,
-    format: ImageManipulator.SaveFormat.JPEG,
-  });
-}
-"""
+          helper = (
+              "function delay(ms: number) {\n"
+              "  return new Promise((resolve) => setTimeout(resolve, ms));\n"
+              "}\n\n"
+              "async function cropCaptureToSquare(capture: CameraCapturedPicture) {\n"
+              "  const side = Math.min(capture.width, capture.height);\n"
+              "  const originX = Math.max(0, Math.round((capture.width - side) / 2));\n"
+              "  const originY = Math.max(0, Math.round((capture.height - side) / 2));\n"
+              "  const context = ImageManipulator.manipulate(capture.uri);\n"
+              "  context.crop({ originX, originY, width: side, height: side });\n"
+              "  const rendered = await context.renderAsync();\n"
+              "  return rendered.saveAsync({\n"
+              "    compress: 0.84,\n"
+              "    format: ImageManipulator.SaveFormat.JPEG,\n"
+              "  });\n"
+              "}\n"
+          )
           if anchor not in s:
               raise SystemExit('delay anchor not found')
           s = s.replace(anchor, helper, 1)
 
-          old_capture = """      const capture = await cameraRef.current.takePictureAsync({ quality: 0.84 });
-      if (!capture?.uri) throw new Error('No photo URI');
-
-      setPendingCaptureUri(capture.uri);
-      setTakingPhoto(false);
-"""
-          new_capture = """      // Capture at source quality, then create the one canonical 1:1 file.
-      // Review, session storage and Photos all use this same square result.
-      const capture = await cameraRef.current.takePictureAsync({ quality: 1 });
-      if (!capture?.uri) throw new Error('No photo URI');
-
-      const squareCapture = await cropCaptureToSquare(capture);
-      setPendingCaptureUri(squareCapture.uri);
-      setTakingPhoto(false);
-"""
+          old_capture = (
+              "      const capture = await cameraRef.current.takePictureAsync({ quality: 0.84 });\n"
+              "      if (!capture?.uri) throw new Error('No photo URI');\n\n"
+              "      setPendingCaptureUri(capture.uri);\n"
+              "      setTakingPhoto(false);\n"
+          )
+          new_capture = (
+              "      // Capture at source quality, then create the one canonical 1:1 file.\n"
+              "      // Review, session storage and Photos all use this same square result.\n"
+              "      const capture = await cameraRef.current.takePictureAsync({ quality: 1 });\n"
+              "      if (!capture?.uri) throw new Error('No photo URI');\n\n"
+              "      const squareCapture = await cropCaptureToSquare(capture);\n"
+              "      setPendingCaptureUri(squareCapture.uri);\n"
+              "      setTakingPhoto(false);\n"
+          )
           if old_capture not in s:
               raise SystemExit('capture block not found')
           s = s.replace(old_capture, new_capture, 1)
@@ -90,42 +94,44 @@ async function cropCaptureToSquare(capture: CameraCapturedPicture) {
               raise SystemExit('autofocus prop not found')
           s = s.replace(
               '        autofocus="on"',
-              '        autofocus="off" // Expo Camera: off keeps automatic focusing active as needed.'
+              '        autofocus="off" // Expo Camera: off keeps automatic focusing active as needed.',
+              1,
           )
 
-          camera_view_end = """        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
-      />
-
-      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
-"""
-          camera_view_replacement = """        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
-      />
-
-      <View pointerEvents=\"none\" style={styles.squareGuideWrap}>
-        <View style={styles.squareGuide} />
-      </View>
-
-      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
-"""
+          camera_view_end = (
+              "        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}\n"
+              "      />\n\n"
+              "      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />\n"
+          )
+          camera_view_replacement = (
+              "        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}\n"
+              "      />\n\n"
+              "      <View pointerEvents=\"none\" style={styles.squareGuideWrap}>\n"
+              "        <View style={styles.squareGuide} />\n"
+              "      </View>\n\n"
+              "      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />\n"
+          )
           if camera_view_end not in s:
               raise SystemExit('camera view end anchor not found')
           s = s.replace(camera_view_end, camera_view_replacement, 1)
 
-          style_anchor = """  cameraScreen: { flex: 1, backgroundColor: '#000' },
-  cameraView: { flex: 1 },
-  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
-"""
-          style_replacement = """  cameraScreen: { flex: 1, backgroundColor: '#000' },
-  cameraView: { flex: 1 },
-  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
-  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
-  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
-"""
+          style_anchor = (
+              "  cameraScreen: { flex: 1, backgroundColor: '#000' },\n"
+              "  cameraView: { flex: 1 },\n"
+              "  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },\n"
+          )
+          style_replacement = (
+              "  cameraScreen: { flex: 1, backgroundColor: '#000' },\n"
+              "  cameraView: { flex: 1 },\n"
+              "  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },\n"
+              "  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },\n"
+              "  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },\n"
+          )
           if style_anchor not in s:
               raise SystemExit('camera style anchor not found')
           s = s.replace(style_anchor, style_replacement, 1)
 
-          path.write_text(s)
+          path.write_text(s, encoding='utf-8')
           PY
 
       - name: Verify package compatibility
@@ -137,7 +143,8 @@ async function cropCaptureToSquare(capture: CameraCapturedPicture) {
       - name: Bundle iOS
         run: npx expo export --platform ios --output-dir /tmp/detour-camera-ios
 
-      - name: Remove temporary workflow and commit verified change
+      - name: Commit verified camera change
+        shell: bash
         run: |
           git rm .github/workflows/fix-camera-square-expo-go.yml
           git config user.name "github-actions[bot]"
