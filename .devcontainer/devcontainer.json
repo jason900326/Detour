@@ -1,7 +1,7 @@
 {
   "name": "Detour iPad Expo Go",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-24-bookworm",
-  "postCreateCommand": "npm ci --no-audit --no-fund && npm install -g @expo/ngrok",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
+  "postCreateCommand": "npm ci --no-audit --no-fund && sudo npm install -g @expo/ngrok",
   "forwardPorts": [8081],
   "portsAttributes": {
     "8081": {
