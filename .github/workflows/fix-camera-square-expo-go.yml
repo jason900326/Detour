@@ -1,0 +1,147 @@
+name: Fix Expo Go square camera
+
+on:
+  push:
+    branches:
+      - fix/camera-square-expo-go
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/camera-square-expo-go
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install existing dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install SDK-compatible image manipulator
+        run: npx expo install expo-image-manipulator
+
+      - name: Apply square capture and continuous autofocus
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/detour-camera-screen.tsx')
+          s = path.read_text()
+
+          s = s.replace(
+          "  type CameraType,\n  type FlashMode,\n} from 'expo-camera';",
+          "  type CameraCapturedPicture,\n  type CameraType,\n  type FlashMode,\n} from 'expo-camera';")
+
+          s = s.replace(
+          "import { Directory, File, Paths } from 'expo-file-system';",
+          "import { Directory, File, Paths } from 'expo-file-system';\nimport * as ImageManipulator from 'expo-image-manipulator';")
+
+          anchor = "function delay(ms: number) {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n"
+          helper = """function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cropCaptureToSquare(capture: CameraCapturedPicture) {
+  const side = Math.min(capture.width, capture.height);
+  const originX = Math.max(0, Math.round((capture.width - side) / 2));
+  const originY = Math.max(0, Math.round((capture.height - side) / 2));
+  const context = ImageManipulator.manipulate(capture.uri);
+  context.crop({ originX, originY, width: side, height: side });
+  const rendered = await context.renderAsync();
+  return rendered.saveAsync({
+    compress: 0.84,
+    format: ImageManipulator.SaveFormat.JPEG,
+  });
+}
+"""
+          if anchor not in s:
+              raise SystemExit('delay anchor not found')
+          s = s.replace(anchor, helper, 1)
+
+          old_capture = """      const capture = await cameraRef.current.takePictureAsync({ quality: 0.84 });
+      if (!capture?.uri) throw new Error('No photo URI');
+
+      setPendingCaptureUri(capture.uri);
+      setTakingPhoto(false);
+"""
+          new_capture = """      // Capture at source quality, then create the one canonical 1:1 file.
+      // Review, session storage and Photos all use this same square result.
+      const capture = await cameraRef.current.takePictureAsync({ quality: 1 });
+      if (!capture?.uri) throw new Error('No photo URI');
+
+      const squareCapture = await cropCaptureToSquare(capture);
+      setPendingCaptureUri(squareCapture.uri);
+      setTakingPhoto(false);
+"""
+          if old_capture not in s:
+              raise SystemExit('capture block not found')
+          s = s.replace(old_capture, new_capture, 1)
+
+          if '        autofocus="on"' not in s:
+              raise SystemExit('autofocus prop not found')
+          s = s.replace(
+              '        autofocus="on"',
+              '        autofocus="off" // Expo Camera: off keeps automatic focusing active as needed.'
+          )
+
+          camera_view_end = """        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
+      />
+
+      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
+"""
+          camera_view_replacement = """        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
+      />
+
+      <View pointerEvents=\"none\" style={styles.squareGuideWrap}>
+        <View style={styles.squareGuide} />
+      </View>
+
+      <Animated.View pointerEvents=\"none\" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
+"""
+          if camera_view_end not in s:
+              raise SystemExit('camera view end anchor not found')
+          s = s.replace(camera_view_end, camera_view_replacement, 1)
+
+          style_anchor = """  cameraScreen: { flex: 1, backgroundColor: '#000' },
+  cameraView: { flex: 1 },
+  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
+"""
+          style_replacement = """  cameraScreen: { flex: 1, backgroundColor: '#000' },
+  cameraView: { flex: 1 },
+  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
+  shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
+"""
+          if style_anchor not in s:
+              raise SystemExit('camera style anchor not found')
+          s = s.replace(style_anchor, style_replacement, 1)
+
+          path.write_text(s)
+          PY
+
+      - name: Verify package compatibility
+        run: npx expo install --check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-camera-ios
+
+      - name: Remove temporary workflow and commit verified change
+        run: |
+          git rm .github/workflows/fix-camera-square-expo-go.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src/components/detour-camera-screen.tsx
+          git commit -m "fix: make Expo Go camera capture square"
+          git push origin HEAD:fix/camera-square-expo-go
