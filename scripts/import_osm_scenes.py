@@ -70,8 +70,132 @@ def is_religious(tags: dict[str, str]) -> bool:
     )
 
 
+def normalized_scene_text(tags: dict[str, str]) -> str:
+    return " ".join(
+        str(tags.get(key, ""))
+        for key in ("name", "name:zh", "official_name", "operator", "description")
+        if tags.get(key)
+    ).lower()
+
+
+def has_any_scene_keyword(text: str, keywords: set[str]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def is_clearly_public_destination(tags: dict[str, str]) -> bool:
+    return (
+        tags.get("tourism") in {"museum", "gallery"}
+        or tags.get("amenity") in {
+            "arts_centre",
+            "community_centre",
+            "library",
+            "marketplace",
+            "public_bookcase",
+        }
+        or tags.get("leisure") in {"park", "garden"}
+        or tags.get("place") == "square"
+    )
+
+
+def is_unsafe_or_restricted_scene(tags: dict[str, str]) -> bool:
+    if tags.get("access") in {"private", "no"}:
+        return True
+
+    amenity = tags.get("amenity", "")
+    building = tags.get("building", "")
+    healthcare = tags.get("healthcare", "")
+    emergency = tags.get("emergency", "")
+    office = tags.get("office", "")
+    text = normalized_scene_text(tags)
+
+    is_healthcare = (
+        amenity in {"hospital", "clinic", "doctors", "dentist"}
+        or healthcare in {"hospital", "clinic", "doctor", "dentist", "centre", "center"}
+        or building == "hospital"
+        or emergency == "emergency_ward"
+        or has_any_scene_keyword(
+            text,
+            {
+                "醫院",
+                "醫學中心",
+                "醫療中心",
+                "診所",
+                " hospital",
+                "hospital ",
+                "medical center",
+                "medical centre",
+                " clinic",
+                "clinic ",
+            },
+        )
+    )
+    if is_healthcare:
+        return True
+
+    is_police_or_fire = (
+        amenity in {"police", "fire_station"}
+        or building in {"police", "fire_station"}
+        or emergency in {"fire_station", "ambulance_station"}
+        or has_any_scene_keyword(
+            text,
+            {
+                "警察局",
+                "派出所",
+                "分局",
+                "警察隊",
+                "消防局",
+                "消防隊",
+                "消防分隊",
+                "police station",
+                "fire station",
+            },
+        )
+    )
+    if is_police_or_fire and tags.get("tourism") not in {"museum", "gallery"}:
+        return True
+
+    if (
+        amenity == "prison"
+        or tags.get("landuse") == "military"
+        or "military" in tags
+        or building == "military"
+    ):
+        return True
+
+    is_government = (
+        office == "government"
+        or "government" in tags
+        or amenity in {"townhall", "courthouse", "embassy"}
+        or building in {"government", "civic"}
+        or has_any_scene_keyword(
+            text,
+            {
+                "市政府",
+                "縣政府",
+                "區公所",
+                "鄉公所",
+                "鎮公所",
+                "戶政事務所",
+                "地政事務所",
+                "稅捐處",
+                "稅務局",
+                "法院",
+                "檢察署",
+                "government office",
+                "city hall",
+                "district office",
+                "courthouse",
+            },
+        )
+    )
+    if is_government and not is_clearly_public_destination(tags):
+        return True
+
+    return False
+
+
 def classify(tags: dict[str, str]) -> tuple[str, str] | None:
-    if is_religious(tags):
+    if is_religious(tags) or is_unsafe_or_restricted_scene(tags):
         return None
 
     if tags.get("tourism") == "artwork":
@@ -252,7 +376,7 @@ def normalize_feature(feature: dict[str, Any], batch: str) -> dict[str, Any] | N
         return None
 
     tags = tags_from_properties(properties)
-    if tags.get("access") in {"private", "no"}:
+    if is_unsafe_or_restricted_scene(tags):
         return None
 
     classification = classify(tags)
