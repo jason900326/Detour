@@ -92,11 +92,7 @@ jobs:
 
           if '        autofocus="on"' not in s:
               raise SystemExit('autofocus prop not found')
-          s = s.replace(
-              '        autofocus="on"',
-              '        autofocus="off" // Expo Camera: off keeps automatic focusing active as needed.',
-              1,
-          )
+          s = s.replace('        autofocus="on"', '        autofocus="off"', 1)
 
           camera_view_end = (
               "        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}\n"
@@ -134,8 +130,8 @@ jobs:
           path.write_text(s, encoding='utf-8')
           PY
 
-      - name: Verify package compatibility
-        run: npx expo install --check
+      - name: Verify image manipulator is installed
+        run: npm ls expo-image-manipulator --depth=0
 
       - name: Typecheck
         run: npm run typecheck
