@@ -392,7 +392,10 @@ export function DetourHomeView({
     // The native slot is the source of truth for paper width. The paper keeps
     // visible mechanical clearance on both sides instead of chasing px values.
     const slotWidth = Math.max(1, printerWidth - 6);
-    const ticketSlotFillRatio = 0.84;
+    // Restore the previously-good paper-to-slot proportion. This is a
+    // design ratio, not a guessed device px width. The slot remains the
+    // source of truth and the paper is always derived from it.
+    const ticketSlotFillRatio = 0.72;
     const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
 
     // The width rule normally wins. Short screens can only shrink the same
@@ -403,8 +406,10 @@ export function DetourHomeView({
     const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
     const ticketWidthFromHeight = maxPaperHeight / ticketAspect;
     const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
-    const ticketScale = ticketWidth / DETOUR_TICKET_WIDTH;
-    const ticketHeight = DETOUR_TICKET_HEIGHT * ticketScale;
+    // ticketWidth is the single final rendered paper width. V45Ticket
+    // derives its one visual scale from this value; the page does not
+    // apply another ticket scale on top of it.
+    const ticketHeight = ticketWidth * ticketAspect;
 
     return {
       leftPadding,
@@ -415,7 +420,6 @@ export function DetourHomeView({
       slotWidth,
       ticketWidth,
       ticketHeight,
-      ticketScale,
       paperViewportHeight: ticketHeight + 2,
       assemblyHeight: 47 + ticketHeight + 2,
     };
