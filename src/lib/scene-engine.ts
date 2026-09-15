@@ -187,6 +187,11 @@ export function isUnsafeOrRestrictedScene(tags: Record<string, string>) {
   const access = tags.access ?? '';
   if (['private', 'no'].includes(access)) return true;
 
+  // A synthetic coordinate has no place-level safety context. Never issue a
+  // ticket to one: failing safely is better than landing inside a hospital,
+  // government compound, private building, or other unknown parcel.
+  if (tags['detour:generated'] === 'route-anchor') return true;
+
   const amenity = tags.amenity ?? '';
   const building = tags.building ?? '';
   const healthcare = tags.healthcare ?? '';

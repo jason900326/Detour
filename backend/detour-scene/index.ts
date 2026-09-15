@@ -160,6 +160,7 @@ function isClearlyPublicDestination(tags: Record<string, string>) {
 
 function isUnsafeOrRestrictedScene(tags: Record<string, string>) {
   if (["private", "no"].includes(tags.access ?? "")) return true;
+  if (tags["detour:generated"] === "route-anchor") return true;
 
   const amenity = tags.amenity ?? "";
   const building = tags.building ?? "";
@@ -342,34 +343,20 @@ function generatedRouteAnchors(descriptor: QueryDescriptor): OverpassElement[] {
 }
 
 function generatedResponse(descriptor: QueryDescriptor, startedAt: number) {
-  const elements = generatedRouteAnchors(descriptor);
-
-  if (elements.length === 0) {
-    return json(
-      {
-        error: "SCENE_DATABASE_EMPTY",
-        detail: "Food needs a real named place. Taiwan Scene import has not provided one here yet.",
-      },
-      503,
-      { "X-Detour-Scene-Source": "database-empty" },
-    );
-  }
-
   console.log(
-    `[DETOUR SCENE API] route-anchor fallback ${Date.now() - startedAt}ms · ${elements.length} anchors`,
+    `[DETOUR SCENE API] database empty ${Date.now() - startedAt}ms · refusing unsafe synthetic anchor`,
   );
 
   return json(
     {
-      elements,
-      detourCache: {
-        status: "generated",
-        ageMs: 0,
-        upstream: "route-anchor",
-      },
+      error: "SCENE_DATABASE_EMPTY",
+      detail:
+        descriptor.family === "food"
+          ? "Food needs a real named place. Taiwan Scene import has not provided one here yet."
+          : "No verified public Scene is available in this area yet.",
     },
-    200,
-    { "X-Detour-Scene-Source": "route-anchor" },
+    503,
+    { "X-Detour-Scene-Source": "database-empty" },
   );
 }
 
