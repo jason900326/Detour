@@ -32,31 +32,14 @@ jobs:
 
           camera = Path('src/components/detour-camera-screen.tsx')
           s = camera.read_text(encoding='utf-8')
-
-          old_markup = '''      <View pointerEvents="none" style={styles.squareGuideWrap}>
-        <View style={styles.squareGuide} />
-      </View>
-'''
-          new_markup = '''      <View pointerEvents="none" style={styles.squareMaskWrap}>
-        <View style={styles.squareMaskBand} />
-        <View style={styles.squareViewport}>
-          <View style={styles.squareGuide} />
-        </View>
-        <View style={styles.squareMaskBand} />
-      </View>
-'''
+          old_markup = "      <View pointerEvents=\"none\" style={styles.squareGuideWrap}>\n        <View style={styles.squareGuide} />\n      </View>\n"
+          new_markup = "      <View pointerEvents=\"none\" style={styles.squareMaskWrap}>\n        <View style={styles.squareMaskBand} />\n        <View style={styles.squareViewport}>\n          <View style={styles.squareGuide} />\n        </View>\n        <View style={styles.squareMaskBand} />\n      </View>\n"
           if old_markup not in s:
               raise SystemExit('camera square guide markup not found')
           s = s.replace(old_markup, new_markup, 1)
 
-          old_styles = '''  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
-  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
-'''
-          new_styles = '''  squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
-  squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
-  squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
-  squareGuide: { ...ABSOLUTE_FILL, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
-'''
+          old_styles = "  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },\n  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },\n"
+          new_styles = "  squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },\n  squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },\n  squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },\n  squareGuide: { ...ABSOLUTE_FILL, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },\n"
           if old_styles not in s:
               raise SystemExit('camera square guide styles not found')
           s = s.replace(old_styles, new_styles, 1)
@@ -64,41 +47,8 @@ jobs:
 
           recap = Path('src/components/journey-recap-visuals.tsx')
           s = recap.read_text(encoding='utf-8')
-          old_strip = '''        {photos.slice(0, 6).map((photo, index) => (
-          <PlacedPhoto key={photo.id} delay={90 + index * 70}>
-            <Pressable
-              onPress={() => onPhotoIndex(index)}
-              style={styles.v54FilmPress}
-            >
-              <Image
-                source={{ uri: photo.uri }}
-                style={[
-                  styles.v54FilmPhoto,
-                  index === activeIndex && styles.v54FilmPhotoActive,
-                ]}
-                resizeMode="cover"
-              />
-            </Pressable>
-          </PlacedPhoto>
-        ))}
-'''
-          new_strip = '''        {photos.slice(0, 6).map((photo, index) => (
-          <Pressable
-            key={photo.id}
-            onPress={() => onPhotoIndex(index)}
-            style={styles.v54FilmPress}
-          >
-            <Image
-              source={{ uri: photo.uri }}
-              style={[
-                styles.v54FilmPhoto,
-                index === activeIndex && styles.v54FilmPhotoActive,
-              ]}
-              resizeMode="cover"
-            />
-          </Pressable>
-        ))}
-'''
+          old_strip = "        {photos.slice(0, 6).map((photo, index) => (\n          <PlacedPhoto key={photo.id} delay={90 + index * 70}>\n            <Pressable\n              onPress={() => onPhotoIndex(index)}\n              style={styles.v54FilmPress}\n            >\n              <Image\n                source={{ uri: photo.uri }}\n                style={[\n                  styles.v54FilmPhoto,\n                  index === activeIndex && styles.v54FilmPhotoActive,\n                ]}\n                resizeMode=\"cover\"\n              />\n            </Pressable>\n          </PlacedPhoto>\n        ))}\n"
+          new_strip = "        {photos.slice(0, 6).map((photo, index) => (\n          <Pressable\n            key={photo.id}\n            onPress={() => onPhotoIndex(index)}\n            style={styles.v54FilmPress}\n          >\n            <Image\n              source={{ uri: photo.uri }}\n              style={[\n                styles.v54FilmPhoto,\n                index === activeIndex && styles.v54FilmPhotoActive,\n              ]}\n              resizeMode=\"cover\"\n            />\n          </Pressable>\n        ))}\n"
           if old_strip not in s:
               raise SystemExit('recap photo strip block not found')
           s = s.replace(old_strip, new_strip, 1)
