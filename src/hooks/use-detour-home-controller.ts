@@ -265,6 +265,8 @@ export function useDetourHomeController() {
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenY = useRef(new Animated.Value(0)).current;
   const routeProgress = useRef(new Animated.Value(0)).current;
+  const ticketVisualReadyRef = useRef(false);
+  const ticketVisualReadyResolverRef = useRef<(() => void) | null>(null);
   const printerPulse = useRef(new Animated.Value(0)).current;
   const ticketStamp = useRef(new Animated.Value(0)).current;
   const [ticketReadyUnlocked, setTicketReadyUnlocked] = useState(false);
@@ -277,6 +279,28 @@ export function useDetourHomeController() {
   const minutePulse = useRef(new Animated.Value(1)).current;
   const homeEntrance = useRef(new Animated.Value(0)).current;
   const homeRouteMotion = useRef(new Animated.Value(0)).current;
+
+  const resetTicketVisualReady = useCallback(() => {
+    ticketVisualReadyRef.current = false;
+    ticketVisualReadyResolverRef.current = null;
+  }, []);
+
+  const markTicketVisualReady = useCallback(() => {
+    if (ticketVisualReadyRef.current) return;
+
+    ticketVisualReadyRef.current = true;
+    const resolve = ticketVisualReadyResolverRef.current;
+    ticketVisualReadyResolverRef.current = null;
+    resolve?.();
+  }, []);
+
+  const waitForTicketVisualReady = useCallback(() => {
+    if (ticketVisualReadyRef.current) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      ticketVisualReadyResolverRef.current = resolve;
+    });
+  }, []);
 
   const mood = useMemo(
     () => MOODS.find((item) => item.id === selectedMood) ?? null,
@@ -1260,6 +1284,12 @@ export function useDetourHomeController() {
   async function continueFromMood() {
     if (!selectedMood) return;
 
+    // Reset the visual gate before the printing screen mounts. The ticket
+    // component will reopen it only after ticket-base is decoded by Skia.
+    resetTicketVisualReady();
+    routeProgress.stopAnimation();
+    routeProgress.setValue(0);
+
     await Haptics.impactAsync(
       Haptics.ImpactFeedbackStyle.Medium
     );
@@ -2138,9 +2168,13 @@ export function useDetourHomeController() {
     setTicketBuildError(null);
     const ticketStartedAt = Date.now();
 
-    // Never show a dead printer. Feed the leading ticket-stub edge immediately
-    // while data is prepared, then hold here until the real route is ready.
+    // Ticket artwork, overlay copy and printer motion are one pipeline. Do not
+    // move paper until the bundled ticket-base has decoded in Skia; otherwise
+    // text can emerge before paper or the renderer can visibly swap mid-print.
     routeProgress.stopAnimation();
+    routeProgress.setValue(0);
+    await waitForTicketVisualReady();
+
     Animated.timing(routeProgress, {
       toValue: 0.13,
       duration: 420,
@@ -3306,6 +3340,7 @@ export function useDetourHomeController() {
     screenOpacity,
     screenY,
     routeProgress,
+    markTicketVisualReady,
     printerPulse,
     ticketStamp,
     ticketReadyUnlocked,

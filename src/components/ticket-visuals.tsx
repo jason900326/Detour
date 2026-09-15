@@ -25,8 +25,6 @@ import { INK, SIGNAL } from '../theme/detour-theme';
 import { V45MoodIcon } from './mood-visuals';
 import { useTicketTear } from './ticket-tear-context';
 
-let ticketArtworkDecoded = false;
-
 const DETOUR_TICKET_BARS = [2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3];
 const DETOUR_TICKET_EDGE = Array.from({ length: 8 }, (_, index) => 30 + index * 50);
 
@@ -249,6 +247,7 @@ type V45TicketProps = {
   showBarcode?: boolean;
   showStubArtwork?: boolean;
   renderWidth?: number;
+  onVisualReady?: () => void;
 };
 
 export function V45Ticket({
@@ -261,10 +260,9 @@ export function V45Ticket({
   artworkVisible = true,
   showBarcode = false,
   renderWidth = DETOUR_TICKET_WIDTH,
+  onVisualReady,
 }: V45TicketProps) {
-  const [artworkReady, setArtworkReady] = useState(
-    artworkVisible ? ticketArtworkDecoded : true
-  );
+  const [artworkReady, setArtworkReady] = useState(!artworkVisible);
   const [tearPoints, setTearPoints] = useState<TearPoint[]>([]);
   const [tearProgress, setTearProgress] = useState(0);
   const [finishing, setFinishing] = useState(false);
@@ -278,6 +276,7 @@ export function V45Ticket({
   const tickRef = useRef(0);
   const finishingRef = useRef(false);
   const frameRef = useRef<number | null>(null);
+  const visualReadyNotifiedRef = useRef(false);
   const activeDragRef = useRef<ActiveDrag>({
     active: false,
     anchor: { x: 0, y: DETOUR_TICKET_HEIGHT * DETOUR_TICKET_TEAR_SEAM_RATIO },
@@ -287,11 +286,6 @@ export function V45Ticket({
   const { enabled: tearEnabled, onTorn } = useTicketTear();
   const seamY = DETOUR_TICKET_HEIGHT * DETOUR_TICKET_TEAR_SEAM_RATIO;
   const gestureTop = seamY - TEAR_HIT_HEIGHT / 2;
-
-  const markArtworkReady = () => {
-    ticketArtworkDecoded = true;
-    setArtworkReady(true);
-  };
 
   const clearTear = () => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -310,8 +304,14 @@ export function V45Ticket({
   };
 
   useEffect(() => {
-    if (!artworkVisible) setArtworkReady(true);
-  }, [artworkVisible]);
+    const ready = !artworkVisible || Boolean(ticketImage);
+    setArtworkReady(ready);
+
+    if (ready && !visualReadyNotifiedRef.current) {
+      visualReadyNotifiedRef.current = true;
+      onVisualReady?.();
+    }
+  }, [artworkVisible, onVisualReady, ticketImage]);
 
   useEffect(() => {
     if (!tearEnabled) clearTear();
@@ -640,13 +640,16 @@ export function V45Ticket({
     ],
   };
 
-  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;
+  // Printing and tearing always use the same decoded Skia image. This avoids
+  // swapping from a React Native Image to Canvas at the ready-state boundary.
+  const skiaArtworkReady = artworkVisible && !!ticketImage;
+  const ticketVisualReady = !artworkVisible || skiaArtworkReady;
 
   return (
     <Animated.View
       style={[
         { width: safeRenderWidth, height: renderedHeight, overflow: 'visible', alignItems: 'center', justifyContent: 'center' },
-        artworkVisible && !artworkReady && !ticketImage && styles.v49TicketArtworkPending,
+        artworkVisible && !ticketVisualReady && styles.v49TicketArtworkPending,
         feedStyle,
       ]}
     >
@@ -656,16 +659,6 @@ export function V45Ticket({
           { width: DETOUR_TICKET_WIDTH, height: DETOUR_TICKET_HEIGHT, transform: [{ scale: renderScale }] },
         ]}
       >
-      {artworkVisible && !skiaArtworkReady && (
-        <Image
-          source={DETOUR_TICKET_BASE_SOURCE}
-          style={StyleSheet.absoluteFill}
-          resizeMode="contain"
-          onLoad={markArtworkReady}
-          onLoadEnd={markArtworkReady}
-        />
-      )}
-
       {skiaArtworkReady && (
         <Canvas style={StyleSheet.absoluteFill}>
           {!hasTear && (
@@ -736,7 +729,13 @@ export function V45Ticket({
         </Canvas>
       )}
 
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          !ticketVisualReady && { opacity: 0 },
+        ]}
+      >
         <View
           style={[
             ticketOverlayStyles.header,
