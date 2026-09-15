@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - prototype/freeform-ticket-tear
     paths:
       - "src/**"
       - "backend/**"
@@ -19,7 +18,7 @@ on:
       - ".github/workflows/**"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -29,109 +28,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Apply one-time ticket layout repair
-        if: >-
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/prototype/freeform-ticket-tear' &&
-          github.event.head_commit.message == 'chore: repair ticket layout handoff'
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_one(path: Path, old: str, new: str):
-              text = path.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:80]!r}')
-              path.write_text(text.replace(old, new, 1))
-
-          ticket = Path('src/components/ticket-visuals.tsx')
-          replace_one(ticket,
-              'export const DETOUR_TICKET_WIDTH = 310;',
-              'export const DETOUR_TICKET_WIDTH = 260;')
-          replace_one(ticket,
-              'const TEAR_EDGE_START_PX = 104;\nconst TEAR_HIT_HEIGHT = 92;\nconst TEAR_WANDER_PX = 18;\nconst TEAR_SAMPLE_PX = 5;',
-              'const TICKET_INTERACTION_SCALE = DETOUR_TICKET_WIDTH / 310;\nconst TEAR_EDGE_START_PX = 104 * TICKET_INTERACTION_SCALE;\nconst TEAR_HIT_HEIGHT = 92 * TICKET_INTERACTION_SCALE;\nconst TEAR_WANDER_PX = 18 * TICKET_INTERACTION_SCALE;\nconst TEAR_SAMPLE_PX = 5 * TICKET_INTERACTION_SCALE;')
-          replace_one(ticket,
-              '  const useSkiaArtwork = artworkVisible && tearEnabled && !!ticketImage;',
-              '  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;')
-          replace_one(ticket,
-              '      {artworkVisible && !useSkiaArtwork && (',
-              '      {artworkVisible && (!hasTear || !ticketImage) && (')
-          replace_one(ticket,
-              '      {useSkiaArtwork && (\n        <Canvas style={StyleSheet.absoluteFill}>',
-              "      {skiaArtworkReady && (\n        <Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>" )
-          replace_one(ticket,
-              '<V45MoodIcon moodId={moodId} size={36} />',
-              '<V45MoodIcon moodId={moodId} size={30} />')
-          replace_one(ticket,
-              "<View style={[styles.v46ArtMiniDash, { left: 15, top: 28, transform: [{ rotate: '12deg' }] }]} />",
-              "<View style={[styles.v46ArtMiniDash, { left: 13, top: 23, transform: [{ rotate: '12deg' }] }]} />")
-          replace_one(ticket,
-              "<View style={[styles.v46ArtMiniDash, { left: 70, top: 22, transform: [{ rotate: '-17deg' }] }]} />",
-              "<View style={[styles.v46ArtMiniDash, { left: 59, top: 18, transform: [{ rotate: '-17deg' }] }]} />")
-
-          styles = Path('src/styles/home/ticket-recap-styles.ts')
-          replace_one(styles,
-              "  v48PaperViewport: {\n    position: 'absolute',\n    top: 47,\n    width: 318,\n    height: 409,\n    overflow: 'hidden',\n    alignItems: 'center',\n    zIndex: 2,\n  },\n  v48PaperTrack: {\n    position: 'absolute',\n    top: 0,\n    width: 318,\n    alignItems: 'center',\n  },",
-              "  v48PaperViewport: {\n    position: 'absolute',\n    top: 47,\n    left: 0,\n    right: 0,\n    height: 409,\n    overflow: 'hidden',\n    alignItems: 'center',\n    zIndex: 2,\n  },\n  v48PaperTrack: {\n    position: 'absolute',\n    top: 0,\n    left: 0,\n    right: 0,\n    alignItems: 'center',\n  },")
-          replace_one(styles,
-              "  v46ArtTicket: {\n    width: 310,\n    aspectRatio: 1115 / 1411,\n    position: 'relative',\n  },",
-              "  v46ArtTicket: {\n    width: 260,\n    aspectRatio: 1122 / 1402,\n    position: 'relative',\n    alignSelf: 'center',\n  },")
-          replace_one(styles,
-              "  v46ArtTicketBrand: {\n    fontSize: 30,\n    lineHeight: 34,\n    fontWeight: '900',\n    letterSpacing: -1.8,\n    color: INK,\n  },",
-              "  v46ArtTicketBrand: {\n    fontSize: 25,\n    lineHeight: 29,\n    fontWeight: '900',\n    letterSpacing: -1.5,\n    color: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtTicketSerial: {\n    paddingBottom: 3,\n    fontSize: 9,\n    fontWeight: '800',\n    letterSpacing: 1.1,\n    color: '#77736B',\n  },",
-              "  v46ArtTicketSerial: {\n    paddingBottom: 2,\n    fontSize: 8,\n    fontWeight: '800',\n    letterSpacing: 0.9,\n    color: '#77736B',\n  },")
-          replace_one(styles,
-              "  v46ArtTicketLabel: {\n    fontSize: 12,\n    lineHeight: 16,\n    fontWeight: '900',\n    color: INK,\n  },",
-              "  v46ArtTicketLabel: {\n    fontSize: 10,\n    lineHeight: 14,\n    fontWeight: '900',\n    color: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtTicketMinutes: {\n    fontSize: 47,\n    lineHeight: 50,\n    fontWeight: '900',\n    letterSpacing: -2.7,\n    color: SIGNAL,\n  },",
-              "  v46ArtTicketMinutes: {\n    fontSize: 40,\n    lineHeight: 43,\n    fontWeight: '900',\n    letterSpacing: -2.3,\n    color: SIGNAL,\n  },")
-          replace_one(styles,
-              "  v46ArtTicketMinutesUnit: {\n    marginLeft: 4,\n    marginBottom: 5,\n    fontSize: 16,\n    fontWeight: '900',\n    color: INK,\n  },",
-              "  v46ArtTicketMinutesUnit: {\n    marginLeft: 3,\n    marginBottom: 4,\n    fontSize: 14,\n    fontWeight: '900',\n    color: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtTicketMoodText: {\n    flex: 1,\n    fontSize: 21,\n    lineHeight: 25,\n    fontWeight: '900',\n    color: INK,\n  },",
-              "  v46ArtTicketMoodText: {\n    flex: 1,\n    fontSize: 18,\n    lineHeight: 21,\n    fontWeight: '900',\n    color: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtTicketPin: {\n    width: 24,\n    height: 30,\n    borderRadius: 13,\n    backgroundColor: SIGNAL,\n    alignItems: 'center',\n    paddingTop: 7,\n  },\n  v46ArtTicketPinCore: {\n    width: 8,\n    height: 8,\n    borderRadius: 4,\n    backgroundColor: '#FBF8EF',\n  },",
-              "  v46ArtTicketPin: {\n    width: 20,\n    height: 25,\n    borderRadius: 11,\n    backgroundColor: SIGNAL,\n    alignItems: 'center',\n    paddingTop: 6,\n  },\n  v46ArtTicketPinCore: {\n    width: 7,\n    height: 7,\n    borderRadius: 4,\n    backgroundColor: '#FBF8EF',\n  },")
-          replace_one(styles,
-              "  v46ArtTicketUnknown: {\n    fontSize: 36,\n    lineHeight: 40,\n    fontWeight: '900',\n    letterSpacing: 2,\n    color: INK,\n  },",
-              "  v46ArtTicketUnknown: {\n    fontSize: 30,\n    lineHeight: 34,\n    fontWeight: '900',\n    letterSpacing: 1.7,\n    color: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtMiniStart: {\n    position: 'absolute',\n    left: 2,\n    bottom: 10,\n    width: 13,\n    height: 22,\n    borderRadius: 2,\n    backgroundColor: INK,\n  },",
-              "  v46ArtMiniStart: {\n    position: 'absolute',\n    left: 2,\n    bottom: 8,\n    width: 11,\n    height: 18,\n    borderRadius: 2,\n    backgroundColor: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtMiniDash: {\n    position: 'absolute',\n    width: 45,\n    borderTopWidth: 3,\n    borderStyle: 'dashed',\n    borderColor: SIGNAL,\n  },",
-              "  v46ArtMiniDash: {\n    position: 'absolute',\n    width: 38,\n    borderTopWidth: 2.5,\n    borderStyle: 'dashed',\n    borderColor: SIGNAL,\n  },")
-          replace_one(styles,
-              "  v46ArtMiniTree: {\n    position: 'absolute',\n    left: 58,\n    top: 13,\n    width: 15,\n    height: 27,\n    borderRadius: 8,\n    backgroundColor: INK,\n  },",
-              "  v46ArtMiniTree: {\n    position: 'absolute',\n    left: 49,\n    top: 11,\n    width: 13,\n    height: 23,\n    borderRadius: 7,\n    backgroundColor: INK,\n  },")
-          replace_one(styles,
-              "  v46ArtMiniFlagPole: {\n    position: 'absolute',\n    right: 9,\n    top: 7,\n    width: 3,\n    height: 34,\n    backgroundColor: INK,\n  },\n  v46ArtMiniFlag: {\n    position: 'absolute',\n    right: -2,\n    top: 7,\n    width: 14,\n    height: 11,\n    backgroundColor: SIGNAL,\n  },",
-              "  v46ArtMiniFlagPole: {\n    position: 'absolute',\n    right: 8,\n    top: 6,\n    width: 3,\n    height: 29,\n    backgroundColor: INK,\n  },\n  v46ArtMiniFlag: {\n    position: 'absolute',\n    right: -2,\n    top: 6,\n    width: 12,\n    height: 9,\n    backgroundColor: SIGNAL,\n  },")
-          replace_one(styles,
-              "  v46ArtSecretStampText: {\n    fontSize: 17,\n    fontWeight: '900',\n    color: SIGNAL,\n  },",
-              "  v46ArtSecretStampText: {\n    fontSize: 14,\n    fontWeight: '900',\n    color: SIGNAL,\n  },")
-
-          view = Path('src/components/detour-home-view.tsx')
-          replace_one(view,
-              "outputRange: [-405, 0],",
-              "outputRange: [-340, 0],")
-          PY
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/ticket-visuals.tsx src/styles/home/ticket-recap-styles.ts src/components/detour-home-view.tsx
-          git commit -m "fix: stabilize ticket scale and skia handoff"
-          git push origin HEAD:prototype/freeform-ticket-tear
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -139,6 +35,9 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Prototype branch added Skia before its lockfile is regenerated on the
+      # developer machine. Use npm install here so CI can validate the graphics
+      # experiment; restore npm ci before this work is merged to main.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
