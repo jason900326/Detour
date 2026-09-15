@@ -12,5 +12,192 @@ jobs:
   integrate-and-verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Smoke test workflow
-        run: echo "workflow-ok"
+      - name: Checkout integration branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Bring in proven ticket-base Skia tear files
+        shell: bash
+        run: |
+          git fetch origin prototype/freeform-ticket-tear
+          git checkout origin/prototype/freeform-ticket-tear -- \
+            package.json \
+            src/app/_layout.tsx \
+            src/app/index.tsx \
+            src/components/ticket-tear-context.tsx \
+            src/components/ticket-visuals.tsx \
+            src/styles/home/ticket-recap-styles.ts
+
+      - name: Join responsive printer geometry to the single ticket-base artwork
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected 1 match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          view = 'src/components/detour-home-view.tsx'
+
+          replace_once(
+              view,
+              """  V45Ticket,
+  getDetourTicketGeometry,
+} from '../components/ticket-visuals';""",
+              """  V45Ticket,
+  DETOUR_TICKET_HEIGHT,
+  DETOUR_TICKET_WIDTH,
+} from '../components/ticket-visuals';""",
+          )
+
+          replace_once(
+              view,
+              """    const ticketSlotFillRatio = 0.72;
+    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
+
+    // The width rule normally wins. Short screens can only shrink the same
+    // authored ticket proportionally; they never distort or crop it.
+    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
+    const departButtonReserve = 68 + bottomPadding + 20;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);
+    const unitGeometry = getDetourTicketGeometry(1);
+    const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;
+    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
+    const ticketGeometry = getDetourTicketGeometry(ticketWidth);
+
+    return {
+      leftPadding,
+      rightPadding,
+      topPadding,
+      bottomPadding,
+      printerWidth,
+      slotWidth,
+      ticketWidth,
+      ticketGeometry,
+      paperViewportHeight: ticketGeometry.physicalHeight + 2,
+      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,
+    };""",
+              """    // The printer mouth defines the ticket width. Keep a visible mechanical
+    // gap, but let the ticket use most of the slot instead of looking tiny.
+    const ticketSlotFillRatio = 0.84;
+    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
+
+    // ticket-base is one complete authored sheet. Scale that single sheet as a
+    // unit; short screens may shrink it, but the artwork is never distorted.
+    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
+    const tearHintReserve = 52 + bottomPadding;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve);
+    const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
+    const ticketWidthFromHeight = maxPaperHeight / ticketAspect;
+    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
+    const ticketScale = ticketWidth / DETOUR_TICKET_WIDTH;
+    const ticketHeight = DETOUR_TICKET_HEIGHT * ticketScale;
+
+    return {
+      leftPadding,
+      rightPadding,
+      topPadding,
+      bottomPadding,
+      printerWidth,
+      slotWidth,
+      ticketWidth,
+      ticketHeight,
+      ticketScale,
+      paperViewportHeight: ticketHeight + 2,
+      assemblyHeight: 47 + ticketHeight + 2,
+    };""",
+          )
+
+          replace_once(
+              view,
+              "outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],",
+              "outputRange: [-printingLayout.ticketHeight, 0],",
+          )
+
+          replace_once(
+              view,
+              """                  <V45Ticket
+                    timeLabel={selectedTime ?? '15'}
+                    moodId={selectedMood ?? 'wander'}
+                    moodLabel={mood?.label ?? '—'}
+                    serial={ticketSerial(selectedTime, selectedMood)}
+                    stamped={stage === 'ready'}
+                    stampProgress={ticketStamp}
+                    renderWidth={printingLayout.ticketWidth}
+                  />""",
+              """                  <View
+                    style={{
+                      width: printingLayout.ticketWidth,
+                      height: printingLayout.ticketHeight,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'visible',
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: DETOUR_TICKET_WIDTH,
+                        height: DETOUR_TICKET_HEIGHT,
+                        transform: [{ scale: printingLayout.ticketScale }],
+                      }}
+                    >
+                      <V45Ticket
+                        timeLabel={selectedTime ?? '15'}
+                        moodId={selectedMood ?? 'wander'}
+                        moodLabel={mood?.label ?? '—'}
+                        serial={ticketSerial(selectedTime, selectedMood)}
+                        stamped={stage === 'ready'}
+                        stampProgress={ticketStamp}
+                      />
+                    </View>
+                  </View>""",
+          )
+
+          ticket = 'src/components/ticket-visuals.tsx'
+          replace_once(
+              ticket,
+              "{artworkVisible && (!hasTear || !ticketImage) && (",
+              "{artworkVisible && !skiaArtworkReady && (",
+          )
+          replace_once(
+              ticket,
+              "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>",
+              "<Canvas style={StyleSheet.absoluteFill}>",
+          )
+          replace_once(
+              ticket,
+              "artworkVisible && !artworkReady && styles.v49TicketArtworkPending,",
+              "artworkVisible && !artworkReady && !ticketImage && styles.v49TicketArtworkPending,",
+          )
+          PY
+
+      - name: Install Skia and regenerate lockfile
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-final-ticket-export
+
+      - name: Commit verified integration
+        shell: bash
+        run: |
+          rm .github/workflows/apply-final-ticket-skia-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: integrate responsive ticket-base with Skia tear"
+          git push origin HEAD:${GITHUB_REF_NAME}
