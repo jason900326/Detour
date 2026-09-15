@@ -81,6 +81,16 @@ eas update --channel preview
 - 大型重構先走獨立 branch，驗證後再合併。
 - EAS Update 成功代表 bundle / 發布成功，不等於完整旅程已經被自動化測試。
 
+## 文件整理方式
+
+- `README.md`：目前專案入口與開發方式（唯一主 README）
+- `PRODUCT_FOUNDATION.md`：產品決策與體驗基準
+- `docs/releases/`：舊版 `README_vXX.txt` release notes / 交付說明歸檔
+- `V039_PRODUCT_CONVERGENCE.md`：特定產品收斂紀錄
+- `IPAD_DEV.md`：iPad 開發環境說明
+
+舊版 release notes 不再放在 repository 根目錄；歷史檔名保留，方便追溯當時版本內容。
+
 ## 開發優先順序
 
 目前先以可實際 Playtest 的完整旅程為目標。新增功能前，優先處理：
