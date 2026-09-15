@@ -1,0 +1,128 @@
+name: Fix camera mask and recap thumbnails
+
+on:
+  push:
+    branches:
+      - fix/camera-mask-recap-thumbnails
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: fix/camera-mask-recap-thumbnails
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Patch camera mask and recap strip
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          camera = Path('src/components/detour-camera-screen.tsx')
+          s = camera.read_text(encoding='utf-8')
+
+          old_markup = '''      <View pointerEvents="none" style={styles.squareGuideWrap}>
+        <View style={styles.squareGuide} />
+      </View>
+'''
+          new_markup = '''      <View pointerEvents="none" style={styles.squareMaskWrap}>
+        <View style={styles.squareMaskBand} />
+        <View style={styles.squareViewport}>
+          <View style={styles.squareGuide} />
+        </View>
+        <View style={styles.squareMaskBand} />
+      </View>
+'''
+          if old_markup not in s:
+              raise SystemExit('camera square guide markup not found')
+          s = s.replace(old_markup, new_markup, 1)
+
+          old_styles = '''  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
+'''
+          new_styles = '''  squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
+  squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
+  squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
+  squareGuide: { ...ABSOLUTE_FILL, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
+'''
+          if old_styles not in s:
+              raise SystemExit('camera square guide styles not found')
+          s = s.replace(old_styles, new_styles, 1)
+          camera.write_text(s, encoding='utf-8')
+
+          recap = Path('src/components/journey-recap-visuals.tsx')
+          s = recap.read_text(encoding='utf-8')
+          old_strip = '''        {photos.slice(0, 6).map((photo, index) => (
+          <PlacedPhoto key={photo.id} delay={90 + index * 70}>
+            <Pressable
+              onPress={() => onPhotoIndex(index)}
+              style={styles.v54FilmPress}
+            >
+              <Image
+                source={{ uri: photo.uri }}
+                style={[
+                  styles.v54FilmPhoto,
+                  index === activeIndex && styles.v54FilmPhotoActive,
+                ]}
+                resizeMode="cover"
+              />
+            </Pressable>
+          </PlacedPhoto>
+        ))}
+'''
+          new_strip = '''        {photos.slice(0, 6).map((photo, index) => (
+          <Pressable
+            key={photo.id}
+            onPress={() => onPhotoIndex(index)}
+            style={styles.v54FilmPress}
+          >
+            <Image
+              source={{ uri: photo.uri }}
+              style={[
+                styles.v54FilmPhoto,
+                index === activeIndex && styles.v54FilmPhotoActive,
+              ]}
+              resizeMode="cover"
+            />
+          </Pressable>
+        ))}
+'''
+          if old_strip not in s:
+              raise SystemExit('recap photo strip block not found')
+          s = s.replace(old_strip, new_strip, 1)
+          recap.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-mask-recap-ios
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          git rm .github/workflows/fix-camera-mask-recap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/detour-camera-screen.tsx src/components/journey-recap-visuals.tsx
+          git commit -m "fix: mask square camera and restore recap thumbnails"
+          git push origin HEAD:fix/camera-mask-recap-thumbnails
