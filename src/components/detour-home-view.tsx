@@ -278,6 +278,7 @@ export function DetourHomeView({
     screenOpacity,
     screenY,
     routeProgress,
+    markTicketVisualReady,
     printerPulse,
     ticketStamp,
     ticketReadyUnlocked,
@@ -1186,7 +1187,7 @@ export function DetourHomeView({
                     height: printingLayout.paperViewportHeight,
                   },
                 ]}
-                pointerEvents="none"
+                pointerEvents={stage === 'ready' ? 'box-none' : 'none'}
               >
                 <Animated.View
                   style={[
@@ -1213,6 +1214,7 @@ export function DetourHomeView({
                     stamped={stage === 'ready'}
                     stampProgress={ticketStamp}
                     renderWidth={printingLayout.ticketWidth}
+                    onVisualReady={markTicketVisualReady}
                   />
                 </Animated.View>
               </View>
