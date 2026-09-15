@@ -576,277 +576,164 @@ export function DetourHomeView({
                           styles.pressedLight,
                       ]}
                     >
-                      <View>
-                        <Text style={styles.settingsChoiceLabel}>
+                      <View style={styles.settingsChoiceText}>
+                        <Text style={styles.settingsChoiceTitle}>
                           {pace.label}
                         </Text>
                         <Text style={styles.settingsChoiceNote}>
                           {pace.note}
                         </Text>
                       </View>
-
-                      <View style={styles.settingsChoiceRight}>
-                        <Text style={styles.settingsChoiceMark}>
-                          {active ? '●' : '○'}
-                        </Text>
-                      </View>
+                      <Text style={styles.settingsChoiceMeta}>
+                        {pace.code}
+                      </Text>
                     </Pressable>
                   );
                 })}
               </View>
 
-              {developerToolsUnlocked && (
               <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionLabel}>
-                  開發者工具
-                </Text>
-
-                <Pressable
-                  onPress={toggleDevMode}
-                  style={({ pressed }) => [
-                    styles.settingsAction,
-                    pressed &&
-                      styles.pressedLight,
-                  ]}
-                >
-                  <View>
-                    <Text style={styles.settingsActionTitle}>
-                      室內測試
-                    </Text>
-                    <Text style={styles.settingsActionNote}>
-                      用真實 Scene / route，
-                      但按按鈕模擬前進。
+                <Text style={styles.settingsSectionLabel}>導航</Text>
+                <View style={styles.settingsChoice}>
+                  <View style={styles.settingsChoiceText}>
+                    <Text style={styles.settingsChoiceTitle}>迷路時再給地圖</Text>
+                    <Text style={styles.settingsChoiceNote}>
+                      平常只給方向；真的走歪了，再自己打開小地圖。
                     </Text>
                   </View>
-
-                  <Text
-                    style={[
-                      styles.settingsActionState,
-                      devMode &&
-                        styles.settingsActionStateOn,
-                    ]}
-                  >
-                    {devMode ? '開' : '關'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={toggleDeveloperTools}
-                  style={({ pressed }) => [
-                    styles.v43DevClose,
-                    pressed && styles.pressedLight,
-                  ]}
-                >
-                  <Text style={styles.v43DevCloseText}>隱藏開發者工具</Text>
-                </Pressable>
+                  <Text style={styles.settingsChoiceMeta}>預設</Text>
+                </View>
               </View>
-              )}
 
               <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionLabel}>
-                  開始導覽
-                </Text>
+                <Text style={styles.settingsSectionLabel}>鏡頭</Text>
+                <View style={styles.settingsChoice}>
+                  <View style={styles.settingsChoiceText}>
+                    <Text style={styles.settingsChoiceTitle}>旅程底片</Text>
+                    <Text style={styles.settingsChoiceNote}>
+                      每趟最多保留 {getFilmRollCapacity(selectedMinutes)} 張。
+                    </Text>
+                  </View>
+                  <Text style={styles.settingsChoiceMeta}>
+                    {getFilmRollCapacity(selectedMinutes)} 張
+                  </Text>
+                </View>
+              </View>
 
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionLabel}>教學</Text>
                 <Pressable
                   onPress={replayOnboarding}
                   style={({ pressed }) => [
-                    styles.settingsAction,
-                    pressed &&
-                      styles.pressedLight,
+                    styles.settingsChoice,
+                    pressed && styles.pressedLight,
                   ]}
                 >
-                  <View>
-                    <Text style={styles.settingsActionTitle}>
-                      再看一次開始導覽
-                    </Text>
-                    <Text style={styles.settingsActionNote}>
-                      不會清除旅程收藏或偏好。
+                  <View style={styles.settingsChoiceText}>
+                    <Text style={styles.settingsChoiceTitle}>再看一次</Text>
+                    <Text style={styles.settingsChoiceNote}>
+                      重新看三張新手提示。
                     </Text>
                   </View>
-
-                  <Text style={styles.settingsActionArrow}>
-                    →
-                  </Text>
+                  <Text style={styles.settingsChoiceMeta}>→</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionLabel}>
-                  旅程資料
-                </Text>
-
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    已完成旅程
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    {passport.length} 趟
+              <Pressable
+                onPress={toggleDevMode}
+                onLongPress={toggleDeveloperTools}
+                delayLongPress={900}
+                style={({ pressed }) => [
+                  styles.settingsDeveloperToggle,
+                  devMode && styles.settingsDeveloperToggleActive,
+                  pressed && styles.pressedLight,
+                ]}
+              >
+                <View>
+                  <Text style={styles.settingsDeveloperTitle}>開發測試</Text>
+                  <Text style={styles.settingsDeveloperNote}>
+                    {developerToolsUnlocked
+                      ? devMode
+                        ? '已顯示室內測試工具與 AI 狀態。'
+                        : '長按這列可再次解鎖；點一下切換顯示。'
+                      : '一般使用不需要開啟。'}
                   </Text>
                 </View>
-
-                <Pressable
-                  onPress={clearPassport}
-                  style={({ pressed }) => [
-                    styles.settingsDanger,
-                    pressed &&
-                      styles.pressedLight,
-                  ]}
-                >
-                  <Text style={styles.settingsDangerText}>
-                    清除已完成旅程
-                  </Text>
-                </Pressable>
-              </View>
+                <Text style={styles.settingsDeveloperMeta}>
+                  {devMode ? 'ON' : 'OFF'}
+                </Text>
+              </Pressable>
 
               {developerToolsUnlocked && (
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionLabel}>
-                  AI 狀態
-                </Text>
-
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    AI 後端
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    {isAIEngineConfigured()
-                      ? 'CONFIGURED'
-                      : 'NOT CONNECTED'}
-                  </Text>
+              <View style={styles.settingsDeveloperPanel}>
+                <View style={styles.settingsDeveloperHeader}>
+                  <Text style={styles.settingsDeveloperHeading}>開發工具</Text>
+                  <Text style={styles.settingsDeveloperEyebrow}>DEV</Text>
                 </View>
 
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    上次執行
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    {lastAIResult === 'ai'
-                      ? 'AI'
-                      : lastAIResult ===
-                          'fallback'
-                        ? 'FALLBACK'
-                        : 'NOT RUN YET'}
-                  </Text>
-                </View>
-
-                <Text style={styles.settingsActionNote}>
-                  AI 失敗時會自動改用內建路線邏輯。
-                </Text>
-
-                <Pressable
-                  onPress={runAIConnectionTest}
-                  disabled={aiConnectionTesting}
-                  style={({ pressed }) => [
-                    styles.settingsAction,
-                    pressed &&
-                      styles.pressedLight,
-                  ]}
-                >
-                  <View>
-                    <Text style={styles.settingsActionTitle}>
-                      {aiConnectionTesting
-                        ? '正在測試 AI…'
-                        : '測試 AI 連線'}
+                <View style={styles.settingsDeveloperRow}>
+                  <View style={styles.settingsDeveloperCopy}>
+                    <Text style={styles.settingsDeveloperLabel}>AI 引擎</Text>
+                    <Text style={styles.settingsDeveloperValue}>
+                      {isAIEngineConfigured()
+                        ? '已設定 API key'
+                        : '未設定 API key，使用本機規則'}
                     </Text>
-                    <Text style={styles.settingsActionNote}>
-                      測試目前的 AI 排序服務是否正常。
+                    {lastAIResult ? (
+                      <Text style={styles.settingsDeveloperMetaLine}>
+                        上次結果：{lastAIResult}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    disabled={aiConnectionTesting}
+                    onPress={() => void runAIConnectionTest()}
+                    style={({ pressed }) => [
+                      styles.settingsDeveloperButton,
+                      pressed && styles.pressedLight,
+                      aiConnectionTesting && { opacity: 0.45 },
+                    ]}
+                  >
+                    <Text style={styles.settingsDeveloperButtonText}>
+                      {aiConnectionTesting ? '測試中…' : '測試連線'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.settingsDeveloperRow}>
+                  <View style={styles.settingsDeveloperCopy}>
+                    <Text style={styles.settingsDeveloperLabel}>遊玩測試</Text>
+                    <Text style={styles.settingsDeveloperValue}>
+                      {playtestSessions.length} 筆 session
+                    </Text>
+                    <Text style={styles.settingsDeveloperMetaLine}>
+                      Tester {playtestTesterId || '—'} · v{DETOUR_PLAYTEST_VERSION}
                     </Text>
                   </View>
-
-                  <Text style={styles.settingsActionArrow}>
-                    ↗
-                  </Text>
-                </Pressable>
-              </View>
-              )}
-
-              {developerToolsUnlocked && (
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionLabel}>
-                  測試資料
-                </Text>
-
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    測試裝置
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    {playtestTesterId}
-                  </Text>
-                </View>
-
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    測試次數
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    {
-                      playtestSessions.filter(
-                        (session) =>
-                          !session.devMode
-                      ).length
-                    } REAL · {
-                      playtestSessions.filter(
-                        (session) =>
-                          session.devMode
-                      ).length
-                    } INDOOR
-                  </Text>
-                </View>
-
-                <View style={styles.settingsDataRow}>
-                  <Text style={styles.settingsDataLabel}>
-                    雲端同步
-                  </Text>
-                  <Text style={styles.settingsDataValue}>
-                    ON · v{DETOUR_PLAYTEST_VERSION}
-                  </Text>
+                  <Pressable
+                    disabled={playtestSyncing}
+                    onPress={() => void syncPlaytestDataNow()}
+                    style={({ pressed }) => [
+                      styles.settingsDeveloperButton,
+                      pressed && styles.pressedLight,
+                      playtestSyncing && { opacity: 0.45 },
+                    ]}
+                  >
+                    <Text style={styles.settingsDeveloperButtonText}>
+                      {playtestSyncing ? '同步中…' : '同步'}
+                    </Text>
+                  </Pressable>
                 </View>
 
                 <Pressable
-                  onPress={syncPlaytestDataNow}
-                  disabled={playtestSyncing}
+                  onPress={() => void sharePlaytestData()}
                   style={({ pressed }) => [
-                    styles.settingsAction,
-                    pressed &&
-                      styles.pressedLight,
+                    styles.settingsDeveloperShare,
+                    pressed && styles.pressedLight,
                   ]}
                 >
-                  <View>
-                    <Text style={styles.settingsActionTitle}>
-                      {playtestSyncing
-                        ? '正在同步…'
-                        : '立即同步測試資料'}
-                    </Text>
-                    <Text style={styles.settingsActionNote}>
-                      手動確認測試資料已同步。
-                    </Text>
-                  </View>
-
-                  <Text style={styles.settingsActionArrow}>
-                    ↗
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={sharePlaytestData}
-                  style={({ pressed }) => [
-                    styles.settingsAction,
-                    pressed &&
-                      styles.pressedLight,
-                  ]}
-                >
-                  <View>
-                    <Text style={styles.settingsActionTitle}>
-                      分享測試報告
-                    </Text>
-                    <Text style={styles.settingsActionNote}>
-                      匿名資料，不包含照片與完整定位軌跡。
-                    </Text>
-                  </View>
-
-                  <Text style={styles.settingsActionArrow}>
-                    ↗
+                  <Text style={styles.settingsDeveloperShareText}>
+                    匯出測試報告
                   </Text>
                 </Pressable>
 
@@ -854,8 +741,7 @@ export function DetourHomeView({
                   onPress={clearPlaytestData}
                   style={({ pressed }) => [
                     styles.settingsDanger,
-                    pressed &&
-                      styles.pressedLight,
+                    pressed && styles.pressedLight,
                   ]}
                 >
                   <Text style={styles.settingsDangerText}>
@@ -1090,7 +976,7 @@ export function DetourHomeView({
                 </View>
               </View>
 
-              <View style={styles.v48PaperViewport} pointerEvents="none">
+              <View style={styles.v48PaperViewport}>
                 <Animated.View
                   style={[
                     styles.v48PaperTrack,
@@ -1248,625 +1134,179 @@ export function DetourHomeView({
               <View style={styles.v41MissionRouteLineMuted} />
             </View>
 
-            <View style={styles.v41MissionHero}>
-              <Text style={styles.v41MissionCue}>新的尋找</Text>
+            <View style={styles.v41MissionBody}>
+              <Text style={styles.v41MissionEyebrow}>路上任務</Text>
               <Text style={styles.v41MissionTitle}>{currentMission.title}</Text>
-              {plan.context !== 'day' && (
-                <Text style={styles.v41MissionSafety}>只在有照明、公開可走的位置找。</Text>
-              )}
+              <View style={styles.v41MissionUnderline} />
+              <View style={styles.v41MissionRule} />
+              <Text style={styles.v41MissionMeta}>看到就拍 · 最多 {rollCapacity} 張</Text>
             </View>
 
             <View style={styles.v41MissionBottom}>
-              <Pressable onPress={beginCurrentMissionSearch} style={({ pressed }) => [styles.v41MissionPrimary, pressed && styles.pressedLight]}>
-                <Text style={styles.v41MissionPrimaryText}>開始找</Text>
-                <Text style={styles.v41MissionPrimaryArrow}>→</Text>
-              </Pressable>
-              <Pressable onPress={skipCurrentRequiredMission} style={({ pressed }) => [styles.v41MissionSkip, pressed && styles.pressedLight]}>
-                <Text style={styles.v41MissionSkipText}>先跳過</Text>
-              </Pressable>
+              <Pressable onPress={() => openCamera('side')} style={({ pressed }) => [styles.v41MissionPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v41MissionPrimaryText}>打開相機</Text><Text style={styles.v41MissionPrimaryArrow}>→</Text></Pressable>
+              <Pressable onPress={skipCurrentRequiredMission} style={({ pressed }) => [styles.v41MissionSkip, pressed && styles.v35JourneyPressed]}><Text style={styles.v41MissionSkipText}>先跳過</Text></Pressable>
+              {devMode && (
+                <Pressable onPress={completeSideMissionWithoutPhoto} style={({ pressed }) => [styles.v41DevAdvance, pressed && styles.v35JourneyPressed]}>
+                  <Text style={styles.v41DevAdvanceText}>室內測試 · 完成這個任務 →</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         )}
 
         {stage === 'arrival' && plan && (
-          <View style={styles.cleanArrivalScreen}>
-            <View style={styles.cleanArrivalTop}>
-              <Text style={[styles.brand]}>DETOUR</Text>
-              <Text style={[styles.cleanArrivalMeta, styles.v41ReadableMeta]}>
-                {selectedScene?.label ?? '抵達'}
-              </Text>
+          <View style={styles.v41ArrivalScreen}>
+            <View style={styles.v41ArrivalTop}>
+              <Text style={styles.v41ArrivalBrand}>DETOUR</Text>
+              <Text style={styles.v41ArrivalMeta}>到了</Text>
             </View>
-
-            <View style={styles.arrivalRevealStrip}>
-              <View style={styles.arrivalRevealStart} />
-              <View style={styles.arrivalRevealLine} />
-              <View style={styles.arrivalRevealFlag}>
-                <View style={styles.arrivalRevealFlagPole} />
-                <View style={styles.arrivalRevealFlagShape} />
-              </View>
-
-              <Text style={styles.arrivalRevealLabel}>
-                終點揭曉
-              </Text>
+            <View style={styles.v41ArrivalHero}>
+              <View style={styles.v41ArrivalPin}><View style={styles.v41ArrivalPinCore} /></View>
+              <Text style={styles.v41ArrivalEyebrow}>ARRIVAL</Text>
+              <Text style={styles.v41ArrivalTitle}>{plan.arrivalMission?.title ?? '找一個你想記住的畫面'}</Text>
+              <View style={styles.v41ArrivalUnderline} />
+              <Text style={styles.v41ArrivalBody}>不用找最佳角度。你停下來的那一刻，就算到了。</Text>
             </View>
-
-            <View style={styles.cleanArrivalHero}>
-              <Text style={[styles.cleanArrivalKicker, styles.v41ReadableKicker]}>
-                到了
-              </Text>
-
-              <Text style={styles.cleanArrivalPlace}>
-                {selectedScene?.name ?? '終點'}
-              </Text>
-
-
-              <Text style={styles.cleanArrivalMission}>
-                {plan.arrivalMission.title}
-              </Text>
-
-              <Text style={[styles.cleanArrivalInstruction, styles.v41ReadableBody]}>
-                {plan.arrivalMission.instruction}
-              </Text>
-
-            </View>
-
-            <View style={styles.cleanArrivalBottom}>
-              {plan.arrivalMission.photo ? (
-                <>
-                  <Pressable
-                    onPress={() => openCamera('arrival')}
-                    style={({ pressed }) => [
-                      styles.cleanArrivalPrimary,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.cleanArrivalPrimaryText}>
-                      拍下來
-                    </Text>
-                    <Text style={styles.cleanArrivalPrimaryArrow}>
-                      →
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={skipArrivalRequiredMission}
-                    style={({ pressed }) => [
-                      styles.cleanArrivalSkip,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.cleanArrivalSkipText}>
-                      找不到，先完成這趟
-                    </Text>
-                  </Pressable>
-                </>
-              ) : (
-                <View style={styles.cleanArrivalActions}>
-                  <Pressable
-                    onPress={completeArrivalWithoutPhoto}
-                    style={({ pressed }) => [
-                      styles.cleanArrivalPrimary,
-                      styles.cleanArrivalPrimaryFlexible,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.cleanArrivalPrimaryText}>
-                      完成這次 DETOUR
-                    </Text>
-                    <Text style={styles.cleanArrivalPrimaryArrow}>
-                      →
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openCamera('arrival')}
-                    style={({ pressed }) => [
-                      styles.cleanArrivalCamera,
-                      pressed && styles.pressedLight,
-                    ]}
-                  >
-                    <Text style={styles.cleanArrivalCameraIcon}>
-                      📷
-                    </Text>
-                  </Pressable>
-                </View>
+            <View style={styles.v41ArrivalBottom}>
+              <Pressable onPress={() => openCamera('arrival')} style={({ pressed }) => [styles.v41ArrivalPrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v41ArrivalPrimaryText}>拍下這一站</Text><Text style={styles.v41ArrivalPrimaryArrow}>→</Text></Pressable>
+              <Pressable onPress={skipArrivalRequiredMission} style={({ pressed }) => [styles.v41MissionSkip, pressed && styles.v35JourneyPressed]}><Text style={styles.v41MissionSkipText}>這次不拍</Text></Pressable>
+              {devMode && (
+                <Pressable onPress={completeArrivalWithoutPhoto} style={({ pressed }) => [styles.v41DevAdvance, pressed && styles.v35JourneyPressed]}>
+                  <Text style={styles.v41DevAdvanceText}>室內測試 · 直接完成旅程 →</Text>
+                </Pressable>
               )}
-
-              <Pressable
-                onPress={() =>
-                  transitionTo('sceneIssue')
-                }
-                style={({ pressed }) => [
-                  styles.cleanArrivalProblem,
-                  pressed && styles.pressedLight,
-                ]}
-              >
-                <Text style={styles.cleanArrivalProblemText}>
-                  這裡不行
-                </Text>
-                <Text style={styles.cleanArrivalProblemArrow}>
-                  →
-                </Text>
-              </Pressable>
-
-              <Text style={[styles.cleanArrivalSource, styles.v41ReadableMeta]}>
-                地圖資料：OpenStreetMap
-              </Text>
             </View>
           </View>
         )}
 
-        {stage === 'sceneIssue' && (
-          <View
-            style={[
-              styles.reissueScreen,
-            ]}
-          >
-            <View style={styles.reissueTop}>
-              <Pressable
-                disabled={replacementLoading}
-                onPress={goBack}
-                hitSlop={16}
-                style={styles.reissueBack}
-              >
-                <Text
-                  style={[
-                    styles.reissueBackText,
-                  ]}
-                >
-                  ←
-                </Text>
-              </Pressable>
-
-              <Text
-                style={[
-                  styles.reissueBrand,
-                ]}
-              >
-                DETOUR
-              </Text>
-
-              <Text style={styles.reissueMeta}>
-                換一條
-              </Text>
+        {stage === 'complete' && plan && (
+          <View style={styles.v46CompleteScreen}>
+            <View style={styles.v46CompleteHeader}>
+              <Text style={styles.v46CompleteBrand}>DETOUR</Text>
+              <Text style={styles.v46CompleteMeta}>旅程完成</Text>
             </View>
-
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.reissueScroll}
+              contentContainerStyle={styles.v46CompleteScroll}
             >
-              <View style={styles.reissueRouteCard}>
-                <View style={styles.reissueRouteHeader}>
-                  <Text
-                    style={[
-                      styles.reissueRouteLabel,
-                    ]}
-                  >
-                    目前路線
-                  </Text>
-
-                  <Text style={styles.reissueRouteStatus}>
-                    中斷
-                  </Text>
+              <V46CompleteArtwork
+                moodId={plan.moodId}
+                moodLabel={mood?.label ?? '—'}
+                durationMinutes={plan.durationMinutes}
+                serial={ticketSerial(String(plan.durationMinutes), plan.moodId)}
+              />
+              <View style={styles.v46CompleteCopy}>
+                <Text style={styles.v46CompleteEyebrow}>DETOUR COMPLETE</Text>
+                <Text style={styles.v46CompleteTitle}>這一趟，{`\n`}你真的走完了。</Text>
+              </View>
+              <View style={styles.v46CompleteStats}>
+                <View style={styles.v46CompleteStat}>
+                  <Text style={styles.v46CompleteStatLabel}>距離</Text>
+                  <Text style={styles.v46CompleteStatValue}>{traveledMeters >= 1000 ? `${(traveledMeters / 1000).toFixed(1)} km` : `${Math.max(0, Math.round(traveledMeters))} m`}</Text>
                 </View>
-
-                <View style={styles.reissueRouteGraphic}>
-                  <View style={styles.reissueRouteStart} />
-                  <View style={styles.reissueRouteLineDone} />
-                  <View style={styles.reissueRouteBreak}>
-                    <Text style={styles.reissueRouteBreakText}>×</Text>
-                  </View>
-                  <View style={styles.reissueRouteLineNext} />
-                  <View style={styles.reissueRouteQuestion}>
-                    <Text style={styles.reissueRouteQuestionText}>?</Text>
-                  </View>
-                </View>
-
-                <View style={styles.reissueRouteFoot}>
-                  <Text
-                    style={[
-                      styles.reissueRouteFootText,
-                    ]}
-                  >
-                    已走過的路和尋找會保留
-                  </Text>
-                  <Text style={styles.reissueRouteFootArrow}>→</Text>
-                  <Text
-                    style={[
-                      styles.reissueRouteFootText,
-                    ]}
-                  >
-                    換一個終點
-                  </Text>
+                <View style={styles.v46CompleteStat}>
+                  <Text style={styles.v46CompleteStatLabel}>照片</Text>
+                  <Text style={styles.v46CompleteStatValue}>{photos.length} 張</Text>
                 </View>
               </View>
-
-              <View style={styles.reissueHero}>
-                <Text style={styles.reissueEyebrow}>
-                  這個終點不行
-                </Text>
-
-                <Text
-                  style={[
-                    styles.reissueTitle,
-                  ]}
-                >
-                  沒關係。{`\n`}
-                  改走另一條。
-                </Text>
-
-                <Text
-                  style={[
-                    styles.reissueBody,
-                  ]}
-                >
-                  從你現在的位置換一個終點；已完成的尋找會保留。
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.reissueChoiceLabel,
-                ]}
-              >
-                為什麼要換？
-              </Text>
-
-              <View style={styles.reissueGrid}>
-                {([
-                  {
-                    id: 'closed' as SceneIssueReason,
-                    index: '01',
-                    title: '沒開 / 已打烊',
-                    note: '這個時間不成立',
-                    mark: '○',
-                  },
-                  {
-                    id: 'inaccessible' as SceneIssueReason,
-                    index: '02',
-                    title: '找不到 / 進不去',
-                    note: '現場無法抵達',
-                    mark: '↗',
-                  },
-                  {
-                    id: 'not-worth-it' as SceneIssueReason,
-                    index: '03',
-                    title: '到現場覺得不值得',
-                    note: '這裡不夠有趣',
-                    mark: '−',
-                  },
-                  {
-                    id: 'wrong-now' as SceneIssueReason,
-                    index: '04',
-                    title: '我現在不想去這裡',
-                    note: '不是現在想要的',
-                    mark: '↝',
-                  },
-                ]).map((reason) => (
-                  <Pressable
-                    key={reason.id}
-                    disabled={replacementLoading}
-                    onPress={() =>
-                      replaceFailedDestination(reason.id)
-                    }
-                    style={({ pressed }) => [
-                      styles.reissueChoice,
-                      pressed && styles.reissueChoicePressed,
-                    ]}
-                  >
-                    <View style={styles.reissueChoiceTop}>
-                      <Text style={styles.reissueChoiceMark}>
-                        {reason.mark}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.reissueChoiceIndex,
-                        ]}
-                      >
-                        {reason.index}
-                      </Text>
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.reissueChoiceTitle,
-                      ]}
-                    >
-                      {reason.title}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.reissueChoiceNote,
-                      ]}
-                    >
-                      {reason.note}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {replacementLoading && (
-                <View
-                  style={[
-                    styles.reissueLoadingCard,
-                  ]}
-                >
-                  <View style={styles.reissueLoadingDot} />
-                  <Text
-                    style={[
-                      styles.reissueLoadingText,
-                    ]}
-                  >
-                    正在重新派發一條能在剩餘時間內完成的路線…
-                  </Text>
-                </View>
-              )}
+              <Pressable onPress={() => transitionTo('review')} style={({ pressed }) => [styles.v46CompletePrimary, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v46CompletePrimaryText}>看看這趟</Text><Text style={styles.v46CompletePrimaryArrow}>→</Text></Pressable>
             </ScrollView>
           </View>
         )}
 
-        {stage === 'developing' && (
-          <View style={styles.developingScreen}>
-            <View style={styles.developingTop}>
-              <Text style={styles.brandLight}>DETOUR</Text>
-              <Text style={styles.developingMeta}>
-                第 {String(passport.length + 1).padStart(2, '0')} 趟
-              </Text>
+        {stage === 'review' && plan && (
+          <View style={styles.v46ReviewScreen}>
+            <View style={styles.v46ReviewHeader}>
+              <Pressable onPress={goBack} hitSlop={16} style={styles.v46ReviewBack}><Text style={styles.v46ReviewBackText}>‹</Text></Pressable>
+              <Text style={styles.v46ReviewBrand}>旅程回顧</Text>
+              <Text style={styles.v46ReviewMeta}>DETOUR</Text>
             </View>
-
-            <View style={styles.developingHero}>
-              <View style={styles.developingDot} />
-<Text style={[styles.developingCode, styles.v41DevelopingCode]}>正在整理</Text>
-              <Text style={styles.developingTitle}>
-                先別看。{`\n`}
-                這趟正在顯影。
-              </Text>
-              <Text style={[styles.developingBody, styles.v41DevelopingBody]}>
-                {photos.length} 張照片
-              </Text>
-            </View>
-
-            <View style={styles.developingTrack}>
-              <View style={styles.developingTrackFill} />
-            </View>
-          </View>
-        )}
-
-        {stage === 'finish' && (
-          <View style={styles.v45FinishScreen}>
-            <View style={styles.v45FinishHeader}>
-              <Text style={styles.v45FinishBrand}>DETOUR</Text>
-              <Pressable onPress={() => transitionTo('settings')} style={styles.v45FinishMenu}>
-                <View style={styles.v45FinishMenuLine} />
-                <View style={styles.v45FinishMenuLine} />
-                <View style={styles.v45FinishMenuLine} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.v45FinishScroll}
-            >
-              <View style={styles.v45FinishTitleWrap}>
-                <Text style={styles.v45FinishTitle}>旅程完成</Text>
-                <DetourAccentStroke width={76} style={styles.v45FinishTitleUnderline} />
-              </View>
-
-              <V46CompleteArtwork
-                entry={lastCompletedEntry}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v46ReviewScroll}>
+              <V46ReviewArtwork
+                moodId={plan.moodId}
+                moodLabel={mood?.label ?? '—'}
+                durationMinutes={plan.durationMinutes}
+                serial={ticketSerial(String(plan.durationMinutes), plan.moodId)}
                 photos={photos}
-                fallbackDestination={selectedScene?.name ?? '這趟的終點'}
-                fallbackMinutes={selectedMinutes}
               />
-
-              <Pressable
-                onPress={() => {
-                  if (lastCompletedEntry) openPassportEntry(lastCompletedEntry);
-                  else transitionTo('passport');
-                }}
-                style={({ pressed }) => [
-                  styles.v45FinishPrimary,
-                  pressed && styles.v45MoodCtaPressed,
-                ]}
-              >
-                <Text style={styles.v45FinishPrimaryArrow}>→</Text>
-                <Text style={styles.v45FinishPrimaryText}>照片回顧</Text>
-              </Pressable>
-              <Pressable
-                onPress={resetDetour}
-                style={({ pressed }) => [
-                  styles.v45FinishSecondary,
-                  pressed && styles.v45MoodCardPressed,
-                ]}
-              >
-                <Text style={styles.v45FinishSecondaryText}>回到首頁</Text>
-              </Pressable>
+              <Pressable onPress={shareJourney} style={({ pressed }) => [styles.v46ReviewShare, pressed && styles.v35JourneyPrimaryPressed]}><Text style={styles.v46ReviewShareText}>分享這趟旅程</Text><Text style={styles.v46ReviewShareArrow}>↗</Text></Pressable>
+              <Pressable onPress={resetDetour} style={({ pressed }) => [styles.v46ReviewAgain, pressed && styles.v35JourneyPressed]}><Text style={styles.v46ReviewAgainText}>再來一趟</Text></Pressable>
             </ScrollView>
           </View>
         )}
 
         {stage === 'passport' && (
-          <View style={styles.v41PassportScreen}>
-            <View style={styles.v41PassportTop}>
-              <Pressable onPress={goBack} hitSlop={16} style={styles.v41PassportBack}><Text style={styles.v41PassportBackText}>←</Text></Pressable>
-              <Text style={styles.v41PassportHeader}>已完成的旅程</Text>
-              <Text style={styles.v41PassportMeta}>收藏</Text>
+          <View style={styles.v46PassportScreen}>
+            <View style={styles.v46PassportHeader}>
+              <Pressable onPress={goBack} hitSlop={16} style={styles.v46PassportBack}><Text style={styles.v46PassportBackText}>‹</Text></Pressable>
+              <Text style={styles.v46PassportBrand}>已完成的旅程</Text>
+              <Text style={styles.v46PassportMeta}>DETOUR</Text>
             </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v41PassportScroll}>
-              <Text style={styles.v41PassportKicker}>你的 DETOUR 收藏</Text>
-              <Text style={styles.v41PassportTitle}>走過的路，{`
-`}一趟一趟留下來。</Text>
-
-              <View style={styles.v41PassportStats}>
-                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{passport.length}</Text><Text style={styles.v41PassportStatLabel}>趟旅程</Text></View>
-                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{(totalDistanceMeters / 1000).toFixed(1)}</Text><Text style={styles.v41PassportStatLabel}>公里</Text></View>
-                <View style={styles.v41PassportStat}><Text style={styles.v41PassportStatValue}>{totalDiscoveries}</Text><Text style={styles.v41PassportStatLabel}>個發現</Text></View>
-              </View>
-
-              <View style={styles.v41PassportSectionRow}>
-                <Text style={styles.v41PassportSectionTitle}>旅程收藏</Text>
-                <Text style={styles.v41PassportSectionMeta}>{passportLoaded ? '存在這支手機' : '載入中'}</Text>
-              </View>
-
-              {passport.length === 0 ? (
-                <View style={styles.v41PassportEmpty}>
-                  <Text style={styles.v41PassportEmptyMark}>○ ─── ⚑</Text>
-                  <Text style={styles.v41PassportEmptyTitle}>第一趟走完後，會留在這裡。</Text>
-                </View>
-              ) : (
-                <View style={styles.v41PassportList}>
-                  {passport.map((entry, index) => {
-                    const coverUri = entry.photos?.[0]?.uri;
-                    return (
-                      <Pressable key={entry.id} onPress={() => openPassportEntry(entry)} style={({ pressed }) => [styles.v41PassportCard, pressed && styles.v35Pressed]}>
-                        {coverUri ? (
-                          <Image source={{ uri: coverUri }} style={styles.v41PassportPhoto} resizeMode="cover" />
-                        ) : (
-                          <View style={styles.v41PassportNoPhoto}>
-                            <View style={styles.v41PassportNoPhotoLine} />
-                            <View style={styles.v41PassportNoPhotoDot} />
-                            <Text style={styles.v41PassportNoPhotoText}>{entry.moodLabel}</Text>
-                          </View>
-                        )}
-                        <View style={styles.v41PassportCardBody}>
-                          <View style={styles.v41PassportCardTop}>
-                            <Text style={styles.v41PassportCardNumber}>{String(passport.length - index).padStart(2, '0')}</Text>
-                            <Text style={styles.v41PassportCardDate}>{formatPassportDate(entry.completedAt)}</Text>
-                          </View>
-                          <Text style={styles.v41PassportCardMood}>{entry.moodLabel}</Text>
-                          <Text style={styles.v41PassportCardDestination} numberOfLines={2}>{entry.sceneName ?? `${entry.city}的一趟 DETOUR`}</Text>
-                          <View style={styles.v41PassportCardFacts}>
-                            <Text style={styles.v41PassportCardFact}>{entry.minutes} 分鐘</Text>
-                            <Text style={styles.v41PassportCardFact}>{entry.photoCount ?? 0} 張照片</Text>
-                            <Text style={styles.v41PassportCardFact}>{entry.discoveries} 個發現</Text>
-                          </View>
-                          <View style={styles.v41PassportOpen}><Text style={styles.v41PassportOpenText}>打開這趟</Text><Text style={styles.v41PassportOpenArrow}>→</Text></View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v46PassportScroll}>
+              {passport.length > 0 ? (
+                <>
+                  <View style={styles.v46PassportSummary}>
+                    <Text style={styles.v46PassportSummaryLabel}>旅程收藏</Text>
+                    <Text style={styles.v46PassportSummaryCount}>{passport.length}</Text>
+                    <Text style={styles.v46PassportSummaryNote}>趟 DETOUR</Text>
+                  </View>
+                  <View style={styles.v46PassportTotals}>
+                    <View style={styles.v46PassportTotalItem}><Text style={styles.v46PassportTotalValue}>{totalDistanceMeters >= 1000 ? `${(totalDistanceMeters / 1000).toFixed(1)} km` : `${Math.round(totalDistanceMeters)} m`}</Text><Text style={styles.v46PassportTotalLabel}>走過</Text></View>
+                    <View style={styles.v46PassportTotalItem}><Text style={styles.v46PassportTotalValue}>{totalDiscoveries}</Text><Text style={styles.v46PassportTotalLabel}>張照片</Text></View>
+                  </View>
+                  <View style={styles.v46PassportList}>
+                    {passport.map((entry, index) => (
+                      <Pressable key={entry.id} onPress={() => openPassportEntry(entry.id)} style={({ pressed }) => [styles.v46PassportTicket, pressed && styles.v35JourneyPressed]}>
+                        <View style={styles.v46PassportTicketTop}>
+                          <View><Text style={styles.v46PassportTicketNo}>DTR-{String(index + 1).padStart(3, '0')}</Text><Text style={styles.v46PassportTicketDate}>{formatPassportDate(entry.completedAt)}</Text></View>
+                          <Text style={styles.v46PassportTicketArrow}>→</Text>
                         </View>
+                        <Text style={styles.v46PassportTicketTitle}>{entry.destination.name}</Text>
+                        <View style={styles.v46PassportTicketMeta}><Text style={styles.v46PassportTicketMetaText}>{entry.durationMinutes} 分</Text><Text style={styles.v46PassportTicketMetaText}>{entry.moodLabel}</Text><Text style={styles.v46PassportTicketMetaText}>{entry.photos.length} 張</Text></View>
                       </Pressable>
-                    );
-                  })}
-                </View>
-              )}
-
-              {developerToolsUnlocked && passport.length > 0 && (
-                <Pressable onPress={clearPassport} style={({ pressed }) => [styles.v41PassportClear, pressed && styles.pressedLight]}>
-                  <Text style={styles.v41PassportClearText}>清除測試收藏</Text>
-                </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <View style={styles.v46PassportEmpty}><Text style={styles.v46PassportEmptyMark}>◌</Text><Text style={styles.v46PassportEmptyTitle}>還沒有走完的 DETOUR。</Text><Text style={styles.v46PassportEmptyBody}>第一張票，會從你真的出發之後開始。</Text></View>
               )}
             </ScrollView>
           </View>
         )}
 
-        {stage === 'passportDetail' && selectedPassportEntry && (
-          <View style={styles.v45DetailScreen}>
-            <View style={styles.v45DetailTop}>
-              <Pressable onPress={goBack} hitSlop={16} style={styles.v45BackButton}>
-                <Text style={styles.v45BackText}>‹</Text>
-              </Pressable>
-              <View style={styles.v45DetailTitleWrap}>
-                <Text style={styles.v45DetailTitle}>旅程回顧</Text>
-                <DetourAccentStroke width={86} style={styles.v45DetailTitleUnderline} />
-              </View>
-              <View style={styles.v45DetailTopSpacer} />
+        {stage === 'passport-detail' && selectedPassportEntry && (
+          <View style={styles.v46PassportDetailScreen}>
+            <View style={styles.v46PassportDetailHeader}>
+              <Pressable onPress={goBack} hitSlop={16} style={styles.v46PassportBack}><Text style={styles.v46PassportBackText}>‹</Text></Pressable>
+              <Text style={styles.v46PassportBrand}>旅程 #{String(selectedPassportNumber).padStart(3, '0')}</Text>
+              <Text style={styles.v46PassportMeta}>{formatPassportDate(selectedPassportEntry.completedAt)}</Text>
             </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.v45DetailScroll}
-            >
-              <V46ReviewArtwork
-                entry={selectedPassportEntry}
-                photoIndex={passportPhotoIndex}
-                onPhotoIndex={setPassportPhotoIndex}
-              />
-
-              {selectedPassportEntry.photos && selectedPassportEntry.photos.length > 3 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.v45DetailThumbRow}
-                >
-                  {selectedPassportEntry.photos.slice(3).map((photo, offset) => {
-                    const index = offset + 3;
-                    return (
-                      <Pressable key={photo.id} onPress={() => setPassportPhotoIndex(index)}>
-                        <Image
-                          source={{ uri: photo.uri }}
-                          style={[
-                            styles.v45DetailThumb,
-                            index === passportPhotoIndex && styles.v45DetailThumbActive,
-                          ]}
-                          resizeMode="cover"
-                        />
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              )}
-
-              <View style={styles.v45RouteStrip}>
-                <View style={styles.v45RouteEndpoint}>
-                  <View style={styles.v45RouteCityIcon} />
-                  <Text style={styles.v45RouteEndpointLabel}>出發</Text>
-                  <Text style={styles.v45RouteEndpointValue} numberOfLines={1}>{selectedPassportEntry.city}</Text>
-                </View>
-                <View style={styles.v45RouteTrack}>
-                  <View style={styles.v45RouteNode} />
-                  <View style={styles.v45RouteDashLine} />
-                  <View style={styles.v45RouteTree} />
-                  <View style={styles.v45RouteDashLineB} />
-                  <View style={styles.v45RouteNode} />
-                </View>
-                <View style={[styles.v45RouteEndpoint, styles.v45RouteEndpointRight]}>
-                  <View style={styles.v45RouteFlag} />
-                  <Text style={styles.v45RouteEndpointLabel}>抵達</Text>
-                  <Text style={styles.v45RouteEndpointValue} numberOfLines={1}>
-                    {selectedPassportEntry.sceneName ?? '這趟的終點'}
-                  </Text>
-                </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v46PassportDetailScroll}>
+              <View style={styles.v46PassportMapWrap}>
+                {passportMapRegion ? (
+                  <MapView style={styles.v46PassportMap} initialRegion={passportMapRegion} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false} showsCompass={false} toolbarEnabled={false}>
+                    {selectedPassportEntry.trace.length > 1 && <Polyline coordinates={selectedPassportEntry.trace} strokeColor={SIGNAL} strokeWidth={4} lineCap="round" />}
+                    <Circle center={selectedPassportEntry.destination} radius={12} strokeColor={BONE} strokeWidth={1} fillColor={SIGNAL} />
+                  </MapView>
+                ) : <View style={styles.v46PassportMapFallback} />}
+                <View style={styles.v46PassportMapStamp}><Text style={styles.v46PassportMapStampText}>走過</Text></View>
               </View>
-
-              <View style={styles.v45NoteCard}>
-                <Text style={styles.v45NoteTitle}>旅程筆記</Text>
-                <Text style={styles.v45NoteBody}>
-                  短短的 {selectedPassportEntry.actualDurationMinutes ?? selectedPassportEntry.minutes} 分鐘，走進熟悉又陌生的 {selectedPassportEntry.sceneName ?? selectedPassportEntry.city}。{`\n`}
-                  留下 {selectedPassportEntry.photoCount ?? selectedPassportEntry.photos?.length ?? 0} 張照片，也把這次轉彎收進 DETOUR。
-                </Text>
+              <View style={styles.v46PassportDetailCopy}>
+                <Text style={styles.v46PassportDetailEyebrow}>{selectedPassportEntry.moodLabel} · {selectedPassportEntry.durationMinutes} 分</Text>
+                <Text style={styles.v46PassportDetailTitle}>{selectedPassportEntry.destination.name}</Text>
               </View>
-
-              <Pressable
-                onPress={() => shareJourney(selectedPassportEntry)}
-                style={({ pressed }) => [
-                  styles.v45ShareButton,
-                  pressed && styles.v45MoodCtaPressed,
-                ]}
-              >
-                <Text style={styles.v45ShareIcon}>↗</Text>
-                <Text style={styles.v45ShareText}>分享這趟旅程</Text>
-              </Pressable>
+              {selectedPassportEntry.photos.length > 0 ? (
+                <View style={styles.v46PassportPhotoStage}>
+                  <Image source={{ uri: selectedPassportEntry.photos[Math.min(passportPhotoIndex, selectedPassportEntry.photos.length - 1)].uri }} style={styles.v46PassportPhoto} resizeMode="cover" />
+                  <View style={styles.v46PassportPhotoMeta}><Text style={styles.v46PassportPhotoMetaText}>{Math.min(passportPhotoIndex + 1, selectedPassportEntry.photos.length)} / {selectedPassportEntry.photos.length}</Text></View>
+                  {selectedPassportEntry.photos.length > 1 && <View style={styles.v46PassportPhotoControls}><Pressable onPress={() => setPassportPhotoIndex((index) => Math.max(0, index - 1))} disabled={passportPhotoIndex <= 0} style={[styles.v46PassportPhotoButton, passportPhotoIndex <= 0 && { opacity: 0.35 }]}><Text style={styles.v46PassportPhotoButtonText}>←</Text></Pressable><Pressable onPress={() => setPassportPhotoIndex((index) => Math.min(selectedPassportEntry.photos.length - 1, index + 1))} disabled={passportPhotoIndex >= selectedPassportEntry.photos.length - 1} style={[styles.v46PassportPhotoButton, passportPhotoIndex >= selectedPassportEntry.photos.length - 1 && { opacity: 0.35 }]}><Text style={styles.v46PassportPhotoButtonText}>→</Text></Pressable></View>}
+                </View>
+              ) : <View style={styles.v46PassportNoPhoto}><Text style={styles.v46PassportNoPhotoText}>這趟沒有留下照片。</Text></View>}
+              <View style={styles.v46PassportDetailStats}><View style={styles.v46PassportDetailStat}><Text style={styles.v46PassportDetailStatLabel}>距離</Text><Text style={styles.v46PassportDetailStatValue}>{selectedPassportEntry.distanceMeters >= 1000 ? `${(selectedPassportEntry.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(selectedPassportEntry.distanceMeters)} m`}</Text></View><View style={styles.v46PassportDetailStat}><Text style={styles.v46PassportDetailStatLabel}>任務</Text><Text style={styles.v46PassportDetailStatValue}>{selectedPassportEntry.missions.length}</Text></View></View>
             </ScrollView>
-
-            <View
-              ref={shareTicketRef}
-              collapsable={false}
-              style={styles.v45SharePosterOffscreen}
-            >
-              <V45SharePoster
-                entry={selectedPassportEntry}
-                photoUri={
-                  selectedPassportEntry.photos?.[
-                    Math.min(passportPhotoIndex, Math.max(0, (selectedPassportEntry.photos?.length ?? 1) - 1))
-                  ]?.uri
-                }
-              />
-            </View>
           </View>
         )}
-
       </Animated.View>
-
     </View>
   );
 }
