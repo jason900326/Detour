@@ -1,0 +1,266 @@
+name: Apply final ticket Skia integration
+
+on:
+  push:
+    branches:
+      - fix/final-ticket-skia-integration
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Bring in the proven Skia tear implementation
+        shell: bash
+        run: |
+          git fetch origin prototype/freeform-ticket-tear
+          git checkout origin/prototype/freeform-ticket-tear -- \
+            package.json \
+            src/app/_layout.tsx \
+            src/app/index.tsx \
+            src/components/ticket-tear-context.tsx \
+            src/components/ticket-visuals.tsx \
+            src/styles/home/ticket-recap-styles.ts
+
+      - name: Adapt Skia ticket to responsive printer geometry
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one match in {path}, found {count}: {old[:140]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          ticket = 'src/components/ticket-visuals.tsx'
+
+          replace_once(
+              ticket,
+              "export const DETOUR_TICKET_WIDTH = 260;",
+              "export const DETOUR_TICKET_DESIGN_WIDTH = 260;\nexport const DETOUR_TICKET_WIDTH = DETOUR_TICKET_DESIGN_WIDTH;",
+          )
+
+          replace_once(
+              ticket,
+              """export const DETOUR_TICKET_TEAR_SEAM_RATIO =
+  TICKET_TEAR_Y / TICKET_ARTWORK_HEIGHT;
+
+const TICKET_INTERACTION_SCALE = DETOUR_TICKET_WIDTH / 310;""",
+              """export const DETOUR_TICKET_TEAR_SEAM_RATIO =
+  TICKET_TEAR_Y / TICKET_ARTWORK_HEIGHT;
+export const DETOUR_TICKET_PHYSICAL_HEIGHT = DETOUR_TICKET_HEIGHT;
+
+export type DetourTicketGeometry = {
+  scale: number;
+  mainWidth: number;
+  mainHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  stubHeight: number;
+};
+
+export function getDetourTicketGeometry(renderWidth: number): DetourTicketGeometry {
+  const mainWidth = Math.max(1, renderWidth);
+  const scale = mainWidth / DETOUR_TICKET_DESIGN_WIDTH;
+  const mainHeight = DETOUR_TICKET_HEIGHT * scale;
+
+  return {
+    scale,
+    mainWidth,
+    mainHeight,
+    physicalWidth: mainWidth,
+    physicalHeight: mainHeight,
+    stubHeight: 0,
+  };
+}
+
+const TICKET_INTERACTION_SCALE = DETOUR_TICKET_WIDTH / 310;""",
+          )
+
+          replace_once(
+              ticket,
+              """  showBarcode?: boolean;
+  showStubArtwork?: boolean;
+};""",
+              """  showBarcode?: boolean;
+  showStubArtwork?: boolean;
+  renderWidth?: number;
+};""",
+          )
+
+          replace_once(
+              ticket,
+              """  artworkVisible = true,
+  showBarcode = false,
+}: V45TicketProps) {""",
+              """  artworkVisible = true,
+  showBarcode = false,
+  renderWidth = DETOUR_TICKET_DESIGN_WIDTH,
+}: V45TicketProps) {""",
+          )
+
+          replace_once(
+              ticket,
+              """  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
+
+  const feedStyle = {""",
+              """  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
+  const safeRenderWidth = Math.max(1, renderWidth);
+  const renderScale = safeRenderWidth / DETOUR_TICKET_DESIGN_WIDTH;
+  const renderedHeight = DETOUR_TICKET_HEIGHT * renderScale;
+
+  const feedStyle = {""",
+          )
+
+          replace_once(
+              ticket,
+              """  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;
+
+  return (
+    <Animated.View
+      style={[
+        styles.v46ArtTicket,
+        { width: DETOUR_TICKET_WIDTH, height: DETOUR_TICKET_HEIGHT },
+        artworkVisible && !artworkReady && styles.v49TicketArtworkPending,
+        feedStyle,
+      ]}
+    >""",
+              """  const skiaArtworkReady = artworkVisible && tearEnabled && !!ticketImage;
+  const artworkIsReady = artworkReady || !!ticketImage;
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: safeRenderWidth,
+          height: renderedHeight,
+          overflow: 'visible',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        artworkVisible && !artworkIsReady && styles.v49TicketArtworkPending,
+        feedStyle,
+      ]}
+    >
+      <View
+        style={[
+          styles.v46ArtTicket,
+          {
+            width: DETOUR_TICKET_DESIGN_WIDTH,
+            height: DETOUR_TICKET_HEIGHT,
+            transform: [{ scale: renderScale }],
+          },
+        ]}
+      >""",
+          )
+
+          replace_once(
+              ticket,
+              "{artworkVisible && (!hasTear || !ticketImage) && (",
+              "{artworkVisible && !skiaArtworkReady && (",
+          )
+
+          replace_once(
+              ticket,
+              "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }] }>",
+              "<Canvas style={StyleSheet.absoluteFill}>",
+          ) if False else None
+
+          # Keep this replacement separate because the source has no space before the closing brace.
+          replace_once(
+              ticket,
+              "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>",
+              "<Canvas style={StyleSheet.absoluteFill}>",
+          )
+
+          replace_once(
+              ticket,
+              """      {tearEnabled && !finishing && (
+        <GestureDetector gesture={tearGesture}>
+          <View
+            accessible
+            accessibilityLabel="沿齒孔撕過中線，開始旅程"
+            style={[
+              ticketOverlayStyles.gestureStrip,
+              {
+                top: gestureTop,
+                width: DETOUR_TICKET_WIDTH,
+                height: TEAR_HIT_HEIGHT,
+              },
+            ]}
+          />
+        </GestureDetector>
+      )}
+    </Animated.View>""",
+              """      {tearEnabled && !finishing && (
+        <GestureDetector gesture={tearGesture}>
+          <View
+            accessible
+            accessibilityLabel="沿齒孔撕過中線，開始旅程"
+            style={[
+              ticketOverlayStyles.gestureStrip,
+              {
+                top: gestureTop,
+                width: DETOUR_TICKET_WIDTH,
+                height: TEAR_HIT_HEIGHT,
+              },
+            ]}
+          />
+        </GestureDetector>
+      )}
+      </View>
+    </Animated.View>""",
+          )
+
+          home = 'src/components/detour-home-view.tsx'
+          replace_once(
+              home,
+              "const ticketSlotFillRatio = 0.72;",
+              "const ticketSlotFillRatio = 0.84;",
+          )
+          replace_once(
+              home,
+              """    const departButtonReserve = 68 + bottomPadding + 20;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);""",
+              """    // The ready state is torn directly on the ticket, so reserve only the
+    // bottom tear hint / safe area instead of a full CTA button.
+    const tearHintReserve = 52 + bottomPadding;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve);""",
+          )
+          PY
+
+      - name: Regenerate lockfile with Skia
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-final-ticket-export
+
+      - name: Commit verified integration
+        shell: bash
+        run: |
+          rm .github/workflows/apply-final-ticket-skia-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: integrate responsive ticket-base with Skia tear"
+          git push origin HEAD:${GITHUB_REF_NAME}
