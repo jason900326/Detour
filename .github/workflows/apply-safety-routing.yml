@@ -1,0 +1,64 @@
+name: Apply Detour safety and route policy
+
+on:
+  push:
+    branches:
+      - fix/safe-scenes-fresh-routes
+    paths:
+      - "scripts/apply-safety-routing.py"
+      - ".github/workflows/apply-safety-routing.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@v5
+        with:
+          ref: fix/safe-scenes-fresh-routes
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Apply safety and routing patch
+        run: python scripts/apply-safety-routing.py
+
+      - name: Check importer syntax
+        run: python3 -m py_compile scripts/import_osm_scenes.py
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-safety-export
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit implementation and remove temporary patch machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm scripts/apply-safety-routing.py .github/workflows/apply-safety-routing.yml
+          git config user.name "detour-safety-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: harden scene safety and avoid repeated routes"
+          git push origin HEAD:fix/safe-scenes-fresh-routes
