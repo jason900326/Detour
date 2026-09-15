@@ -33,7 +33,10 @@ jobs:
           fetch-depth: 0
 
       - name: Apply one-time ticket viewport fix
-        if: github.event_name == 'push' && github.ref == 'refs/heads/prototype/freeform-ticket-tear' && github.event.head_commit.message == 'chore: apply exact ticket viewport fix'
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/prototype/freeform-ticket-tear' &&
+          github.event.head_commit.message == 'chore: apply exact ticket viewport fix'
         run: |
           git checkout afaedfebbd4deb92a4e23234c2019d6a22980799 -- src/components/detour-home-view.tsx
           python3 - <<'PY'
