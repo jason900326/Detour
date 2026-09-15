@@ -1,0 +1,152 @@
+name: Apply responsive ticket printer geometry
+
+on:
+  push:
+    branches:
+      - fix/responsive-ticket-printer-geometry
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply responsive printer patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {count}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          ticket_path = Path('src/components/ticket-visuals.tsx')
+          ticket = ticket_path.read_text()
+          start = ticket.index('export const DETOUR_TICKET_WIDTH = 280;')
+          end = ticket.index('export type DetourTicketProps = {')
+          geometry_block = '''export const DETOUR_TICKET_DESIGN_WIDTH = 310;\nexport const DETOUR_TICKET_WIDTH = DETOUR_TICKET_DESIGN_WIDTH;\nexport const DETOUR_TICKET_MAIN_SOURCE = require('../../assets/detour/ticket-main.png');\nexport const DETOUR_TICKET_STUB_SOURCE = require('../../assets/detour/ticket-stub.png');\n\n// These values come from decoding the actual PNG bytes committed in the repo,\n// not from chat previews or runtime asset metadata. The canvases differ in\n// pixel size, so layout is based on their real visible-alpha paper bounds.\nconst MAIN_ARTWORK_SIZE = {\n  width: 1122,\n  height: 1402,\n} as const;\nconst STUB_ARTWORK_SIZE = {\n  width: 2172,\n  height: 724,\n} as const;\nconst MAIN_PAPER_BOUNDS = {\n  left: 32,\n  width: 1058,\n  bottom: 1319,\n} as const;\nconst STUB_PAPER_BOUNDS = {\n  left: 46,\n  width: 2081,\n  top: 70,\n} as const;\n\nexport const DETOUR_TICKET_HEIGHT =\n  DETOUR_TICKET_DESIGN_WIDTH * (MAIN_ARTWORK_SIZE.height / MAIN_ARTWORK_SIZE.width);\n\nconst MAIN_ARTWORK_SCALE = DETOUR_TICKET_DESIGN_WIDTH / MAIN_ARTWORK_SIZE.width;\nconst MAIN_PAPER_LEFT = MAIN_PAPER_BOUNDS.left * MAIN_ARTWORK_SCALE;\nconst MAIN_PAPER_WIDTH = MAIN_PAPER_BOUNDS.width * MAIN_ARTWORK_SCALE;\nconst MAIN_PAPER_BOTTOM = MAIN_PAPER_BOUNDS.bottom * MAIN_ARTWORK_SCALE;\nconst STUB_ARTWORK_SCALE = MAIN_PAPER_WIDTH / STUB_PAPER_BOUNDS.width;\nconst TEAR_JOIN_OVERLAP = 1;\n\nexport const DETOUR_TICKET_STUB_LEFT =\n  MAIN_PAPER_LEFT - STUB_PAPER_BOUNDS.left * STUB_ARTWORK_SCALE;\nexport const DETOUR_TICKET_STUB_WIDTH =\n  STUB_ARTWORK_SIZE.width * STUB_ARTWORK_SCALE;\nexport const DETOUR_TICKET_STUB_HEIGHT =\n  STUB_ARTWORK_SIZE.height * STUB_ARTWORK_SCALE;\nexport const DETOUR_TICKET_STUB_TOP =\n  MAIN_PAPER_BOTTOM - STUB_PAPER_BOUNDS.top * STUB_ARTWORK_SCALE - TEAR_JOIN_OVERLAP;\nexport const DETOUR_TICKET_PHYSICAL_HEIGHT = Math.max(\n  DETOUR_TICKET_HEIGHT,\n  DETOUR_TICKET_STUB_TOP + DETOUR_TICKET_STUB_HEIGHT\n);\n\nexport type DetourTicketGeometry = {\n  scale: number;\n  mainWidth: number;\n  mainHeight: number;\n  physicalWidth: number;\n  physicalHeight: number;\n  stubHeight: number;\n};\n\nexport function getDetourTicketGeometry(renderWidth: number): DetourTicketGeometry {\n  const mainWidth = Math.max(1, renderWidth);\n  const scale = mainWidth / DETOUR_TICKET_DESIGN_WIDTH;\n\n  return {\n    scale,\n    mainWidth,\n    mainHeight: DETOUR_TICKET_HEIGHT * scale,\n    physicalWidth: Math.max(MAIN_PAPER_WIDTH, DETOUR_TICKET_STUB_WIDTH) * scale,\n    physicalHeight: DETOUR_TICKET_PHYSICAL_HEIGHT * scale,\n    stubHeight: DETOUR_TICKET_STUB_HEIGHT * scale,\n  };\n}\n\n// The swipe hit area follows the actual bottom perforation of ticket-main.png.\nexport const DETOUR_TICKET_TEAR_SEAM_RATIO =\n  MAIN_PAPER_BOUNDS.bottom / MAIN_ARTWORK_SIZE.height;\n\n'''
+          ticket = ticket[:start] + geometry_block + ticket[end:]
+          ticket_path.write_text(ticket)
+
+          replace_once(
+              'src/components/ticket-visuals.tsx',
+              '''  showBarcode?: boolean;\n  showStubArtwork?: boolean;\n};''',
+              '''  showBarcode?: boolean;\n  showStubArtwork?: boolean;\n  renderWidth?: number;\n};''',
+          )
+          replace_once(
+              'src/components/ticket-visuals.tsx',
+              '''  showBarcode = false,\n  showStubArtwork = true,\n}: V45TicketProps) {''',
+              '''  showBarcode = false,\n  showStubArtwork = true,\n  renderWidth = DETOUR_TICKET_DESIGN_WIDTH,\n}: V45TicketProps) {''',
+          )
+          replace_once(
+              'src/components/ticket-visuals.tsx',
+              '''  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);\n\n  const feedStyle = {''',
+              '''  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);\n  const safeRenderWidth = Math.max(1, renderWidth);\n  const renderScale = safeRenderWidth / DETOUR_TICKET_DESIGN_WIDTH;\n  const renderedMainHeight = DETOUR_TICKET_HEIGHT * renderScale;\n\n  const feedStyle = {''',
+          )
+          replace_once(
+              'src/components/ticket-visuals.tsx',
+              '''  return (\n    <Animated.View\n      ref={ticketRef}\n      onLayout={measureTicket}\n      style={[\n        styles.v46ArtTicket,\n        { height: DETOUR_TICKET_HEIGHT },\n        artworkVisible && !artworkReady && styles.v49TicketArtworkPending,\n        feedStyle,\n      ]}\n    >\n      {artworkVisible && (''',
+              '''  return (\n    <Animated.View\n      ref={ticketRef}\n      onLayout={measureTicket}\n      style={[\n        {\n          width: safeRenderWidth,\n          height: renderedMainHeight,\n          overflow: 'visible',\n          alignItems: 'center',\n          justifyContent: 'center',\n        },\n        artworkVisible && !artworkReady && styles.v49TicketArtworkPending,\n        feedStyle,\n      ]}\n    >\n      <View\n        style={[\n          styles.v46ArtTicket,\n          {\n            height: DETOUR_TICKET_HEIGHT,\n            transform: [{ scale: renderScale }],\n          },\n        ]}\n      >\n      {artworkVisible && (''',
+          )
+
+          ticket_path = Path('src/components/ticket-visuals.tsx')
+          ticket = ticket_path.read_text()
+          function_start = ticket.index('export function V45Ticket')
+          close_at = ticket.index('    </Animated.View>\n  );\n}', function_start)
+          ticket = ticket[:close_at] + '      </View>\n' + ticket[close_at:]
+          ticket_path.write_text(ticket)
+
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''  Text,\n  View,\n} from 'react-native';''',
+              '''  Text,\n  View,\n  useWindowDimensions,\n} from 'react-native';''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''import { captureRef } from 'react-native-view-shot';\n''',
+              '''import { captureRef } from 'react-native-view-shot';\nimport { useSafeAreaInsets } from 'react-native-safe-area-context';\n''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''import { DetourAccentStroke, DetourTicket, V45Ticket } from '../components/ticket-visuals';''',
+              '''import {\n  DetourAccentStroke,\n  DetourTicket,\n  V45Ticket,\n  getDetourTicketGeometry,\n} from '../components/ticket-visuals';''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''  } = controller;\n\n  return (''',
+              '''  } = controller;\n\n  const { width: windowWidth, height: windowHeight } = useWindowDimensions();\n  const safeAreaInsets = useSafeAreaInsets();\n\n  const printingLayout = useMemo(() => {\n    // Printer geometry is derived synchronously from the current window. The\n    // artwork never needs to load or measure before the first frame can size it.\n    const baseSidePadding = 30;\n    const leftPadding = baseSidePadding + safeAreaInsets.left;\n    const rightPadding = baseSidePadding + safeAreaInsets.right;\n    const topPadding = Math.max(24, safeAreaInsets.top + 10);\n    const bottomPadding = Math.max(24, safeAreaInsets.bottom + 12);\n    const availableWidth = Math.max(1, windowWidth - leftPadding - rightPadding);\n    const printerWidth = Math.min(availableWidth, 420);\n\n    // The native slot is the source of truth for paper width. The paper keeps\n    // visible mechanical clearance on both sides instead of chasing px values.\n    const slotWidth = Math.max(1, printerWidth - 6);\n    const ticketSlotFillRatio = 0.72;\n    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;\n\n    // The width rule normally wins. Short screens can only shrink the same\n    // authored ticket proportionally; they never distort or crop it.\n    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;\n    const departButtonReserve = 68 + bottomPadding + 20;\n    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);\n    const unitGeometry = getDetourTicketGeometry(1);\n    const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;\n    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));\n    const ticketGeometry = getDetourTicketGeometry(ticketWidth);\n\n    return {\n      leftPadding,\n      rightPadding,\n      topPadding,\n      bottomPadding,\n      printerWidth,\n      slotWidth,\n      ticketWidth,\n      ticketGeometry,\n      paperViewportHeight: ticketGeometry.physicalHeight + 2,\n      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,\n    };\n  }, [\n    safeAreaInsets.bottom,\n    safeAreaInsets.left,\n    safeAreaInsets.right,\n    safeAreaInsets.top,\n    windowHeight,\n    windowWidth,\n  ]);\n\n  return (''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''          <View style={styles.v45PrintingScreen}>''',
+              '''          <View\n            style={[\n              styles.v45PrintingScreen,\n              {\n                paddingTop: printingLayout.topPadding,\n                paddingLeft: printingLayout.leftPadding,\n                paddingRight: printingLayout.rightPadding,\n              },\n            ]}\n          >''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''            <View style={styles.v48PrinterAssembly}>''',
+              '''            <View\n              style={[\n                styles.v48PrinterAssembly,\n                {\n                  width: printingLayout.printerWidth,\n                  height: printingLayout.assemblyHeight,\n                  alignSelf: 'center',\n                },\n              ]}\n            >''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''              <View style={styles.v48PaperViewport} pointerEvents="none">\n                <Animated.View\n                  style={[\n                    styles.v48PaperTrack,\n                    {\n                      transform: [\n                        {\n                          translateY: routeProgress.interpolate({\n                            inputRange: [0, 1],\n                            outputRange: [-405, 0],\n                          }),\n                        },\n                      ],\n                    },\n                  ]}\n                >''',
+              '''              <View\n                style={[\n                  styles.v48PaperViewport,\n                  {\n                    width: printingLayout.slotWidth,\n                    height: printingLayout.paperViewportHeight,\n                  },\n                ]}\n                pointerEvents="none"\n              >\n                <Animated.View\n                  style={[\n                    styles.v48PaperTrack,\n                    {\n                      width: printingLayout.slotWidth,\n                      transform: [\n                        {\n                          translateY: routeProgress.interpolate({\n                            inputRange: [0, 1],\n                            outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],\n                          }),\n                        },\n                      ],\n                    },\n                  ]}\n                >''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''                    stampProgress={ticketStamp}\n                  />''',
+              '''                    stampProgress={ticketStamp}\n                    renderWidth={printingLayout.ticketWidth}\n                  />''',
+          )
+          replace_once(
+              'src/components/detour-home-view.tsx',
+              '''                  styles.v48DepartButton,\n                  pressed && styles.v48DepartButtonPressed,''',
+              '''                  styles.v48DepartButton,\n                  {\n                    left: printingLayout.leftPadding,\n                    right: printingLayout.rightPadding,\n                    bottom: printingLayout.bottomPadding,\n                  },\n                  pressed && styles.v48DepartButtonPressed,''',
+          )
+
+          replace_once(
+              'src/styles/home/printer-overrides.ts',
+              '''  // The final authored stub extends below the main artwork canvas after its\n  // perforation is aligned. Keep the clipping window tall enough to show the\n  // entire physical ticket instead of forcing the stub upward to fit.\n  v48PaperViewport: {\n    position: 'absolute',\n    top: 47,\n    width: 318,\n    height: 470,\n    overflow: 'hidden',\n    alignItems: 'center',\n    zIndex: 3,\n    elevation: 3,\n  },''',
+              '''  // Width and height are supplied by the responsive printer geometry so the\n  // clipping window always matches the native slot and the scaled full ticket.\n  v48PaperViewport: {\n    position: 'absolute',\n    top: 47,\n    overflow: 'hidden',\n    alignItems: 'center',\n    zIndex: 3,\n    elevation: 3,\n  },''',
+          )
+
+          replace_once(
+              'src/hooks/use-detour-home-controller.ts',
+              '''    // Never show a dead printer. Feed the top edge immediately while data is\n    // being prepared, then hold here until the real route is ready.''',
+              '''    // Never show a dead printer. Feed the leading ticket-stub edge immediately\n    // while data is prepared, then hold here until the real route is ready.''',
+          )
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle iOS
+        run: npx expo export --platform ios --output-dir /tmp/detour-export
+
+      - name: Remove temporary workflow and commit fix
+        shell: bash
+        run: |
+          rm .github/workflows/apply-responsive-ticket-printer.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: make ticket printer geometry responsive"
+          git push origin HEAD:${GITHUB_REF_NAME}
