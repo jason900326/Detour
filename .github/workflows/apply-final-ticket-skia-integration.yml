@@ -27,15 +27,9 @@ jobs:
         shell: bash
         run: |
           git fetch origin prototype/freeform-ticket-tear
-          git checkout origin/prototype/freeform-ticket-tear -- \
-            package.json \
-            src/app/_layout.tsx \
-            src/app/index.tsx \
-            src/components/ticket-tear-context.tsx \
-            src/components/ticket-visuals.tsx \
-            src/styles/home/ticket-recap-styles.ts
+          git checkout origin/prototype/freeform-ticket-tear -- package.json src/app/_layout.tsx src/app/index.tsx src/components/ticket-tear-context.tsx src/components/ticket-visuals.tsx src/styles/home/ticket-recap-styles.ts
 
-      - name: Join responsive printer geometry to the single ticket-base artwork
+      - name: Adapt responsive printer to the one-piece ticket
         shell: bash
         run: |
           python3 - <<'PY'
@@ -50,137 +44,31 @@ jobs:
               p.write_text(text.replace(old, new, 1))
 
           view = 'src/components/detour-home-view.tsx'
-
-          replace_once(
-              view,
-              """  V45Ticket,
-  getDetourTicketGeometry,
-} from '../components/ticket-visuals';""",
-              """  V45Ticket,
-  DETOUR_TICKET_HEIGHT,
-  DETOUR_TICKET_WIDTH,
-} from '../components/ticket-visuals';""",
-          )
-
-          replace_once(
-              view,
-              """    const ticketSlotFillRatio = 0.72;
-    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
-
-    // The width rule normally wins. Short screens can only shrink the same
-    // authored ticket proportionally; they never distort or crop it.
-    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
-    const departButtonReserve = 68 + bottomPadding + 20;
-    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);
-    const unitGeometry = getDetourTicketGeometry(1);
-    const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;
-    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
-    const ticketGeometry = getDetourTicketGeometry(ticketWidth);
-
-    return {
-      leftPadding,
-      rightPadding,
-      topPadding,
-      bottomPadding,
-      printerWidth,
-      slotWidth,
-      ticketWidth,
-      ticketGeometry,
-      paperViewportHeight: ticketGeometry.physicalHeight + 2,
-      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,
-    };""",
-              """    // The printer mouth defines the ticket width. Keep a visible mechanical
-    // gap, but let the ticket use most of the slot instead of looking tiny.
-    const ticketSlotFillRatio = 0.84;
-    const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
-
-    // ticket-base is one complete authored sheet. Scale that single sheet as a
-    // unit; short screens may shrink it, but the artwork is never distorted.
-    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
-    const tearHintReserve = 52 + bottomPadding;
-    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve);
-    const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
-    const ticketWidthFromHeight = maxPaperHeight / ticketAspect;
-    const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
-    const ticketScale = ticketWidth / DETOUR_TICKET_WIDTH;
-    const ticketHeight = DETOUR_TICKET_HEIGHT * ticketScale;
-
-    return {
-      leftPadding,
-      rightPadding,
-      topPadding,
-      bottomPadding,
-      printerWidth,
-      slotWidth,
-      ticketWidth,
-      ticketHeight,
-      ticketScale,
-      paperViewportHeight: ticketHeight + 2,
-      assemblyHeight: 47 + ticketHeight + 2,
-    };""",
-          )
-
-          replace_once(
-              view,
-              "outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],",
-              "outputRange: [-printingLayout.ticketHeight, 0],",
-          )
-
-          replace_once(
-              view,
-              """                  <V45Ticket
-                    timeLabel={selectedTime ?? '15'}
-                    moodId={selectedMood ?? 'wander'}
-                    moodLabel={mood?.label ?? '—'}
-                    serial={ticketSerial(selectedTime, selectedMood)}
-                    stamped={stage === 'ready'}
-                    stampProgress={ticketStamp}
-                    renderWidth={printingLayout.ticketWidth}
-                  />""",
-              """                  <View
-                    style={{
-                      width: printingLayout.ticketWidth,
-                      height: printingLayout.ticketHeight,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'visible',
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: DETOUR_TICKET_WIDTH,
-                        height: DETOUR_TICKET_HEIGHT,
-                        transform: [{ scale: printingLayout.ticketScale }],
-                      }}
-                    >
-                      <V45Ticket
-                        timeLabel={selectedTime ?? '15'}
-                        moodId={selectedMood ?? 'wander'}
-                        moodLabel={mood?.label ?? '—'}
-                        serial={ticketSerial(selectedTime, selectedMood)}
-                        stamped={stage === 'ready'}
-                        stampProgress={ticketStamp}
-                      />
-                    </View>
-                  </View>""",
-          )
+          replace_once(view, "  V45Ticket,\n  getDetourTicketGeometry,\n} from '../components/ticket-visuals';", "  V45Ticket,\n  DETOUR_TICKET_HEIGHT,\n  DETOUR_TICKET_WIDTH,\n} from '../components/ticket-visuals';")
+          replace_once(view, "const ticketSlotFillRatio = 0.72;", "const ticketSlotFillRatio = 0.84;")
+          replace_once(view, "const departButtonReserve = 68 + bottomPadding + 20;", "const tearHintReserve = 52 + bottomPadding;")
+          replace_once(view, "- departButtonReserve);", "- tearHintReserve);")
+          replace_once(view, "const unitGeometry = getDetourTicketGeometry(1);", "const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;")
+          replace_once(view, "const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;", "const ticketWidthFromHeight = maxPaperHeight / ticketAspect;")
+          replace_once(view, "const ticketGeometry = getDetourTicketGeometry(ticketWidth);", "const ticketScale = ticketWidth / DETOUR_TICKET_WIDTH;\n    const ticketHeight = DETOUR_TICKET_HEIGHT * ticketScale;")
+          replace_once(view, "      ticketGeometry,\n      paperViewportHeight: ticketGeometry.physicalHeight + 2,\n      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,", "      ticketHeight,\n      ticketScale,\n      paperViewportHeight: ticketHeight + 2,\n      assemblyHeight: 47 + ticketHeight + 2,")
+          replace_once(view, "outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],", "outputRange: [-printingLayout.ticketHeight, 0],")
 
           ticket = 'src/components/ticket-visuals.tsx'
-          replace_once(
-              ticket,
-              "{artworkVisible && (!hasTear || !ticketImage) && (",
-              "{artworkVisible && !skiaArtworkReady && (",
-          )
-          replace_once(
-              ticket,
-              "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>",
-              "<Canvas style={StyleSheet.absoluteFill}>",
-          )
-          replace_once(
-              ticket,
-              "artworkVisible && !artworkReady && styles.v49TicketArtworkPending,",
-              "artworkVisible && !artworkReady && !ticketImage && styles.v49TicketArtworkPending,",
-          )
+          replace_once(ticket, "  showStubArtwork?: boolean;\n};", "  showStubArtwork?: boolean;\n  renderWidth?: number;\n};")
+          replace_once(ticket, "  artworkVisible = true,\n  showBarcode = false,\n}: V45TicketProps) {", "  artworkVisible = true,\n  showBarcode = false,\n  renderWidth = DETOUR_TICKET_WIDTH,\n}: V45TicketProps) {")
+          replace_once(ticket, "  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);\n\n  const feedStyle = {", "  const stampOpacity = stampProgress ?? (stamped ? 1 : 0);\n  const safeRenderWidth = Math.max(1, renderWidth);\n  const renderScale = safeRenderWidth / DETOUR_TICKET_WIDTH;\n  const renderedHeight = DETOUR_TICKET_HEIGHT * renderScale;\n\n  const feedStyle = {")
+          old_root = "  return (\n    <Animated.View\n      style={[\n        styles.v46ArtTicket,\n        { width: DETOUR_TICKET_WIDTH, height: DETOUR_TICKET_HEIGHT },\n        artworkVisible && !artworkReady && styles.v49TicketArtworkPending,\n        feedStyle,\n      ]}\n    >"
+          new_root = "  return (\n    <Animated.View\n      style={[\n        { width: safeRenderWidth, height: renderedHeight, overflow: 'visible', alignItems: 'center', justifyContent: 'center' },\n        artworkVisible && !artworkReady && !ticketImage && styles.v49TicketArtworkPending,\n        feedStyle,\n      ]}\n    >\n      <View\n        style={[\n          styles.v46ArtTicket,\n          { width: DETOUR_TICKET_WIDTH, height: DETOUR_TICKET_HEIGHT, transform: [{ scale: renderScale }] },\n        ]}\n      >"
+          replace_once(ticket, old_root, new_root)
+          replace_once(ticket, "{artworkVisible && (!hasTear || !ticketImage) && (", "{artworkVisible && !skiaArtworkReady && (")
+          replace_once(ticket, "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }] }>", "<Canvas style={StyleSheet.absoluteFill}>") if False else None
+          replace_once(ticket, "<Canvas style={[StyleSheet.absoluteFill, { opacity: hasTear ? 1 : 0 }]}>", "<Canvas style={StyleSheet.absoluteFill}>")
+          old_end = "      {tearEnabled && !finishing && (\n        <GestureDetector gesture={tearGesture}>\n          <View\n            accessible\n            accessibilityLabel=\"沿齒孔撕過中線，開始旅程\"\n            style={[\n              ticketOverlayStyles.gestureStrip,\n              {\n                top: gestureTop,\n                width: DETOUR_TICKET_WIDTH,\n                height: TEAR_HIT_HEIGHT,\n              },\n            ]}\n          />\n        </GestureDetector>\n      )}\n    </Animated.View>"
+          new_end = "      {tearEnabled && !finishing && (\n        <GestureDetector gesture={tearGesture}>\n          <View\n            accessible\n            accessibilityLabel=\"沿齒孔撕過中線，開始旅程\"\n            style={[\n              ticketOverlayStyles.gestureStrip,\n              {\n                top: gestureTop,\n                width: DETOUR_TICKET_WIDTH,\n                height: TEAR_HIT_HEIGHT,\n              },\n            ]}\n          />\n        </GestureDetector>\n      )}\n      </View>\n    </Animated.View>"
+          replace_once(ticket, old_end, new_end)
+
+          replace_once(view, "                    renderWidth={printingLayout.ticketWidth}\n", "                    renderWidth={printingLayout.ticketWidth}\n")
           PY
 
       - name: Install Skia and regenerate lockfile
