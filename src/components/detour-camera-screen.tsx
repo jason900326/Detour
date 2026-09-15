@@ -411,8 +411,12 @@ export default function DetourCameraScreen() {
         onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
       />
 
-      <View pointerEvents="none" style={styles.squareGuideWrap}>
-        <View style={styles.squareGuide} />
+      <View pointerEvents="none" style={styles.squareMaskWrap}>
+        <View style={styles.squareMaskBand} />
+        <View style={styles.squareViewport}>
+          <View style={styles.squareGuide} />
+        </View>
+        <View style={styles.squareMaskBand} />
       </View>
 
       <Animated.View pointerEvents="none" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
@@ -512,8 +516,10 @@ const styles = StyleSheet.create({
   cancelPermissionText: { textAlign: 'center', fontSize: 13, color: '#706C64' },
   cameraScreen: { flex: 1, backgroundColor: '#000' },
   cameraView: { flex: 1 },
-  squareGuideWrap: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
-  squareGuide: { width: '100%', aspectRatio: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
+  squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
+  squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
+  squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
+  squareGuide: { ...ABSOLUTE_FILL, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
   shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
   cameraOverlay: { ...ABSOLUTE_FILL, paddingTop: 58, paddingHorizontal: 18, paddingBottom: 28, justifyContent: 'space-between', zIndex: 5 },
   cameraTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
