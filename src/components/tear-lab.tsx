@@ -30,7 +30,6 @@ type TearDirection = -1 | 1;
 type ActiveDrag = {
   active: boolean;
   anchor: Point;
-  touchStartY: number;
 };
 
 const TICKET_SOURCE = require('../../assets/detour/ticket-base.png');
@@ -39,11 +38,13 @@ const ARTWORK_HEIGHT = 1402;
 const SEAM_RATIO = 1027 / ARTWORK_HEIGHT;
 const PAGE = '#F6F1E7';
 const EDGE_START_PX = 104;
-const RESUME_RADIUS_PX = 72;
 const HIT_HEIGHT = 92;
 const WANDER_PX = 18;
 const SAMPLE_PX = 5;
-const FINISH_MS = 560;
+const SNAP_RELEASE_PROGRESS = 0.68;
+const DIRECT_FINISH_PROGRESS = 0.965;
+const FINISH_MS = 520;
+const SNAP_PHASE = 0.34;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -135,7 +136,6 @@ export function TearLab() {
   const activeDragRef = useRef<ActiveDrag>({
     active: false,
     anchor: { x: 0, y: seamY },
-    touchStartY: seamY,
   });
 
   const reset = () => {
@@ -158,17 +158,8 @@ export function TearLab() {
     const current = ordered(pointsRef.current);
     if (current.length < 2) return;
 
-    const edgeX = tearDirection === 1 ? ticketWidth : 0;
-    const tail =
-      tearDirection === 1 ? current[current.length - 1] : current[0];
-    const finalPoints = ordered([...current, { x: edgeX, y: tail.y }]);
-
     finishingRef.current = true;
     activeDragRef.current.active = false;
-    pointsRef.current = finalPoints;
-    progressRef.current = 1;
-    setPoints(finalPoints);
-    setProgress(1);
     setDirection(tearDirection);
     setFinishing(true);
     setCompletion(0);
@@ -176,7 +167,7 @@ export function TearLab() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setTimeout(
       () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
-      62
+      74
     );
 
     const startedAt = Date.now();
@@ -188,7 +179,7 @@ export function TearLab() {
         return;
       }
       frameRef.current = null;
-      setTimeout(reset, 360);
+      setTimeout(reset, 330);
     };
     frameRef.current = requestAnimationFrame(step);
   };
@@ -203,20 +194,17 @@ export function TearLab() {
     );
     const current = ordered(pointsRef.current);
 
+    // Once a tear exists, any new swipe inside the perforation strip resumes
+    // from the actual tear tip. The user no longer has to hit that tiny tip
+    // precisely, which was the reason partial tears could feel "stuck".
     if (current.length >= 2) {
       const tearDirection = directionRef.current;
       const tip =
         tearDirection === 1 ? current[current.length - 1] : current[0];
 
-      if (Math.abs(x - tip.x) > RESUME_RADIUS_PX) {
-        activeDragRef.current.active = false;
-        return;
-      }
-
       activeDragRef.current = {
         active: true,
         anchor: tip,
-        touchStartY: ticketY,
       };
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       return;
@@ -243,9 +231,7 @@ export function TearLab() {
     tickRef.current = 0;
     activeDragRef.current = {
       active: true,
-      anchor:
-        tearDirection === 1 ? start[start.length - 1] : start[0],
-      touchStartY: ticketY,
+      anchor: tearDirection === 1 ? start[start.length - 1] : start[0],
     };
     setPoints(start);
     setProgress(progressRef.current);
@@ -302,20 +288,23 @@ export function TearLab() {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
     }
 
-    if (nextProgress >= 0.965) finish(tearDirection);
+    if (nextProgress >= DIRECT_FINISH_PROGRESS) finish(tearDirection);
   };
 
   const endDrag = () => {
+    if (!activeDragRef.current.active) return;
     activeDragRef.current.active = false;
     if (finishingRef.current) return;
 
-    if (progressRef.current >= 0.88) {
+    // Keep the satisfying full-width swipe if the user wants it, but if they
+    // release after roughly two thirds, let paper tension snap the rest open.
+    if (progressRef.current >= SNAP_RELEASE_PROGRESS) {
       finish(directionRef.current);
       return;
     }
 
-    // A half-torn paper does not magically repair itself. Leave the tear where
-    // it is and let the next touch resume from the current tear tip.
+    // Below the commit threshold the paper stays torn, but the next swipe can
+    // begin anywhere along the seam and will continue from the existing tip.
     if (pointsRef.current.length >= 2) {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -329,8 +318,11 @@ export function TearLab() {
         .onBegin((event) => beginDrag(event.x, event.y))
         .onUpdate((event) => updateDrag(event.translationX, event.translationY))
         .onEnd(endDrag)
+        // onEnd is not guaranteed for every cancellation path. If the gesture
+        // finalizes while still active, settle it here so no half-state is left
+        // with an unresponsive drag ref.
         .onFinalize(() => {
-          activeDragRef.current.active = false;
+          if (activeDragRef.current.active) endDrag();
         }),
     [gestureTop, seamY, ticketWidth]
   );
@@ -338,33 +330,56 @@ export function TearLab() {
   const livePoints = ordered(points);
   const hasTear = livePoints.length >= 2;
 
+  const snapProgress = finishing
+    ? clamp(completion / SNAP_PHASE, 0, 1)
+    : 0;
+  const fallProgress = finishing
+    ? clamp((completion - SNAP_PHASE * 0.62) / (1 - SNAP_PHASE * 0.62), 0, 1)
+    : 0;
+
+  const renderPoints = useMemo(() => {
+    if (!finishing || livePoints.length < 2) return livePoints;
+
+    const tearDirection = directionRef.current;
+    const tip =
+      tearDirection === 1
+        ? livePoints[livePoints.length - 1]
+        : livePoints[0];
+    const edgeX = tearDirection === 1 ? ticketWidth : 0;
+    const animatedTip = {
+      x: tip.x + (edgeX - tip.x) * snapProgress,
+      y: tip.y,
+    };
+    return ordered([...livePoints, animatedTip]);
+  }, [points, finishing, snapProgress, ticketWidth]);
+
   const regionPath = useMemo(
-    () => buildLowerRegion(livePoints, ticketHeight),
-    [points, ticketHeight]
+    () => buildLowerRegion(renderPoints, ticketHeight),
+    [renderPoints, ticketHeight]
   );
-  const edgePath = useMemo(() => buildSmoothPath(livePoints), [points]);
+  const edgePath = useMemo(() => buildSmoothPath(renderPoints), [renderPoints]);
   const edgeShadowPath = useMemo(
-    () => buildSmoothPath(shiftedPoints(livePoints, 1.25)),
-    [points]
+    () => buildSmoothPath(shiftedPoints(renderPoints, 1.25)),
+    [renderPoints]
   );
 
   const lastPoint =
     direction === 1
-      ? livePoints[livePoints.length - 1]
-      : livePoints[0];
+      ? renderPoints[renderPoints.length - 1]
+      : renderPoints[0];
   const edgeLean = lastPoint
     ? clamp((lastPoint.y - seamY) / WANDER_PX, -1, 1)
     : 0;
 
-  const finishEase = 1 - Math.pow(1 - completion, 3);
-  const gravity = completion * completion;
+  const fallEase = 1 - Math.pow(1 - fallProgress, 3);
+  const gravity = fallProgress * fallProgress;
   const liveGap = 0.9 + progress * 3.2;
   const pieceX = finishing
-    ? direction * 22 * finishEase
+    ? direction * 22 * fallEase
     : direction * progress * 1.6;
   const pieceY = finishing ? 3 + gravity * 108 : liveGap;
   const pieceRotation = finishing
-    ? direction * 0.075 * finishEase
+    ? direction * 0.075 * fallEase
     : edgeLean * 0.012 * progress;
   const pieceOrigin = {
     x: ticketWidth / 2,
@@ -470,8 +485,8 @@ export function TearLab() {
         </View>
 
         <View style={styles.hint} pointerEvents="none">
-          <Text style={styles.hintMain}>沿齒孔撕；放手後可以接著撕</Text>
-          <Text style={styles.hintSub}>裂口跟手走，不會強制拉成固定直線</Text>
+          <Text style={styles.hintMain}>沿齒孔撕；超過約 2/3 放手會自動斷開</Text>
+          <Text style={styles.hintSub}>太早放手也不會卡住，再滑一次即可接著撕</Text>
         </View>
       </SafeAreaView>
     </GestureHandlerRootView>
