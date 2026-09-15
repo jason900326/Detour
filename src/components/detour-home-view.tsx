@@ -121,7 +121,8 @@ import {
   DetourAccentStroke,
   DetourTicket,
   V45Ticket,
-  getDetourTicketGeometry,
+  DETOUR_TICKET_HEIGHT,
+  DETOUR_TICKET_WIDTH,
 } from '../components/ticket-visuals';
 import {
   V45SharePoster,
@@ -391,18 +392,19 @@ export function DetourHomeView({
     // The native slot is the source of truth for paper width. The paper keeps
     // visible mechanical clearance on both sides instead of chasing px values.
     const slotWidth = Math.max(1, printerWidth - 6);
-    const ticketSlotFillRatio = 0.72;
+    const ticketSlotFillRatio = 0.84;
     const ticketWidthFromSlot = slotWidth * ticketSlotFillRatio;
 
     // The width rule normally wins. Short screens can only shrink the same
     // authored ticket proportionally; they never distort or crop it.
     const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
-    const departButtonReserve = 68 + bottomPadding + 20;
-    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - departButtonReserve);
-    const unitGeometry = getDetourTicketGeometry(1);
-    const ticketWidthFromHeight = maxPaperHeight / unitGeometry.physicalHeight;
+    const tearHintReserve = 52 + bottomPadding;
+    const maxPaperHeight = Math.max(1, windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve);
+    const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
+    const ticketWidthFromHeight = maxPaperHeight / ticketAspect;
     const ticketWidth = Math.max(1, Math.min(ticketWidthFromSlot, ticketWidthFromHeight));
-    const ticketGeometry = getDetourTicketGeometry(ticketWidth);
+    const ticketScale = ticketWidth / DETOUR_TICKET_WIDTH;
+    const ticketHeight = DETOUR_TICKET_HEIGHT * ticketScale;
 
     return {
       leftPadding,
@@ -412,9 +414,10 @@ export function DetourHomeView({
       printerWidth,
       slotWidth,
       ticketWidth,
-      ticketGeometry,
-      paperViewportHeight: ticketGeometry.physicalHeight + 2,
-      assemblyHeight: 47 + ticketGeometry.physicalHeight + 2,
+      ticketHeight,
+      ticketScale,
+      paperViewportHeight: ticketHeight + 2,
+      assemblyHeight: 47 + ticketHeight + 2,
     };
   }, [
     safeAreaInsets.bottom,
@@ -1185,7 +1188,7 @@ export function DetourHomeView({
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-printingLayout.ticketGeometry.physicalHeight, 0],
+                            outputRange: [-printingLayout.ticketHeight, 0],
                           }),
                         },
                       ],
