@@ -123,8 +123,8 @@ export function useDetourHomeController() {
     useState('等待開始…');
   const [ticketBuildError, setTicketBuildError] = useState<string | null>(null);
 
-  const [selectedTime, setSelectedTime] = useState<string | null>('15');
-  const [sliderDisplayMinutes, setSliderDisplayMinutes] = useState(15);
+  const [selectedTime, setSelectedTime] = useState<string | null>(String(TIME_MIN));
+  const [sliderDisplayMinutes, setSliderDisplayMinutes] = useState(TIME_MIN);
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [selectedColor, setSelectedColor] = useState<ColorChoice | null>(null);
   const [slowDestinationInput, setSlowDestinationInput] = useState('');
@@ -247,7 +247,7 @@ export function useDetourHomeController() {
   const timeSliderProgress = useRef(new Animated.Value(0)).current;
   const timeSliderWidthRef = useRef(1);
   const timeSliderStartProgressRef = useRef(0);
-  const timeSliderDisplayRef = useRef(15);
+  const timeSliderDisplayRef = useRef(TIME_MIN);
   const minutePulse = useRef(new Animated.Value(1)).current;
   const homeEntrance = useRef(new Animated.Value(0)).current;
   const homeRouteMotion = useRef(new Animated.Value(0)).current;
@@ -278,8 +278,8 @@ export function useDetourHomeController() {
   );
 
   const selectedMinutes = parseMinutes(selectedTime);
-  const rollCapacity = getFilmRollCapacity(selectedMinutes || 15);
-  const previewProfile = getJourneyProfile(selectedMinutes || 15);
+  const rollCapacity = getFilmRollCapacity(selectedMinutes || TIME_MIN);
+  const previewProfile = getJourneyProfile(selectedMinutes || TIME_MIN);
 
   const timeIndexFromRatio = (ratio: number) =>
     Math.max(
@@ -523,7 +523,7 @@ export function useDetourHomeController() {
   useEffect(() => {
     const nextMinutes = Math.max(
       TIME_MIN,
-      Math.min(TIME_MAX, selectedMinutes || 15)
+      Math.min(TIME_MAX, selectedMinutes || TIME_MIN)
     );
     const nextRatio = ratioForMinutes(nextMinutes);
 
@@ -936,7 +936,7 @@ export function useDetourHomeController() {
 
     const session = await createPlaytestSession({
       devMode,
-      minutes: selectedMinutes || 15,
+      minutes: selectedMinutes || TIME_MIN,
       moodId: selectedMood,
     });
 
@@ -982,7 +982,7 @@ export function useDetourHomeController() {
     setPlaytestFeedbackReasons([]);
 
     stopLocationWatcher();
-    setSelectedTime('15');
+    setSelectedTime(String(TIME_MIN));
     setSelectedMood(null);
     setSelectedColor(null);
     setSlowDestinationInput('');
@@ -1125,11 +1125,11 @@ export function useDetourHomeController() {
 
   function remainingDetourMinutes() {
     const startedAt = detourStartedAtRef.current;
-    if (!startedAt) return selectedMinutes || 15;
+    if (!startedAt) return selectedMinutes || TIME_MIN;
 
     const elapsedMinutes =
       (Date.now() - new Date(startedAt).getTime()) / 60000;
-    return Math.max(1, (selectedMinutes || 15) - elapsedMinutes);
+    return Math.max(1, (selectedMinutes || TIME_MIN) - elapsedMinutes);
   }
 
   function replacementDistanceBudget(minutesLeft: number) {
@@ -1619,7 +1619,7 @@ export function useDetourHomeController() {
         .map((entry) => entry.sceneId)
         .filter((value): value is string => typeof value === 'string');
       const sceneFeedback = await loadSceneFeedback();
-      const minutes = selectedMinutes || 15;
+      const minutes = selectedMinutes || TIME_MIN;
 
       const candidates = await findSceneCandidates({
         start: point,
@@ -1716,7 +1716,7 @@ export function useDetourHomeController() {
 
     try {
       const finalMood: MoodId = selectedMood ?? 'wander';
-      const minutes = selectedMinutes || 15;
+      const minutes = selectedMinutes || TIME_MIN;
       const profile = getJourneyProfile(minutes);
       const plannedSideEventCount =
         finalMood === 'color' ? 0 : profile.sideEventCount;
@@ -2406,7 +2406,7 @@ export function useDetourHomeController() {
       id: `${Date.now()}`,
       completedAt: new Date().toISOString(),
       city: '台北',
-      minutes: selectedMinutes || 15,
+      minutes: selectedMinutes || TIME_MIN,
       moodId: finalMood.id,
       moodLabel: finalMood.label,
       moodCode: finalMood.code,
