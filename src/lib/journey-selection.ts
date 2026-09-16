@@ -1,31 +1,13 @@
-import type { MoodId } from './journey-engine';
+import { getSideEventCount, type MoodId } from './journey-engine';
 import type { SceneCandidate } from './scene-engine';
 
 export function moodHint(moodId: MoodId) {
-  if (moodId === 'wander') {
-    return '不設目的，讓路線自己長出來。';
-  }
-
-  if (moodId === 'food') {
-    return '讓 DETOUR 幫你決定去哪裡吃。';
-  }
-
-  if (moodId === 'quiet') {
-    return '少一點聲音，留一點空白。';
-  }
-
-  if (moodId === 'weird') {
-    return '去找平常會錯過的小東西。';
-  }
-
-  if (moodId === 'color') {
-    return '整趟只追同一個顏色。';
-  }
-
-  if (moodId === 'slow') {
-    return '你決定去哪，DETOUR 決定怎麼繞。';
-  }
-
+  if (moodId === 'wander') return '不設目的，讓路線自己長出來。';
+  if (moodId === 'food') return '讓 DETOUR 幫你決定去哪裡吃。';
+  if (moodId === 'color') return '整趟只追同一個顏色。';
+  if (moodId === 'slow') return '你決定去哪，DETOUR 決定怎麼繞。';
+  if (moodId === 'quiet') return '少一點聲音，留一點空白。';
+  if (moodId === 'weird') return '去找平常會錯過的小東西。';
   return '今天的方向完全交給 DETOUR。';
 }
 
@@ -48,15 +30,11 @@ export function isMealFoodCandidate(scene: SceneCandidate) {
 }
 
 export function applyFoodDestinationWeight(candidates: SceneCandidate[]) {
-  // Product rule: when both groups are healthy enough, Food mode chooses a
-  // drink-like destination about 80% of the time and a meal about 20%.
   const preferDrink = Math.random() < 0.8;
   const preferred = candidates.filter((scene) =>
     preferDrink ? isDrinkLikeFoodCandidate(scene) : isMealFoodCandidate(scene)
   );
 
-  // Keep route quality/safety first. If there are too few candidates in the
-  // rolled category, fall back to the full qualified pool.
   if (preferred.length >= 3) return preferred;
 
   return [
@@ -65,8 +43,8 @@ export function applyFoodDestinationWeight(candidates: SceneCandidate[]) {
   ];
 }
 
-export function getFilmRollCapacity(_minutes: number) {
-  // Every DETOUR keeps one small roll. Camera-first Side Quests plus the
-  // arrival frame are designed to fit inside these six intentional photos.
-  return 6;
+export function getFilmRollCapacity(minutes: number) {
+  // A user may photograph every suggested target plus a couple of free/arrival
+  // frames. The roll must never punish engaging with side events.
+  return Math.min(12, Math.max(6, getSideEventCount(minutes) + 2));
 }
