@@ -1,8 +1,9 @@
 import { StyleSheet } from 'react-native';
 
-// The printer is intentionally reduced to a single dark slit. The paper viewport
-// starts behind the slit so the ticket reads as passing through the opening,
-// without a separate housing or lower lip competing with the paper.
+// Keep the printer as one simple slit. The animated viewport grows downward from
+// the slit, while the full ticket is bottom-anchored inside that viewport. That
+// makes the ticket's bottom edge emerge first; the top edge is the last part to
+// leave the printer and ends flush against the slit.
 export const printerOverrides = StyleSheet.create({
   v50PrinterSlotOnly: {
     position: 'absolute',
@@ -18,7 +19,11 @@ export const printerOverrides = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
   },
   v48PaperTrack: {
-    top: 0,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
   },
   v48PaperViewport: {
     position: 'absolute',
