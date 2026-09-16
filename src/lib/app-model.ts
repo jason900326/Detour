@@ -127,8 +127,8 @@ export const TIME_STEPS = [
   55,
   60,
 ] as const;
-export const TIME_MIN = TIME_STEPS[0];
-export const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
+export const TIME_MIN: number = TIME_STEPS[0];
+export const TIME_MAX: number = TIME_STEPS[TIME_STEPS.length - 1];
 
 export const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
   { id: 'wander', label: '隨便走', code: 'WANDER' },

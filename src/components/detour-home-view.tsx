@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
 import type { SceneIssueReason, WalkingPace } from '../lib/app-model';
-import { MOODS, TIME_STEPS } from '../lib/app-model';
+import { MOODS } from '../lib/app-model';
 import { isAIEngineConfigured } from '../lib/ai-engine';
 import { DETOUR_PLAYTEST_VERSION } from '../lib/playtest-analytics';
 import { ticketSerial } from '../lib/detour-formatters';
@@ -33,8 +33,6 @@ import {
   DETOUR_TICKET_WIDTH,
 } from './ticket-visuals';
 import { CollectionStages } from './home/collection-stages';
-
-const HOME_TIME_LABELS = [10, 20, 30, 40, 50, 60] as const;
 
 export function DetourHomeView({
   controller,
@@ -414,7 +412,7 @@ export function DetourHomeView({
               </Pressable>
             </View>
 
-            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}>
+            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}> 
               <Image
                 source={require('../../assets/detour/home-hero-route.png')}
                 style={styles.v46HomeHeroRoute}
@@ -424,24 +422,44 @@ export function DetourHomeView({
 
             <Text style={styles.v35HomeQuestion}>今天有多少時間，{`\n`}可以拿來偏離一下？</Text>
             <DetourAccentStroke width={126} style={styles.v35Underline} />
-            <Animated.View style={[styles.v35MinuteReadout, { transform: [{ scale: minutePulse }] }]}>
+            <Animated.View
+              style={[
+                styles.v35MinuteReadout,
+                {
+                  paddingHorizontal: 18,
+                  overflow: 'visible',
+                  transform: [{ scale: minutePulse }],
+                },
+              ]}
+            >
               <Text style={styles.v35MinuteNumber}>{sliderDisplayMinutes}</Text>
               <Text style={styles.v35MinuteUnit}>分</Text>
             </Animated.View>
 
             <View
-              style={styles.v35SliderWrap}
+              style={[
+                styles.v35SliderWrap,
+                { height: 58, marginHorizontal: 20 },
+              ]}
               onLayout={(event) => {
                 timeSliderWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
               }}
               {...timeSliderResponder.panHandlers}
             >
-              <View style={styles.v35SliderRail} />
+              <View
+                style={[
+                  styles.v35SliderRail,
+                  { top: 15, height: 4, borderRadius: 2 },
+                ]}
+              />
               <Animated.View
                 pointerEvents="none"
                 style={[
                   styles.v35SliderFill,
                   {
+                    top: 15,
+                    height: 4,
+                    borderRadius: 2,
                     width: timeSliderProgress.interpolate({
                       inputRange: [0, 1],
                       outputRange: ['0%', '100%'],
@@ -449,41 +467,44 @@ export function DetourHomeView({
                   },
                 ]}
               />
-              {TIME_STEPS.map((minute, index) => {
-                const progress = index / (TIME_STEPS.length - 1);
-                return (
-                  <View
-                    key={minute}
-                    pointerEvents="none"
-                    style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}
-                  >
-                    <View
-                      style={[
-                        styles.v35Tick,
-                        minute <= sliderDisplayMinutes && styles.v35TickActive,
-                      ]}
-                    />
-                  </View>
-                );
-              })}
-              {HOME_TIME_LABELS.map((minute) => {
-                const index = TIME_STEPS.indexOf(minute);
-                const progress = index / (TIME_STEPS.length - 1);
-                return (
-                  <View
-                    key={`label-${minute}`}
-                    pointerEvents="none"
-                    style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}
-                  >
-                    <Text style={styles.v35TickLabel}>{minute}</Text>
-                  </View>
-                );
-              })}
+              <Text
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: -2,
+                  top: 32,
+                  fontSize: 12,
+                  fontWeight: '800',
+                  color: MUTED,
+                }}
+              >
+                10
+              </Text>
+              <Text
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  right: -2,
+                  top: 32,
+                  fontSize: 12,
+                  fontWeight: '800',
+                  color: MUTED,
+                }}
+              >
+                60
+              </Text>
               <Animated.View
                 pointerEvents="none"
                 style={[
                   styles.v35SliderThumb,
                   {
+                    top: 0,
+                    width: 34,
+                    height: 34,
+                    marginLeft: -17,
+                    borderRadius: 17,
+                    borderWidth: 1,
+                    shadowOpacity: 0.12,
                     left: timeSliderProgress.interpolate({
                       inputRange: [0, 1],
                       outputRange: ['0%', '100%'],
@@ -491,7 +512,12 @@ export function DetourHomeView({
                   },
                 ]}
               >
-                <View style={styles.v35SliderThumbCore} />
+                <View
+                  style={[
+                    styles.v35SliderThumbCore,
+                    { width: 22, height: 22, borderRadius: 11 },
+                  ]}
+                />
               </Animated.View>
             </View>
 
@@ -688,7 +714,7 @@ export function DetourHomeView({
                   ]}
                 >
                   <V45Ticket
-                    timeLabel={selectedTime ?? '15'}
+                    timeLabel={selectedTime ?? '10'}
                     moodId={selectedMood ?? 'wander'}
                     moodLabel={mood?.label ?? '—'}
                     serial={ticketSerial(selectedTime, selectedMood)}
