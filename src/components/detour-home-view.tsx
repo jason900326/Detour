@@ -4,7 +4,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
-  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -44,7 +43,6 @@ export function DetourHomeView({
     preferences,
     onboardingStep,
     onboardingFromSettings,
-    ticketBuildStatus,
     ticketBuildError,
     setTicketBuildError,
     selectedTime,
@@ -131,21 +129,18 @@ export function DetourHomeView({
     const availableWidth = Math.max(1, windowWidth - leftPadding - rightPadding);
     const printerWidth = Math.min(availableWidth, 420);
     const slotWidth = Math.max(1, printerWidth - 6);
-    const ticketArtworkWidthPx = 1122;
-    const ticketArtworkRenderScale = 0.75;
-    const ticketWidthFromArtwork =
-      (ticketArtworkWidthPx * ticketArtworkRenderScale) / PixelRatio.get();
-    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + 47;
+    const paperExitTop = 6;
+    const chromeAndPrinterTop = 48 + 48 + 67 + 12 + paperExitTop;
     const tearHintReserve = 52 + bottomPadding;
     const maxPaperHeight = Math.max(
       1,
       windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve
     );
     const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
-    const ticketWidth = Math.max(
-      1,
-      Math.min(ticketWidthFromArtwork, slotWidth, maxPaperHeight / ticketAspect)
-    );
+    const maxRailWidthByHeight =
+      maxPaperHeight / Math.max(0.85 * ticketAspect, 0.001);
+    const railWidth = Math.max(1, Math.min(slotWidth, maxRailWidthByHeight));
+    const ticketWidth = railWidth * 0.85;
     const ticketHeight = ticketWidth * ticketAspect;
 
     return {
@@ -155,10 +150,12 @@ export function DetourHomeView({
       bottomPadding,
       printerWidth,
       slotWidth,
+      railWidth,
       ticketWidth,
       ticketHeight,
+      paperExitTop,
       paperViewportHeight: ticketHeight + 2,
-      assemblyHeight: 47 + ticketHeight + 2,
+      assemblyHeight: paperExitTop + ticketHeight + 2,
     };
   }, [
     safeAreaInsets.bottom,
@@ -175,9 +172,23 @@ export function DetourHomeView({
     }
   }, [stage]);
 
+  useEffect(() => {
+    if (stage === 'time' && selectedMood === 'slow') {
+      controller.setSelectedMood(null);
+      setSlowDestinationInput('');
+      setSlowDestinationError(null);
+    }
+  }, [stage, selectedMood]);
+
   const handleTicketVisualReady = () => {
     markTicketVisualReady();
     requestAnimationFrame(() => setTicketDisplayReady(true));
+  };
+
+  const dismissSlowMood = () => {
+    controller.setSelectedMood(null);
+    setSlowDestinationInput('');
+    setSlowDestinationError(null);
   };
 
   const chromeDark = stage === 'journey' || stage === 'developing';
@@ -412,7 +423,7 @@ export function DetourHomeView({
               </Pressable>
             </View>
 
-            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}> 
+            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}>
               <Image
                 source={require('../../assets/detour/home-hero-route.png')}
                 style={styles.v46HomeHeroRoute}
@@ -432,7 +443,14 @@ export function DetourHomeView({
                 },
               ]}
             >
-              <Text style={styles.v35MinuteNumber}>{sliderDisplayMinutes}</Text>
+              <Text
+                style={[
+                  styles.v35MinuteNumber,
+                  { letterSpacing: 0, paddingHorizontal: 5, overflow: 'visible' },
+                ]}
+              >
+                {sliderDisplayMinutes}
+              </Text>
               <Text style={styles.v35MinuteUnit}>分</Text>
             </Animated.View>
 
@@ -592,10 +610,7 @@ export function DetourHomeView({
               transparent
               animationType="fade"
               statusBarTranslucent
-              onRequestClose={() => {
-                controller.setSelectedMood(null);
-                setSlowDestinationError(null);
-              }}
+              onRequestClose={dismissSlowMood}
             >
               <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -611,9 +626,27 @@ export function DetourHomeView({
                     backgroundColor: '#F5F1E8',
                   }}
                 >
+                  <Pressable
+                    onPress={dismissSlowMood}
+                    hitSlop={12}
+                    style={{
+                      position: 'absolute',
+                      top: 14,
+                      right: 18,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#EAE5DB',
+                      zIndex: 2,
+                    }}
+                  >
+                    <Text style={{ marginTop: -2, fontSize: 28, lineHeight: 30, color: INK }}>×</Text>
+                  </Pressable>
                   <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 1.5, color: SIGNAL }}>慢慢走</Text>
                   <Text style={{ marginTop: 8, fontSize: 34, lineHeight: 40, fontWeight: '900', color: INK }}>你要去哪？</Text>
-                  <Text style={{ marginTop: 8, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
+                  <Text style={{ marginTop: 8, paddingRight: 42, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
                   <TextInput
                     autoFocus
                     value={slowDestinationInput}
@@ -663,9 +696,15 @@ export function DetourHomeView({
               </Pressable>
               <Text style={styles.v45PrintingBrand}>DETOUR</Text>
             </View>
-            <View style={[styles.v45PrintingTitleWrap, styles.v48PrintingTitleWrap]}>
+            <View
+              style={[
+                styles.v45PrintingTitleWrap,
+                styles.v48PrintingTitleWrap,
+                { minHeight: 72 },
+              ]}
+            >
               <Text style={styles.v45PrintingTitle}>
-                {stage === 'ready' ? '車票完成' : ticketBuildStatus}
+                {stage === 'ready' ? '車票完成' : '出票中⋯'}
               </Text>
               <DetourAccentStroke width={180} style={styles.v45PrintingUnderline} />
             </View>
@@ -680,18 +719,23 @@ export function DetourHomeView({
                 },
               ]}
             >
-              <View pointerEvents="none" style={styles.v50PrinterBody}>
-                <View style={styles.v50PrinterHighlight} />
-                <View style={styles.v50PrinterSlotShell}>
-                  <View style={styles.v50PrinterSlot} />
-                </View>
-              </View>
               <View
+                pointerEvents="none"
+                style={[
+                  styles.v50PrinterRearRail,
+                  { width: printingLayout.railWidth },
+                ]}
+              />
+              <Animated.View
                 style={[
                   styles.v48PaperViewport,
                   {
-                    width: printingLayout.slotWidth,
-                    height: printingLayout.paperViewportHeight,
+                    top: printingLayout.paperExitTop,
+                    width: printingLayout.railWidth,
+                    height: routeProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, printingLayout.paperViewportHeight],
+                    }),
                   },
                 ]}
               >
@@ -699,14 +743,22 @@ export function DetourHomeView({
                   style={[
                     styles.v48PaperTrack,
                     {
-                      width: printingLayout.slotWidth,
+                      width: printingLayout.railWidth,
                       alignItems: 'center',
                       opacity: ticketDisplayReady ? 1 : 0,
+                      transformOrigin: '50% 0%',
                       transform: [
+                        { perspective: 900 },
+                        {
+                          rotateX: routeProgress.interpolate({
+                            inputRange: [0, 0.72, 1],
+                            outputRange: ['0deg', '0deg', '4deg'],
+                          }),
+                        },
                         {
                           translateY: routeProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-printingLayout.ticketHeight, 0],
+                            inputRange: [0, 0.72, 1],
+                            outputRange: [0, 0, 2],
                           }),
                         },
                       ],
@@ -724,8 +776,14 @@ export function DetourHomeView({
                     onVisualReady={handleTicketVisualReady}
                   />
                 </Animated.View>
-              </View>
-              <View pointerEvents="none" style={styles.v50PrinterFrontLip} />
+              </Animated.View>
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.v50PrinterSlotOnly,
+                  { width: printingLayout.railWidth },
+                ]}
+              />
             </View>
 
             {stage === 'ready' && ticketReadyUnlocked && (

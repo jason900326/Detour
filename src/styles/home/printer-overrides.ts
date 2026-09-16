@@ -1,74 +1,71 @@
 import { StyleSheet } from 'react-native';
 
-// The printer is intentionally split into depth planes instead of drawing a
-// single metal bar over the ticket. The slot/body sit furthest back, the
-// lower guide rail sits behind the paper, and the paper itself becomes the
-// front-most moving surface once it leaves the slot.
+// The feed mouth is a three-plane stack:
+//   front silver rail  -> always above the ticket
+//   ticket             -> feeds between the rails
+//   rear silver rail   -> always behind the ticket
+// Both rails receive the exact same responsive width from the printing layout.
 export const printerOverrides = StyleSheet.create({
-  v50PrinterBody: {
+  v50PrinterSlotOnly: {
     position: 'absolute',
     top: 0,
+    alignSelf: 'center',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#BBB8B1',
+    borderTopWidth: 1,
+    borderTopColor: '#F4F1EB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#68645D',
+    zIndex: 6,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
+  v50PrinterRearRail: {
+    position: 'absolute',
+    top: 7,
+    alignSelf: 'center',
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#8E8A83',
+    borderTopWidth: 1,
+    borderTopColor: '#C9C6BF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#5F5B55',
+    zIndex: 1,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
+  v48PaperTrack: {
+    position: 'absolute',
     left: 0,
     right: 0,
-    height: 82,
-    borderRadius: 18,
-    backgroundColor: '#AAA7A0',
-    borderWidth: 1,
-    borderColor: '#D5D2CB',
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 1,
-  },
-  v50PrinterSlotShell: {
-    position: 'absolute',
-    left: 3,
-    right: 3,
-    top: 31,
-    height: 29,
-    borderRadius: 10,
-    backgroundColor: '#5E5B55',
+    bottom: 0,
     alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 3,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOpacity: 0.34,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
   },
-  // Width and height are supplied by the responsive printer geometry so the
-  // clipping window always matches the native slot and the scaled full ticket.
+
   v48PaperViewport: {
     position: 'absolute',
-    top: 47,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 3,
     elevation: 3,
   },
-  v50PrinterFrontLip: {
-    position: 'absolute',
-    left: 4,
-    right: 4,
-    top: 51,
-    height: 9,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-    backgroundColor: '#77746E',
-    borderTopWidth: 1,
-    borderTopColor: '#96938C',
-    zIndex: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
-  },
-  // V45Ticket still owns the barcode view structurally, but the current ticket
-  // design intentionally omits it. Overriding the shared style keeps all
-  // existing layouts stable without adding another special-case render path.
+
   v46ArtBarcode: {
     display: 'none',
   },
