@@ -154,10 +154,11 @@ export const arrivalCompletionOverrides = StyleSheet.create({
 
   // "developing" remains only as an internal bridge stage. Visually it is now
   // a short route-like sweep, not a standalone page or a fake photo-processing
-  // wait state.
+  // wait state. The dark bridge also matches the light status-bar chrome already
+  // used by that internal stage.
   completionTransitionScreen: {
     flex: 1,
-    backgroundColor: BONE,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
@@ -171,7 +172,7 @@ export const arrivalCompletionOverrides = StyleSheet.create({
     width: '100%',
     height: 2,
     borderRadius: 1,
-    backgroundColor: '#D4CEC2',
+    backgroundColor: '#34322E',
   },
   completionTransitionSweep: {
     position: 'absolute',
@@ -190,6 +191,6 @@ export const arrivalCompletionOverrides = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 4,
     borderColor: SIGNAL,
-    backgroundColor: BONE,
+    backgroundColor: INK,
   },
 });
