@@ -135,16 +135,29 @@ export function V45Skyline() {
 }
 
 export function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
-  const commonProps = { width: size, height: size };
-  if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
-  if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
-  if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
-  if (moodId === 'weird') return <MoodWeirdIcon {...commonProps} />;
-  if (moodId === 'color') return <MoodColorIcon {...commonProps} />;
-  if (moodId === 'slow') {
-    const scale = size / 76;
-    return (
-      <View style={{ width: size, height: size }}>
+  // The ticket passes size=30. Treat that as the compact ticket placement:
+  // remove the icon from the mood copy's normal flow, enlarge it, and place it
+  // in the lower-right information cell. Mood cards keep their existing layout.
+  const ticketPlacement = size === 30;
+  const renderSize = ticketPlacement ? 46 : size;
+  const commonProps = { width: renderSize, height: renderSize };
+
+  let icon;
+
+  if (moodId === 'wander') {
+    icon = <MoodWanderIcon {...commonProps} />;
+  } else if (moodId === 'food') {
+    icon = <MoodFoodIcon {...commonProps} />;
+  } else if (moodId === 'quiet') {
+    icon = <MoodQuietIcon {...commonProps} />;
+  } else if (moodId === 'weird') {
+    icon = <MoodWeirdIcon {...commonProps} />;
+  } else if (moodId === 'color') {
+    icon = <MoodColorIcon {...commonProps} />;
+  } else if (moodId === 'slow') {
+    const scale = renderSize / 76;
+    icon = (
+      <View style={{ width: renderSize, height: renderSize }}>
         <View style={{ position: 'absolute', left: 5 * scale, top: 48 * scale, width: 28 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '-31deg' }] }} />
         <View style={{ position: 'absolute', left: 28 * scale, top: 31 * scale, width: 27 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '19deg' }] }} />
         <View style={{ position: 'absolute', left: 50 * scale, top: 35 * scale, width: 18 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '-22deg' }] }} />
@@ -152,6 +165,28 @@ export function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: numb
         <View style={{ position: 'absolute', right: 1 * scale, top: 26 * scale, width: 20 * scale, height: 20 * scale, borderRadius: 10 * scale, borderWidth: 5 * scale, borderColor: '#FF6A2A', backgroundColor: '#F5F1E8' }} />
       </View>
     );
+  } else {
+    icon = <MoodSurpriseIcon {...commonProps} />;
   }
-  return <MoodSurpriseIcon {...commonProps} />;
+
+  if (ticketPlacement) {
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          right: 4,
+          top: 52,
+          width: renderSize,
+          height: renderSize,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {icon}
+      </View>
+    );
+  }
+
+  return icon;
 }
