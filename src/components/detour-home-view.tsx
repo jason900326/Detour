@@ -1710,10 +1710,11 @@ export function DetourHomeView({
                   </Text>
                 </View>
               )}
-   <CollectionStages controller={controller} />          />
-            </View>
+            </ScrollView>
           </View>
         )}
+
+        <CollectionStages controller={controller} />
 
       </Animated.View>
 
