@@ -15,7 +15,6 @@ export type Stage =
   | 'preparing'
   | 'ready'
   | 'journey'
-  | 'mission'
   | 'arrival'
   | 'sceneIssue'
   | 'developing'
@@ -78,17 +77,6 @@ export type CameraRouteResult = {
   photo: SessionPhoto;
 };
 
-export type MissionResult = 'completed' | 'skipped';
-
-export type PassportMission = {
-  code: string;
-  title: string;
-  instruction: string;
-  completion: string;
-  result?: MissionResult;
-  photoRequired?: boolean;
-};
-
 export type PassportEntry = {
   id: string;
   completedAt: string;
@@ -106,7 +94,8 @@ export type PassportEntry = {
   photoCount?: number;
   rollCapacity?: number;
   photos?: SessionPhoto[];
-  missions?: PassportMission[];
+  sideEventsShown?: number;
+  sideEventReplacements?: number;
   sceneId?: string;
   sceneName?: string;
   sceneKind?: string;
@@ -125,7 +114,19 @@ export const CAMERA_RESULT_KEY = '@detour/camera/result/v1';
 export const PASSPORT_KEY = '@detour/passport/v1';
 export const PREFERENCES_KEY = '@detour/preferences/v1';
 
-export const TIME_STEPS = [15, 30, 45, 60, 90] as const;
+export const TIME_STEPS = [
+  10,
+  15,
+  20,
+  25,
+  30,
+  35,
+  40,
+  45,
+  50,
+  55,
+  60,
+] as const;
 export const TIME_MIN = TIME_STEPS[0];
 export const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
 
@@ -140,8 +141,8 @@ export const FREE_CAMERA_MISSION: Mission = {
   id: 'free-frame',
   code: 'FREE FRAME',
   title: '留下現在看到的東西。',
-  instruction: '這張照片不會完成任何任務，只是這趟 DETOUR 的自由紀錄。',
-  completion: '拍或不拍都不影響主線。',
+  instruction: '想拍就拍，這張只會留在這趟 DETOUR 的紀錄裡。',
+  completion: '',
   photo: false,
   portable: true,
 };
