@@ -2,12 +2,12 @@ import { StyleSheet } from 'react-native';
 
 import { INK } from '../../theme/detour-theme';
 
-// Ticket overlay refinements only. Keep the artwork, tear behavior, and printer
-// geometry independent from these information-layer adjustments.
+// Ticket overlay refinements only. V45Ticket now renders these native text
+// layers at the final ticket size, so they stay sharp even when the artwork is
+// scaled by Skia underneath.
 export const ticketInfoOverrides = StyleSheet.create({
-  // The ticket mood icon is taken out of normal flow by V45MoodIcon's compact
-  // ticket variant. That leaves the mood value flush with the left edge of the
-  // "此趟心情" label while preserving the stronger type size from the previous pass.
+  // Mood copy is text-only in the upper-right cell. The active Mood icon now
+  // lives in the lower-right cell and is rendered separately by V45Ticket.
   v46ArtTicketMoodRow: {
     marginTop: 7,
     position: 'relative',
@@ -24,8 +24,6 @@ export const ticketInfoOverrides = StyleSheet.create({
     color: INK,
   },
 
-  // Destination is intentionally unknown. The question marks are now the only
-  // content in the cell and carry enough scale to feel like primary information.
   v46ArtTicketUnknownRow: {
     marginTop: 5,
     flexDirection: 'row',
@@ -46,9 +44,8 @@ export const ticketInfoOverrides = StyleSheet.create({
     color: INK,
   },
 
-  // The lower-right cell now belongs to the active Mood icon. Hide every piece
-  // of the previous detour-route illustration; V45MoodIcon places the real mood
-  // mark into this area from the existing mood row without changing ticket data.
+  // Legacy mini-route pieces remain hidden; the lower-right cell is reserved
+  // for the current Mood icon.
   v46ArtMiniStart: {
     display: 'none',
   },
