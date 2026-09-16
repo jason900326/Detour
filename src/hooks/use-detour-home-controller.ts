@@ -3,23 +3,14 @@ import {
   Alert,
   Animated,
   Easing,
-  Image,
-  Modal,
   PanResponder,
-  Pressable,
-  ScrollView,
   Share,
-  StatusBar,
-  Text,
-  View,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Directory, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import MapView, { Circle, Polyline } from 'react-native-maps';
 import { captureRef } from 'react-native-view-shot';
 
 import {
@@ -27,12 +18,16 @@ import {
   COLORS,
   getJourneyProfile,
   getLightContext,
+  pickSideEvent,
   type ColorChoice,
   type GeoPoint,
   type JourneyPlan,
   type LightContext,
   type Mission,
   type MoodId,
+  type SideEvent,
+  type SideEventContext,
+  type SideEventGaze,
 } from '../lib/journey-engine';
 
 import {
@@ -52,7 +47,6 @@ import {
 } from '../lib/scene-engine';
 
 import {
-  isAIEngineConfigured,
   testAIEngineConnection,
 } from '../lib/ai-engine';
 
@@ -72,17 +66,11 @@ import {
 } from '../lib/scene-feedback';
 
 import {
-  buildPlaytestReport,
-  clearPlaytestSessions,
   createPlaytestSession,
-  DETOUR_PLAYTEST_VERSION,
   getPlaytestTesterId,
   loadPlaytestSessions,
   syncAllPlaytestSessions,
   updatePlaytestSession,
-  type PlaytestFeedbackReason,
-  type PlaytestRating,
-  type PlaytestSession,
 } from '../lib/playtest-analytics';
 
 import {
@@ -90,20 +78,16 @@ import {
   DEFAULT_PREFERENCES,
   FREE_CAMERA_MISSION,
   MOODS,
-  PASSPORT_KEY,
   PREFERENCES_KEY,
   TIME_MAX,
   TIME_MIN,
   TIME_STEPS,
   getPaceDistanceScale,
-  walkingPaceLabel,
   type CameraRouteResult,
   type CameraSource,
   type DetourPreferences,
   type DetourPrewarm,
   type PassportEntry,
-  type PassportMission,
-  type MissionResult,
   type SceneIssueReason,
   type SessionPhoto,
   type SessionSceneFailure,
@@ -111,35 +95,21 @@ import {
   type WalkingPace,
 } from '../lib/app-model';
 
-
-import { styles } from '../styles/home-styles';
-import { BONE, INK, LINE, MUTED, SIGNAL, SOFT } from '../theme/detour-theme';
-import { MoodGlyph, V45MoodIcon, V45Skyline } from '../components/mood-visuals';
-import { DetourAccentStroke, DetourTicket, V45Ticket } from '../components/ticket-visuals';
-import {
-  V45SharePoster,
-  V46CompleteArtwork,
-  V46ReviewArtwork,
-} from '../components/journey-recap-visuals';
 import {
   applyFoodDestinationWeight,
   getFilmRollCapacity,
-  moodHint,
 } from '../lib/journey-selection';
-import { getDistanceInMeters, getRouteDistance, offsetPoint } from '../lib/geo-utils';
+import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
 import { ABANDONABLE_STAGES, canTransition } from '../lib/stage-flow';
 import { usePassportStore } from './use-passport-store';
 import { usePlaytestStore } from './use-playtest-store';
 import {
   contextCode,
-  formatClockTime,
   formatPassportDate,
   parseMinutes,
-  ticketSerial,
 } from '../lib/detour-formatters';
 
 export function useDetourHomeController() {
-
   const router = useRouter();
   const activeCameraRequestRef = useRef<string | null>(null);
   const [stage, setStage] = useState<Stage>('boot');
@@ -177,31 +147,23 @@ export function useDetourHomeController() {
   const [beatRemainingMeters, setBeatRemainingMeters] = useState(0);
   const [deviceHeading, setDeviceHeading] = useState(0);
   const [showNextBeatMap, setShowNextBeatMap] = useState(false);
-  const [questPulse, setQuestPulse] = useState<
-    'side' | 'final' | null
-  >(null);
+  const [questPulse, setQuestPulse] = useState<'side' | 'final' | null>(null);
   const [isRerouting, setIsRerouting] = useState(false);
   const [rerouteFailed, setRerouteFailed] = useState(false);
   const [rerouteCount, setRerouteCount] = useState(0);
-  const [detourStartedAt, setDetourStartedAt] =
-    useState<string | null>(null);
-  const [sceneFailures, setSceneFailures] =
-    useState<SessionSceneFailure[]>([]);
-  const [replacementLoading, setReplacementLoading] =
-    useState(false);
+  const [detourStartedAt, setDetourStartedAt] = useState<string | null>(null);
+  const [sceneFailures, setSceneFailures] = useState<SessionSceneFailure[]>([]);
+  const [replacementLoading, setReplacementLoading] = useState(false);
 
-  const [sideMissionIndex, setSideMissionIndex] = useState(0);
-  const [missionRevealedIndex, setMissionRevealedIndex] =
-    useState<number | null>(null);
+  const [activeSideEvent, setActiveSideEvent] = useState<SideEvent | null>(null);
+  const [sideEventSlot, setSideEventSlot] = useState(0);
+  const [sideEventsShown, setSideEventsShown] = useState(0);
+  const [sideEventReplacements, setSideEventReplacements] = useState(0);
   const [traveledMeters, setTraveledMeters] = useState(0);
   const [devMode, setDevMode] = useState(false);
   const [developerToolsUnlocked, setDeveloperToolsUnlocked] = useState(false);
-  const [lightContext, setLightContext] =
-    useState<LightContext | null>(null);
-
+  const [lightContext, setLightContext] = useState<LightContext | null>(null);
   const [photos, setPhotos] = useState<SessionPhoto[]>([]);
-  const [missionResults, setMissionResults] =
-    useState<Record<string, MissionResult>>({});
 
   const {
     passport,
@@ -219,9 +181,7 @@ export function useDetourHomeController() {
     clearPassport,
   } = usePassportStore();
 
-
-  const playtestSessionIdRef =
-    useRef<string | null>(null);
+  const playtestSessionIdRef = useRef<string | null>(null);
 
   const {
     playtestSessions,
@@ -242,25 +202,17 @@ export function useDetourHomeController() {
     togglePlaytestFeedbackReason,
     sharePlaytestData,
     clearPlaytestData,
-  } = usePlaytestStore(
-    playtestSessionIdRef
-  );
+  } = usePlaytestStore(playtestSessionIdRef);
 
   const [lastAIResult, setLastAIResult] =
-    useState<
-      'not-run' | 'ai' | 'fallback'
-    >('not-run');
-  const [
-    aiConnectionTesting,
-    setAIConnectionTesting,
-  ] = useState(false);
+    useState<'not-run' | 'ai' | 'fallback'>('not-run');
+  const [aiConnectionTesting, setAIConnectionTesting] = useState(false);
 
-  const locationWatcher =
-    useRef<Location.LocationSubscription | null>(null);
-  const headingWatcher =
-    useRef<Location.LocationSubscription | null>(null);
-  const missionResultsRef = useRef<Record<string, MissionResult>>({});
+  const locationWatcher = useRef<Location.LocationSubscription | null>(null);
+  const headingWatcher = useRef<Location.LocationSubscription | null>(null);
   const lastTracePointRef = useRef<GeoPoint | null>(null);
+  const lastMovementSampleAtRef = useRef<number | null>(null);
+  const effectiveMovingSecondsRef = useRef(0);
   const planRef = useRef<JourneyPlan | null>(null);
   const navigationRouteRef = useRef<NavigationRoute | null>(null);
   const navigationBeatIndexRef = useRef(0);
@@ -271,9 +223,13 @@ export function useDetourHomeController() {
   const checkpointLockedRef = useRef(false);
   const rerouteCountRef = useRef(0);
   const detourStartedAtRef = useRef<string | null>(null);
-  const sceneFailuresRef =
-    useRef<SessionSceneFailure[]>([]);
-  const sideMissionIndexRef = useRef(0);
+  const sceneFailuresRef = useRef<SessionSceneFailure[]>([]);
+  const activeSideEventRef = useRef<SideEvent | null>(null);
+  const sideEventSlotRef = useRef(0);
+  const sideEventsShownRef = useRef(0);
+  const sideEventReplacementsRef = useRef(0);
+  const sideEventSeenIdsRef = useRef<Set<string>>(new Set());
+  const previousSideEventGazeRef = useRef<SideEventGaze | null>(null);
   const traveledMetersRef = useRef(0);
   const stageRef = useRef<Stage>('boot');
   const prewarmRef = useRef<DetourPrewarm | null>(null);
@@ -288,9 +244,7 @@ export function useDetourHomeController() {
   const printerPulse = useRef(new Animated.Value(0)).current;
   const ticketStamp = useRef(new Animated.Value(0)).current;
   const [ticketReadyUnlocked, setTicketReadyUnlocked] = useState(false);
-  const timeSliderProgress = useRef(
-    new Animated.Value(0)
-  ).current;
+  const timeSliderProgress = useRef(new Animated.Value(0)).current;
   const timeSliderWidthRef = useRef(1);
   const timeSliderStartProgressRef = useRef(0);
   const timeSliderDisplayRef = useRef(15);
@@ -305,7 +259,6 @@ export function useDetourHomeController() {
 
   const markTicketVisualReady = useCallback(() => {
     if (ticketVisualReadyRef.current) return;
-
     ticketVisualReadyRef.current = true;
     const resolve = ticketVisualReadyResolverRef.current;
     ticketVisualReadyResolverRef.current = null;
@@ -314,7 +267,6 @@ export function useDetourHomeController() {
 
   const waitForTicketVisualReady = useCallback(() => {
     if (ticketVisualReadyRef.current) return Promise.resolve();
-
     return new Promise<void>((resolve) => {
       ticketVisualReadyResolverRef.current = resolve;
     });
@@ -436,26 +388,19 @@ export function useDetourHomeController() {
     [timeSliderProgress]
   );
 
-  const currentMission: Mission | null =
-    plan?.sideMissions[sideMissionIndex] ?? null;
-
   const currentNavigationBeat =
     navigationRoute?.beats[navigationBeatIndex] ?? null;
 
   const navigationProgressRatio = navigationRoute
     ? Math.min(
         1,
-        navigationBeatIndex /
-          Math.max(1, navigationRoute.beats.length)
+        navigationBeatIndex / Math.max(1, navigationRoute.beats.length)
       )
     : 0;
 
   const nextBeatMeters = Math.max(0, beatRemainingMeters);
-
   const nextBeatLabel =
-    currentNavigationBeat?.turn === 'arrive'
-      ? 'FINAL BEAT'
-      : 'NEXT BEAT';
+    currentNavigationBeat?.turn === 'arrive' ? 'FINAL BEAT' : 'NEXT BEAT';
 
   const guidanceBearing =
     currentNavigationBeat
@@ -470,33 +415,18 @@ export function useDetourHomeController() {
       : 0;
 
   const arrowRotation = currentNavigationBeat
-    ? relativeArrowDegrees(
-        guidanceBearing,
-        deviceHeading
-      )
+    ? relativeArrowDegrees(guidanceBearing, deviceHeading)
     : 0;
 
   const nextBeatSegment =
     currentNavigationBeat?.segmentCoordinates?.length
       ? currentNavigationBeat.segmentCoordinates
-      : latitude !== null &&
-          longitude !== null &&
-          currentNavigationBeat
-        ? [
-            { latitude, longitude },
-            currentNavigationBeat.point,
-          ]
+      : latitude !== null && longitude !== null && currentNavigationBeat
+        ? [{ latitude, longitude }, currentNavigationBeat.point]
         : [];
 
-  const paceDistanceScale =
-    getPaceDistanceScale(
-      preferences.walkingPace
-    );
-
-  const darkStage =
-    stage === 'developing' ||
-    stage === 'journey';
-
+  const paceDistanceScale = getPaceDistanceScale(preferences.walkingPace);
+  const darkStage = stage === 'developing' || stage === 'journey';
   const chromeDark = darkStage;
 
   const tracedPassport = useMemo(
@@ -549,7 +479,6 @@ export function useDetourHomeController() {
 
     const latitudes = points.map((point) => point.latitude);
     const longitudes = points.map((point) => point.longitude);
-
     const minLat = Math.min(...latitudes);
     const maxLat = Math.max(...latitudes);
     const minLon = Math.min(...longitudes);
@@ -586,10 +515,6 @@ export function useDetourHomeController() {
   useEffect(() => {
     beatRemainingMetersRef.current = beatRemainingMeters;
   }, [beatRemainingMeters]);
-
-  useEffect(() => {
-    sideMissionIndexRef.current = sideMissionIndex;
-  }, [sideMissionIndex]);
 
   useEffect(() => {
     traveledMetersRef.current = traveledMeters;
@@ -641,10 +566,6 @@ export function useDetourHomeController() {
 
   useEffect(() => {
     if (stage !== 'mood') return;
-
-    // Warm the generic nearby OSM query as soon as the mood screen appears.
-    // All non-food moods share this discovery query, so the user's decision
-    // time becomes useful network time instead of dead time after tapping go.
     const warmMood = selectedMood ?? 'wander';
     const timer = setTimeout(() => {
       void prewarmDetour(warmMood);
@@ -660,13 +581,10 @@ export function useDetourHomeController() {
       const consumeCameraResult = async () => {
         try {
           const raw = await AsyncStorage.getItem(CAMERA_RESULT_KEY);
-
           if (!raw || cancelled) return;
 
           await AsyncStorage.removeItem(CAMERA_RESULT_KEY);
-
           const result = JSON.parse(raw) as CameraRouteResult;
-
           if (cancelled) return;
 
           await handleCameraRouteResult(result);
@@ -675,29 +593,16 @@ export function useDetourHomeController() {
         }
       };
 
-      consumeCameraResult();
-
+      void consumeCameraResult();
       return () => {
         cancelled = true;
       };
-    }, [
-      photos,
-      plan,
-      sideMissionIndex,
-      passport,
-      activeTrace,
-      selectedMinutes,
-      mood,
-      lightContext,
-    ])
+    }, [photos, plan, passport, activeTrace, selectedMinutes, mood, lightContext])
   );
 
   useEffect(() => {
-    initializeApp();
-
-    return () => {
-      stopLocationWatcher();
-    };
+    void initializeApp();
+    return () => stopLocationWatcher();
   }, []);
 
   useEffect(() => {
@@ -710,8 +615,18 @@ export function useDetourHomeController() {
     printerPulse.setValue(0);
     const printerLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(printerPulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(printerPulse, { toValue: 0, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(printerPulse, {
+          toValue: 1,
+          duration: 520,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(printerPulse, {
+          toValue: 0,
+          duration: 520,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
       ])
     );
     printerLoop.start();
@@ -747,79 +662,50 @@ export function useDetourHomeController() {
     };
   }, [stage]);
 
-
   useEffect(() => {
     if (stage !== 'developing') return;
-
-    const timer = setTimeout(() => {
-      transitionTo('finish');
-    }, 1450);
-
+    const timer = setTimeout(() => transitionTo('finish'), 1450);
     return () => clearTimeout(timer);
   }, [stage]);
-
 
   async function initializeApp() {
     await loadPassport();
 
-    const [
-      storedPlaytestSessions,
-      testerId,
-    ] = await Promise.all([
+    const [storedPlaytestSessions, testerId] = await Promise.all([
       loadPlaytestSessions(),
       getPlaytestTesterId(),
     ]);
 
-    setPlaytestSessions(
-      storedPlaytestSessions
-    );
+    setPlaytestSessions(storedPlaytestSessions);
     setPlaytestTesterId(testerId);
-
-    void syncAllPlaytestSessions(
-      storedPlaytestSessions
-    );
+    void syncAllPlaytestSessions(storedPlaytestSessions);
 
     try {
-      const raw =
-        await AsyncStorage.getItem(
-          PREFERENCES_KEY
-        );
-
+      const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
       const parsed = raw
         ? (JSON.parse(raw) as Partial<DetourPreferences>)
         : null;
-
       const nextPreferences: DetourPreferences = {
         ...DEFAULT_PREFERENCES,
         ...(parsed ?? {}),
       };
 
       setPreferences(nextPreferences);
-      setDevMode(
-        nextPreferences.indoorTest
-      );
+      setDevMode(nextPreferences.indoorTest);
 
       const nextStage: Stage =
-        nextPreferences.onboardingComplete
-          ? 'time'
-          : 'onboarding';
-
+        nextPreferences.onboardingComplete ? 'time' : 'onboarding';
       setStage(nextStage);
       stageRef.current = nextStage;
     } catch {
-      setPreferences(
-        DEFAULT_PREFERENCES
-      );
+      setPreferences(DEFAULT_PREFERENCES);
       setDevMode(false);
       setStage('onboarding');
-      stageRef.current =
-        'onboarding';
+      stageRef.current = 'onboarding';
     }
   }
 
-  async function savePreferences(
-    nextPreferences: DetourPreferences
-  ) {
+  async function savePreferences(nextPreferences: DetourPreferences) {
     setPreferences(nextPreferences);
 
     try {
@@ -835,56 +721,33 @@ export function useDetourHomeController() {
     }
   }
 
-  async function setWalkingPace(
-    pace: WalkingPace
-  ) {
+  async function setWalkingPace(pace: WalkingPace) {
     await Haptics.selectionAsync();
-
-    await savePreferences({
-      ...preferences,
-      walkingPace: pace,
-    });
+    await savePreferences({ ...preferences, walkingPace: pace });
   }
 
   async function toggleNightRoutePreference() {
     await Haptics.selectionAsync();
-
     await savePreferences({
       ...preferences,
-      preferLegibleRoutesAtNight:
-        !preferences.preferLegibleRoutesAtNight,
+      preferLegibleRoutesAtNight: !preferences.preferLegibleRoutesAtNight,
     });
   }
 
   function routingContext(context: LightContext): LightContext {
-    if (
-      context === 'night' &&
-      !preferences.preferLegibleRoutesAtNight
-    ) {
+    if (context === 'night' && !preferences.preferLegibleRoutesAtNight) {
       return 'day';
     }
-
     return context;
   }
 
   async function completeOnboarding() {
-    const nextPreferences = {
-      ...preferences,
-      onboardingComplete: true,
-    };
-
-    await savePreferences(
-      nextPreferences
-    );
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    );
+    const nextPreferences = { ...preferences, onboardingComplete: true };
+    await savePreferences(nextPreferences);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     transitionTo(
-      onboardingFromSettings
-        ? 'settings'
-        : 'time',
+      onboardingFromSettings ? 'settings' : 'time',
       () => {
         setOnboardingStep(0);
         setOnboardingFromSettings(false);
@@ -894,18 +757,14 @@ export function useDetourHomeController() {
 
   async function runAIConnectionTest() {
     if (aiConnectionTesting) return;
-
     setAIConnectionTesting(true);
 
     try {
-      const result =
-        await testAIEngineConnection();
-
+      const result = await testAIEngineConnection();
       if (result.ok) {
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
-
         Alert.alert(
           'AI 已連線',
           `App → Supabase → OpenAI → Structured Output 全部正常。\n\nAI ranking note:\n${result.message}`
@@ -914,11 +773,7 @@ export function useDetourHomeController() {
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Error
         );
-
-        Alert.alert(
-          'AI 還沒接通',
-          result.message
-        );
+        Alert.alert('AI 還沒接通', result.message);
       }
     } finally {
       setAIConnectionTesting(false);
@@ -933,15 +788,11 @@ export function useDetourHomeController() {
 
   async function nextOnboardingStep() {
     await Haptics.selectionAsync();
-
     if (onboardingStep >= 2) {
       await completeOnboarding();
       return;
     }
-
-    setOnboardingStep(
-      (value) => value + 1
-    );
+    setOnboardingStep((value) => value + 1);
   }
 
   function stopLocationWatcher() {
@@ -949,7 +800,6 @@ export function useDetourHomeController() {
       locationWatcher.current.remove();
       locationWatcher.current = null;
     }
-
     if (headingWatcher.current) {
       headingWatcher.current.remove();
       headingWatcher.current = null;
@@ -963,29 +813,17 @@ export function useDetourHomeController() {
     }
 
     try {
-      headingWatcher.current = await Location.watchHeadingAsync(
-        (heading) => {
-          const value =
-            heading.trueHeading >= 0
-              ? heading.trueHeading
-              : heading.magHeading;
-
-          if (Number.isFinite(value)) {
-            setDeviceHeading(value);
-          }
-        }
-      );
+      headingWatcher.current = await Location.watchHeadingAsync((heading) => {
+        const value =
+          heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+        if (Number.isFinite(value)) setDeviceHeading(value);
+      });
     } catch {
       // Heading is useful, but the route can still render without it.
     }
   }
 
-  function advanceTicketProgress(
-    _toValue: number,
-    status: string
-  ) {
-    // Route/data preparation and physical paper movement are separate.
-    // The ticket must stay fully inside the printer until the route is ready.
+  function advanceTicketProgress(_toValue: number, status: string) {
     setTicketBuildStatus(status);
   }
 
@@ -1011,11 +849,8 @@ export function useDetourHomeController() {
 
   function transitionTo(next: Stage, beforeEnter?: () => void) {
     const current = stageRef.current;
-
     if (!canTransition(current, next)) {
-      console.warn(
-        `[DETOUR FLOW] blocked invalid transition ${current} -> ${next}`
-      );
+      console.warn(`[DETOUR FLOW] blocked invalid transition ${current} -> ${next}`);
       return;
     }
 
@@ -1048,18 +883,12 @@ export function useDetourHomeController() {
   async function toggleDevMode() {
     const next = !devMode;
     setDevMode(next);
-
-    await savePreferences({
-      ...preferences,
-      indoorTest: next,
-    });
-
+    await savePreferences({ ...preferences, indoorTest: next });
     await Haptics.notificationAsync(
       next
         ? Haptics.NotificationFeedbackType.Success
         : Haptics.NotificationFeedbackType.Warning
     );
-
     Alert.alert(
       next ? '室內測試模式已開啟' : '室內測試模式已關閉',
       next
@@ -1075,11 +904,7 @@ export function useDetourHomeController() {
 
   async function continueFromTime() {
     if (!selectedTime) return;
-
-    await Haptics.impactAsync(
-      Haptics.ImpactFeedbackStyle.Medium
-    );
-
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     transitionTo('mood');
   }
 
@@ -1089,8 +914,6 @@ export function useDetourHomeController() {
     setSlowDestinationError(null);
     if (moodId !== 'slow') void prewarmDetour(moodId);
 
-    // Color Walk draws once per Detour session. Switching away and back keeps
-    // the same draw, so there is no hidden reroll interaction.
     if (moodId === 'color' && !selectedColor) {
       const color = COLORS[Math.floor(Math.random() * COLORS.length)];
       setSelectedColor(color);
@@ -1106,63 +929,55 @@ export function useDetourHomeController() {
       return;
     }
 
-    // Reset the visual gate before the printing screen mounts. The ticket
-    // component will reopen it only after ticket-base is decoded by Skia.
     resetTicketVisualReady();
     routeProgress.stopAnimation();
     routeProgress.setValue(0);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    await Haptics.impactAsync(
-      Haptics.ImpactFeedbackStyle.Medium
-    );
+    const session = await createPlaytestSession({
+      devMode,
+      minutes: selectedMinutes || 15,
+      moodId: selectedMood,
+    });
 
-    const session =
-      await createPlaytestSession({
-        devMode,
-        minutes:
-          selectedMinutes || 15,
-        moodId: selectedMood,
-      });
-
-    playtestSessionIdRef.current =
-      session.id;
-
+    playtestSessionIdRef.current = session.id;
     void refreshPlaytestSessions();
-
     transitionTo('preparing');
   }
 
+  function resetSideEventRuntime() {
+    setActiveSideEvent(null);
+    activeSideEventRef.current = null;
+    setSideEventSlot(0);
+    sideEventSlotRef.current = 0;
+    setSideEventsShown(0);
+    sideEventsShownRef.current = 0;
+    setSideEventReplacements(0);
+    sideEventReplacementsRef.current = 0;
+    sideEventSeenIdsRef.current = new Set();
+    previousSideEventGazeRef.current = null;
+    effectiveMovingSecondsRef.current = 0;
+    lastMovementSampleAtRef.current = null;
+  }
 
   function resetDetour() {
-    const testSessionId =
-      playtestSessionIdRef.current;
+    const testSessionId = playtestSessionIdRef.current;
 
-    if (
-      testSessionId &&
-      ABANDONABLE_STAGES.has(stageRef.current)
-    ) {
-      void updatePlaytestSession(
-        testSessionId,
-        {
-          status: 'abandoned',
-          completedAt:
-            new Date().toISOString(),
-          rerouteCount:
-            rerouteCountRef.current,
-          sceneFailureReasons:
-            sceneFailuresRef.current.map(
-              (failure) =>
-                failure.reason
-            ),
-        }
-      ).then(setPlaytestSessions);
+    if (testSessionId && ABANDONABLE_STAGES.has(stageRef.current)) {
+      void updatePlaytestSession(testSessionId, {
+        status: 'abandoned',
+        completedAt: new Date().toISOString(),
+        sideEventsShown: sideEventsShownRef.current,
+        sideEventReplacements: sideEventReplacementsRef.current,
+        rerouteCount: rerouteCountRef.current,
+        sceneFailureReasons: sceneFailuresRef.current.map(
+          (failure) => failure.reason
+        ),
+      }).then(setPlaytestSessions);
     }
 
-    playtestSessionIdRef.current =
-      null;
-    setLastCompletedPlaytestSessionId(
-      null
-    );
+    playtestSessionIdRef.current = null;
+    setLastCompletedPlaytestSessionId(null);
     setPlaytestRating(null);
     setPlaytestFeedbackReasons([]);
 
@@ -1201,23 +1016,18 @@ export function useDetourHomeController() {
     sceneFailuresRef.current = [];
     setReplacementLoading(false);
     selectedSceneRef.current = null;
-    setSideMissionIndex(0);
+    resetSideEventRuntime();
     setTraveledMeters(0);
+    traveledMetersRef.current = 0;
     setLightContext(null);
     setPhotos([]);
     setLastCompletedEntry(null);
     setSelectedPassportId(null);
     activeCameraRequestRef.current = null;
-    setMissionResults({});
-    missionResultsRef.current = {};
     lastTracePointRef.current = null;
     planRef.current = null;
-    navigationRouteRef.current = null;
-    navigationBeatIndexRef.current = 0;
-    beatRemainingMetersRef.current = 0;
-    sideMissionIndexRef.current = 0;
-    traveledMetersRef.current = 0;
     setStage('time');
+    stageRef.current = 'time';
     screenOpacity.setValue(1);
     screenY.setValue(0);
   }
@@ -1227,56 +1037,38 @@ export function useDetourHomeController() {
       transitionTo('time');
       return;
     }
-
     if (stage === 'onboarding') {
       if (onboardingStep > 0) {
-        setOnboardingStep(
-          (value) =>
-            Math.max(0, value - 1)
-        );
+        setOnboardingStep((value) => Math.max(0, value - 1));
         return;
       }
-
       if (onboardingFromSettings) {
-        transitionTo('settings', () => {
-          setOnboardingFromSettings(false);
-        });
+        transitionTo('settings', () => setOnboardingFromSettings(false));
       }
-
       return;
     }
-
     if (stage === 'mood') {
       transitionTo('time');
       return;
     }
-
     if (stage === 'preparing' || stage === 'ready') {
       transitionTo('mood');
       return;
     }
-
     if (stage === 'passport') {
       transitionTo('time');
       return;
     }
-
     if (stage === 'passportDetail') {
       transitionTo('passport');
       return;
     }
-
-
     if (stage === 'sceneIssue') {
       transitionTo('arrival');
       return;
     }
 
-    if (
-      stage === 'journey' ||
-      stage === 'mission' ||
-      stage === 'arrival'
-    ) {
+    if (stage === 'journey' || stage === 'arrival') {
       Alert.alert(
         '結束這次 DETOUR？',
         '目前進度和這次尚未存進 Passport 的照片會消失。',
@@ -1288,9 +1080,7 @@ export function useDetourHomeController() {
       return;
     }
 
-    if (stage === 'finish') {
-      resetDetour();
-    }
+    if (stage === 'finish') resetDetour();
   }
 
   const edgeBackResponder = useMemo(
@@ -1334,74 +1124,148 @@ export function useDetourHomeController() {
   );
 
   function remainingDetourMinutes() {
-    const startedAt =
-      detourStartedAtRef.current;
-
-    if (!startedAt) {
-      return selectedMinutes || 15;
-    }
+    const startedAt = detourStartedAtRef.current;
+    if (!startedAt) return selectedMinutes || 15;
 
     const elapsedMinutes =
-      (Date.now() -
-        new Date(startedAt).getTime()) /
-      60000;
-
-    return Math.max(
-      1,
-      (selectedMinutes || 15) -
-        elapsedMinutes
-    );
+      (Date.now() - new Date(startedAt).getTime()) / 60000;
+    return Math.max(1, (selectedMinutes || 15) - elapsedMinutes);
   }
 
-  function replacementDistanceBudget(
-    minutesLeft: number
-  ) {
-    // Replacement should feel like recovery, not "start another Detour".
-    // Reserve time for arrival and the final task.
+  function replacementDistanceBudget(minutesLeft: number) {
     return Math.max(
       70,
-      Math.min(
-        320,
-        Math.round(
-          minutesLeft * 52
-        )
-      )
+      Math.min(320, Math.round(minutesLeft * 52))
     );
   }
 
   function feedbackKindForIssue(
     reason: SceneIssueReason
   ): SceneFeedbackKind {
-    if (reason === 'closed') {
-      return 'closed';
-    }
-
-    if (reason === 'inaccessible') {
-      return 'inaccessible';
-    }
-
-    if (reason === 'not-worth-it') {
-      return 'not-worth-it';
-    }
-
+    if (reason === 'closed') return 'closed';
+    if (reason === 'inaccessible') return 'inaccessible';
+    if (reason === 'not-worth-it') return 'not-worth-it';
     return 'wrong-now';
   }
 
-  async function replaceFailedDestination(
-    reason: SceneIssueReason
-  ) {
-    const failedScene =
-      selectedSceneRef.current;
-
-    const currentPlan =
-      planRef.current;
+  function currentAllowedSideEventContexts(): SideEventContext[] {
+    const allowed: SideEventContext[] = ['safe-stop'];
+    const beat =
+      navigationRouteRef.current?.beats[navigationBeatIndexRef.current] ?? null;
+    const remaining = beatRemainingMetersRef.current;
 
     if (
-      !failedScene ||
-      !currentPlan
+      beat &&
+      ['left', 'right', 'slight-left', 'slight-right'].includes(beat.turn) &&
+      remaining >= 45 &&
+      remaining <= 140
+    ) {
+      allowed.push('corner');
+    }
+
+    return allowed;
+  }
+
+  function presentSideEvent(options?: {
+    advanceSlot?: boolean;
+    countAsReplacement?: boolean;
+  }) {
+    const currentPlan = planRef.current;
+    if (!currentPlan || selectedMood === 'color') return null;
+
+    const next = pickSideEvent({
+      seenIds: sideEventSeenIdsRef.current,
+      previousGaze: previousSideEventGazeRef.current,
+      allowedContexts: currentAllowedSideEventContexts(),
+    });
+
+    if (!next) return null;
+
+    sideEventSeenIdsRef.current.add(next.id);
+    previousSideEventGazeRef.current = next.gaze;
+    activeSideEventRef.current = next;
+    setActiveSideEvent(next);
+
+    const nextShown = sideEventsShownRef.current + 1;
+    sideEventsShownRef.current = nextShown;
+    setSideEventsShown(nextShown);
+
+    if (options?.advanceSlot) {
+      const nextSlot = sideEventSlotRef.current + 1;
+      sideEventSlotRef.current = nextSlot;
+      setSideEventSlot(nextSlot);
+    }
+
+    if (options?.countAsReplacement) {
+      const nextCount = sideEventReplacementsRef.current + 1;
+      sideEventReplacementsRef.current = nextCount;
+      setSideEventReplacements(nextCount);
+    }
+
+    setQuestPulse('side');
+    setTimeout(() => setQuestPulse((pulse) => (pulse === 'side' ? null : pulse)), 700);
+    return next;
+  }
+
+  async function replaceActiveSideEvent() {
+    const next = presentSideEvent({ countAsReplacement: true });
+    if (next) await Haptics.selectionAsync();
+  }
+
+  function refreshSideEventAfterPhoto() {
+    presentSideEvent();
+  }
+
+  function maybeTriggerSideEvent(currentPoint: GeoPoint) {
+    const currentPlan = planRef.current;
+    const route = navigationRouteRef.current;
+
+    if (
+      !currentPlan ||
+      !route ||
+      stageRef.current !== 'journey' ||
+      selectedMood === 'color'
     ) {
       return;
     }
+
+    const slot = sideEventSlotRef.current;
+    const window = currentPlan.profile.triggerWindows[slot];
+    if (!window) return;
+
+    const remainingRoute = remainingDistanceOnPolyline(
+      currentPoint,
+      route.coordinates
+    );
+    const progress = Math.max(
+      0,
+      Math.min(1, 1 - remainingRoute / Math.max(1, route.totalDistanceMeters))
+    );
+    const movingSeconds = effectiveMovingSecondsRef.current;
+    const due =
+      progress >= window.targetProgress ||
+      movingSeconds >= window.targetMovingSeconds;
+
+    if (!due || remainingRoute < 55) return;
+
+    const beat = route.beats[navigationBeatIndexRef.current];
+    const remainingBeat = beatRemainingMetersRef.current;
+    const nearNavigationDecision =
+      beat &&
+      beat.turn !== 'continue' &&
+      beat.turn !== 'start' &&
+      remainingBeat > 0 &&
+      remainingBeat < 32;
+
+    if (nearNavigationDecision) return;
+
+    presentSideEvent({ advanceSlot: true });
+  }
+
+  async function replaceFailedDestination(reason: SceneIssueReason) {
+    const failedScene = selectedSceneRef.current;
+    const currentPlan = planRef.current;
+    if (!failedScene || !currentPlan) return;
 
     setReplacementLoading(true);
 
@@ -1409,18 +1273,11 @@ export function useDetourHomeController() {
       sceneId: failedScene.id,
       sceneName: failedScene.name,
       reason,
-      createdAt:
-        new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     };
-
-    const nextFailures = [
-      ...sceneFailuresRef.current,
-      failure,
-    ];
-
+    const nextFailures = [...sceneFailuresRef.current, failure];
     setSceneFailures(nextFailures);
-    sceneFailuresRef.current =
-      nextFailures;
+    sceneFailuresRef.current = nextFailures;
 
     await saveSceneFeedback({
       sceneId: failedScene.id,
@@ -1430,218 +1287,120 @@ export function useDetourHomeController() {
 
     try {
       let currentPoint: GeoPoint | null =
-        latitude !== null &&
-        longitude !== null
-          ? {
-              latitude,
-              longitude,
-            }
+        latitude !== null && longitude !== null
+          ? { latitude, longitude }
           : null;
 
       if (!currentPoint) {
-        const position =
-          await Location.getCurrentPositionAsync({
-            accuracy:
-              Location.Accuracy.Balanced,
-          });
-
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
         currentPoint = {
-          latitude:
-            position.coords.latitude,
-          longitude:
-            position.coords.longitude,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
         };
       }
 
-      const minutesLeft =
-        remainingDetourMinutes();
-
-      const distanceBudget =
-        Math.round(
-          replacementDistanceBudget(
-            minutesLeft
-          ) * paceDistanceScale
-        );
-
+      const minutesLeft = remainingDetourMinutes();
+      const distanceBudget = Math.round(
+        replacementDistanceBudget(minutesLeft) * paceDistanceScale
+      );
       const visitedSceneIds = passport
         .map((entry) => entry.sceneId)
-        .filter(
-          (value): value is string =>
-            typeof value === 'string'
-        );
-
-      const feedback =
-        await loadSceneFeedback();
-
+        .filter((value): value is string => typeof value === 'string');
+      const feedback = await loadSceneFeedback();
       const hardExcluded = [
         failedScene.id,
-        ...nextFailures.map(
-          (item) => item.sceneId
-        ),
+        ...nextFailures.map((item) => item.sceneId),
       ];
 
-      const candidates =
-        await findSceneCandidates({
-          start: currentPoint,
-          moodId:
-            selectedMood ?? 'wander',
-          context:
-            lightContext ?? 'day',
-          minutes: Math.max(
-            5,
-            Math.round(minutesLeft)
-          ),
-          excludeSceneIds:
-            visitedSceneIds,
-          hardExcludeSceneIds:
-            hardExcluded,
-          feedback,
-          distanceScale:
-            paceDistanceScale,
-        });
+      const candidates = await findSceneCandidates({
+        start: currentPoint,
+        moodId: selectedMood ?? 'wander',
+        context: lightContext ?? 'day',
+        minutes: Math.max(5, Math.round(minutesLeft)),
+        excludeSceneIds: visitedSceneIds,
+        hardExcludeSceneIds: hardExcluded,
+        feedback,
+        distanceScale: paceDistanceScale,
+      });
 
-      if (
-        candidates.length === 0
-      ) {
-        throw new Error(
-          '附近沒有第二個夠好的 Scene。'
-        );
+      if (candidates.length === 0) {
+        throw new Error('附近沒有第二個夠好的 Scene。');
       }
 
-      const recoveryMood =
-        selectedMood ?? 'wander';
+      const recoveryMood = selectedMood ?? 'wander';
+      const recoveryContext = lightContext ?? 'day';
+      const recoveryMinutes = Math.max(5, Math.round(minutesLeft));
+      const routed = await resolveRoutedScene({
+        start: currentPoint,
+        candidates,
+        minutes: recoveryMinutes,
+        maxDistanceMeters: distanceBudget,
+        sideEventCount: 0,
+        context: routingContext(recoveryContext),
+        avoidRoutes: [
+          activeTrace,
+          ...passport.slice(0, 5).map((entry) =>
+            entry.route && entry.route.length >= 2
+              ? entry.route
+              : entry.plannedRoute ?? []
+          ),
+        ].filter(
+          (route): route is GeoPoint[] =>
+            Array.isArray(route) && route.length >= 2
+        ),
+      });
 
-      const recoveryContext =
-        lightContext ?? 'day';
-
-      const recoveryMinutes =
-        Math.max(
-          5,
-          Math.round(minutesLeft)
-        );
-
-      const routed =
-        await resolveRoutedScene({
-          start: currentPoint,
-          candidates,
-          minutes:
-            recoveryMinutes,
-          maxDistanceMeters:
-            distanceBudget,
-          sideMissionCount: 0,
-          context: routingContext(recoveryContext),
-          avoidRoutes: [
-            activeTrace,
-            ...passport.slice(0, 5).map((entry) =>
-              entry.route && entry.route.length >= 2
-                ? entry.route
-                : entry.plannedRoute ?? []
-            ),
-          ].filter((route): route is GeoPoint[] => Array.isArray(route) && route.length >= 2),
-        });
-
-      const fallbackArrival =
+      const nextArrivalMission =
         recoveryMood === 'color'
           ? currentPlan.arrivalMission
           : buildSceneArrivalMission({
               scene: routed.scene,
-              moodId:
-                recoveryMood,
-              context:
-                recoveryContext,
+              moodId: recoveryMood,
+              context: recoveryContext,
             });
-
-      const nextArrivalMission =
-        fallbackArrival;
-
       const nextPlan = {
         ...currentPlan,
-        arrivalMission:
-          nextArrivalMission,
+        arrivalMission: nextArrivalMission,
       };
+      const nextNavigation = buildNavigationRouteFromPolyline({
+        coordinates: routed.route.coordinates,
+        totalDistanceMeters: routed.route.distanceMeters,
+        durationSeconds: routed.route.durationSeconds,
+      });
 
-      // The Side Quests already happened.
-      // Recovery only creates a short replacement main-line leg.
-      const nextNavigation =
-        buildNavigationRouteFromPolyline({
-          coordinates:
-            routed.route.coordinates,
-          totalDistanceMeters:
-            routed.route.distanceMeters,
-          durationSeconds:
-            routed.route.durationSeconds,
-          sideMissionCount: 0,
-        });
-
-      if (
-        nextNavigation.beats.length < 1
-      ) {
-        throw new Error(
-          '替代路線資料不足。'
-        );
+      if (nextNavigation.beats.length < 1) {
+        throw new Error('替代路線資料不足。');
       }
 
-      setSelectedScene(
-        routed.scene
-      );
-      selectedSceneRef.current =
-        routed.scene;
-
-      setWalkingRoute(
-        routed.route
-      );
-
+      setSelectedScene(routed.scene);
+      selectedSceneRef.current = routed.scene;
+      setWalkingRoute(routed.route);
       setPlan(nextPlan);
-      planRef.current =
-        nextPlan;
-
-      setNavigationRoute(
-        nextNavigation
-      );
-      navigationRouteRef.current =
-        nextNavigation;
-
+      planRef.current = nextPlan;
+      setNavigationRoute(nextNavigation);
+      navigationRouteRef.current = nextNavigation;
       setNavigationBeatIndex(0);
       navigationBeatIndexRef.current = 0;
 
-      const firstDistance =
-        nextNavigation.beats[0]
-          ?.segmentDistanceMeters ?? 0;
-
-      setBeatRemainingMeters(
-        firstDistance
-      );
-      beatRemainingMetersRef.current =
-        firstDistance;
-
-      setLatitude(
-        currentPoint.latitude
-      );
-      setLongitude(
-        currentPoint.longitude
-      );
-
-      lastTracePointRef.current =
-        currentPoint;
-
+      const firstDistance = nextNavigation.beats[0]?.segmentDistanceMeters ?? 0;
+      setBeatRemainingMeters(firstDistance);
+      beatRemainingMetersRef.current = firstDistance;
+      setLatitude(currentPoint.latitude);
+      setLongitude(currentPoint.longitude);
+      lastTracePointRef.current = currentPoint;
       setShowNextBeatMap(false);
       setRerouteFailed(false);
       offRouteCountRef.current = 0;
 
-      const nextRerouteCount =
-        rerouteCountRef.current + 1;
-
-      rerouteCountRef.current =
-        nextRerouteCount;
-
-      setRerouteCount(
-        nextRerouteCount
-      );
+      const nextRerouteCount = rerouteCountRef.current + 1;
+      rerouteCountRef.current = nextRerouteCount;
+      setRerouteCount(nextRerouteCount);
 
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success
       );
-
       transitionTo('journey');
     } catch (error) {
       const message =
@@ -1651,29 +1410,10 @@ export function useDetourHomeController() {
 
       Alert.alert(
         '這次不用硬撐',
-        `${message}\n\n你已經完成的路和任務可以直接收進 Passport。`,
+        `${message}\n\n已經走過的路和拍下來的照片可以直接收進 Passport。`,
         [
-          {
-            text: '回到這裡',
-            style: 'cancel',
-          },
-          {
-            text: '結束這次',
-            onPress: async () => {
-              if (
-                planRef.current
-                  ?.arrivalMission
-              ) {
-                recordMissionResult(
-                  planRef.current
-                    .arrivalMission,
-                  'skipped'
-                );
-              }
-
-              await completeDetour();
-            },
-          },
+          { text: '回到這裡', style: 'cancel' },
+          { text: '結束這次', onPress: () => void completeDetour() },
         ]
       );
     } finally {
@@ -1681,99 +1421,48 @@ export function useDetourHomeController() {
     }
   }
 
-  async function rerouteFromCurrentPosition(
-    currentPoint: GeoPoint
-  ) {
-    if (
-      rerouteInFlightRef.current ||
-      devMode
-    ) {
-      return;
-    }
+  async function rerouteFromCurrentPosition(currentPoint: GeoPoint) {
+    if (rerouteInFlightRef.current || devMode) return;
 
-    const scene =
-      selectedSceneRef.current;
-    const currentPlan =
-      planRef.current;
-
-    if (!scene || !currentPlan) {
-      return;
-    }
+    const scene = selectedSceneRef.current;
+    if (!scene || !planRef.current) return;
 
     rerouteInFlightRef.current = true;
     setIsRerouting(true);
     setRerouteFailed(false);
 
     try {
-      const nextWalkingRoute =
-        await fetchWalkingRoute(
-          currentPoint,
-          scene.point,
-          undefined,
-          { context: routingContext(lightContext ?? 'day') }
-        );
+      const nextWalkingRoute = await fetchWalkingRoute(
+        currentPoint,
+        scene.point,
+        undefined,
+        { context: routingContext(lightContext ?? 'day') }
+      );
+      const nextNavigationRoute = buildNavigationRouteFromPolyline({
+        coordinates: nextWalkingRoute.coordinates,
+        totalDistanceMeters: nextWalkingRoute.distanceMeters,
+        durationSeconds: nextWalkingRoute.durationSeconds,
+      });
 
-      const remainingMissionCount =
-        Math.max(
-          0,
-          currentPlan.sideMissions.length -
-            sideMissionIndexRef.current
-        );
-
-      const nextNavigationRoute =
-        buildNavigationRouteFromPolyline({
-          coordinates:
-            nextWalkingRoute.coordinates,
-          totalDistanceMeters:
-            nextWalkingRoute.distanceMeters,
-          durationSeconds:
-            nextWalkingRoute.durationSeconds,
-          sideMissionCount:
-            remainingMissionCount,
-          missionIndexOffset:
-            sideMissionIndexRef.current,
-        });
-
-      if (
-        nextNavigationRoute.beats.length <
-        1
-      ) {
-        throw new Error(
-          'No reroute beats'
-        );
+      if (nextNavigationRoute.beats.length < 1) {
+        throw new Error('No reroute beats');
       }
 
-      setWalkingRoute(
-        nextWalkingRoute
-      );
-
-      setNavigationRoute(
-        nextNavigationRoute
-      );
-      navigationRouteRef.current =
-        nextNavigationRoute;
-
+      setWalkingRoute(nextWalkingRoute);
+      setNavigationRoute(nextNavigationRoute);
+      navigationRouteRef.current = nextNavigationRoute;
       setNavigationBeatIndex(0);
       navigationBeatIndexRef.current = 0;
 
       const firstDistance =
-        nextNavigationRoute.beats[0]
-          ?.segmentDistanceMeters ?? 0;
-
-      setBeatRemainingMeters(
-        firstDistance
-      );
-      beatRemainingMetersRef.current =
-        firstDistance;
-
+        nextNavigationRoute.beats[0]?.segmentDistanceMeters ?? 0;
+      setBeatRemainingMeters(firstDistance);
+      beatRemainingMetersRef.current = firstDistance;
       setShowNextBeatMap(false);
       offRouteCountRef.current = 0;
 
-      const nextCount =
-        rerouteCountRef.current + 1;
-
-      rerouteCountRef.current =
-        nextCount;
+      const nextCount = rerouteCountRef.current + 1;
+      rerouteCountRef.current = nextCount;
       setRerouteCount(nextCount);
 
       await Haptics.notificationAsync(
@@ -1790,7 +1479,6 @@ export function useDetourHomeController() {
 
   async function startTraceWatcher() {
     stopLocationWatcher();
-
     if (devMode) return;
 
     locationWatcher.current = await Location.watchPositionAsync(
@@ -1804,6 +1492,9 @@ export function useDetourHomeController() {
           latitude: newLocation.coords.latitude,
           longitude: newLocation.coords.longitude,
         };
+        const sampleAt = newLocation.timestamp || Date.now();
+        const previousSampleAt = lastMovementSampleAtRef.current;
+        lastMovementSampleAtRef.current = sampleAt;
 
         setLatitude(nextPoint.latitude);
         setLongitude(nextPoint.longitude);
@@ -1825,6 +1516,14 @@ export function useDetourHomeController() {
 
         if (moved < 4 || moved > 80) return;
 
+        if (previousSampleAt !== null) {
+          const sampleSeconds = Math.max(
+            0,
+            Math.min(10, (sampleAt - previousSampleAt) / 1000)
+          );
+          effectiveMovingSecondsRef.current += sampleSeconds;
+        }
+
         setActiveTrace((trace) =>
           trace.length >= 700 ? trace : [...trace, nextPoint]
         );
@@ -1836,31 +1535,25 @@ export function useDetourHomeController() {
         setTraveledMeters(nextTraveled);
 
         const route = navigationRouteRef.current;
-        const beat =
-          route?.beats[navigationBeatIndexRef.current] ?? null;
-
+        const beat = route?.beats[navigationBeatIndexRef.current] ?? null;
         if (!route || !beat) return;
 
-        const remainingOnBeat =
-          remainingDistanceOnPolyline(
-            nextPoint,
-            beat.segmentCoordinates
-          );
-
-        setBeatRemainingMeters(
-          remainingOnBeat
+        const remainingOnBeat = remainingDistanceOnPolyline(
+          nextPoint,
+          beat.segmentCoordinates
         );
-        beatRemainingMetersRef.current =
-          remainingOnBeat;
+        setBeatRemainingMeters(remainingOnBeat);
+        beatRemainingMetersRef.current = remainingOnBeat;
 
-        const offRouteDistance =
-          distanceToPolyline(
-            nextPoint,
-            route.coordinates
-          );
-
+        const offRouteDistance = distanceToPolyline(
+          nextPoint,
+          route.coordinates
+        );
         const gpsAccuracy = newLocation.coords.accuracy ?? 0;
-        const offRouteThreshold = Math.max(45, Math.min(70, gpsAccuracy + 30));
+        const offRouteThreshold = Math.max(
+          45,
+          Math.min(70, gpsAccuracy + 30)
+        );
 
         if (offRouteDistance > offRouteThreshold) {
           offRouteCountRef.current += 1;
@@ -1873,14 +1566,14 @@ export function useDetourHomeController() {
           !rerouteInFlightRef.current
         ) {
           offRouteCountRef.current = 0;
-          rerouteFromCurrentPosition(
-            nextPoint
-          );
+          void rerouteFromCurrentPosition(nextPoint);
           return;
         }
 
+        maybeTriggerSideEvent(nextPoint);
+
         if (remainingOnBeat <= 12) {
-          reachCurrentNavigationBeat();
+          void reachCurrentNavigationBeat();
         }
       }
     );
@@ -1903,8 +1596,6 @@ export function useDetourHomeController() {
     prewarmInFlightRef.current = true;
 
     try {
-      // Do not surprise a first-time user with a permission sheet on Home/Mood.
-      // Prewarm only when permission already exists; ticket issue owns the ask.
       const permission = await Location.getForegroundPermissionsAsync();
       if (permission.status !== 'granted') return;
 
@@ -1940,18 +1631,17 @@ export function useDetourHomeController() {
         distanceScale: paceDistanceScale,
       });
 
-      const createdAt = Date.now();
       prewarmRef.current = {
         point,
         context,
         candidatesByMood: { [targetMood]: candidates },
-        rankedIdsByMood: { [targetMood]: candidates.map((candidate) => candidate.id) },
+        rankedIdsByMood: {
+          [targetMood]: candidates.map((candidate) => candidate.id),
+        },
         aiUsedByMood: { [targetMood]: false },
-        createdAt,
+        createdAt: Date.now(),
       };
 
-      // Warm one or two likely walking legs in the background. fetchWalkingRoute
-      // caches them, so pressing 出發 can often issue immediately.
       void prewarmWalkingRoutes(
         point,
         candidates,
@@ -1961,7 +1651,7 @@ export function useDetourHomeController() {
         routingContext(context)
       );
     } catch {
-      // Prewarming is an optimization. Ticket issue remains available.
+      // Prewarming is only an optimization.
     } finally {
       prewarmInFlightRef.current = false;
     }
@@ -1990,9 +1680,6 @@ export function useDetourHomeController() {
     setTicketBuildError(null);
     const ticketStartedAt = Date.now();
 
-    // Ticket artwork, overlay copy and printer motion are one pipeline. Do not
-    // move paper until the bundled ticket-base has decoded in Skia; otherwise
-    // text can emerge before paper or the renderer can visibly swap mid-print.
     routeProgress.stopAnimation();
     routeProgress.setValue(0);
     await waitForTicketVisualReady();
@@ -2021,13 +1708,18 @@ export function useDetourHomeController() {
         );
       }
       setTicketBuildStatus('需要定位才能繼續');
-      setTicketBuildError('允許定位後再試一次。DETOUR 只會用現在的位置找這趟的終點和步行路線。');
+      setTicketBuildError(
+        '允許定位後再試一次。DETOUR 只會用現在的位置找這趟的終點和步行路線。'
+      );
       return;
     }
 
     try {
       const finalMood: MoodId = selectedMood ?? 'wander';
       const minutes = selectedMinutes || 15;
+      const profile = getJourneyProfile(minutes);
+      const plannedSideEventCount =
+        finalMood === 'color' ? 0 : profile.sideEventCount;
       const cached =
         prewarmRef.current &&
         Date.now() - prewarmRef.current.createdAt < 5 * 60 * 1000
@@ -2115,8 +1807,9 @@ export function useDetourHomeController() {
               ? entry.route
               : entry.plannedRoute ?? []
           )
-          .filter((route): route is GeoPoint[] =>
-            Array.isArray(route) && route.length >= 2
+          .filter(
+            (route): route is GeoPoint[] =>
+              Array.isArray(route) && route.length >= 2
           );
 
         advanceTicketProgress(0.5, '先算最快路線，再找自然的繞法…');
@@ -2124,145 +1817,138 @@ export function useDetourHomeController() {
           start: startPoint,
           destination: destinationPoint,
           minutes,
-          sideMissionCount: getJourneyProfile(minutes).sideMissionCount,
+          sideEventCount: plannedSideEventCount,
           context: routingContext(context),
           avoidRoutes: recentRoutes,
         });
 
-        routed = {
-          scene: destinationScene,
-          route: slowRoute.route,
-        };
-        rankingUsedAI = false;
+        routed = { scene: destinationScene, route: slowRoute.route };
       } else {
-      const cachedCandidates = cached?.candidatesByMood[finalMood] ?? [];
+        const cachedCandidates = cached?.candidatesByMood[finalMood] ?? [];
 
-      if (cached) {
-        startPoint = cached.point;
-        context = cached.context;
+        if (cached) {
+          startPoint = cached.point;
+          context = cached.context;
 
-        // Prewarm is primarily an OSM/network warm-up. Candidate distance
-        // scoring must still use the duration the user actually selected.
-        const visitedSceneIds = passport
-          .map((entry) => entry.sceneId)
-          .filter((value): value is string => typeof value === 'string');
-        const sceneFeedback = await loadSceneFeedback();
-        const durationCandidates = await findSceneCandidates({
-          start: startPoint,
-          moodId: finalMood,
-          context,
-          minutes,
-          excludeSceneIds: visitedSceneIds,
-          feedback: sceneFeedback,
-          distanceScale: paceDistanceScale,
-        });
-
-        if (durationCandidates.length === 0) {
-          throw new Error(
-            finalMood === 'food'
-              ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
-              : '附近暫時沒有找到適合現在情境的 Scene。'
-          );
-        }
-
-        rankedCandidates = applyCachedRanking(
-          durationCandidates,
-          cached.rankedIdsByMood[finalMood]
-        );
-        rankingUsedAI =
-          finalMood === 'food' || finalMood === 'color'
-            ? false
-            : cached.aiUsedByMood[finalMood] ?? false;
-
-        advanceTicketProgress(
-          0.58,
-          `附近已先準備好。正在確認 ${rankedCandidates.length} 個候選的步行路線…`
-        );
-      } else {
-        advanceTicketProgress(0.12, '正在取得現在位置…');
-
-        let location = await Location.getLastKnownPositionAsync({
-          maxAge: 2 * 60 * 1000,
-          requiredAccuracy: 150,
-        });
-
-        if (!location) {
-          location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+          const visitedSceneIds = passport
+            .map((entry) => entry.sceneId)
+            .filter((value): value is string => typeof value === 'string');
+          const sceneFeedback = await loadSceneFeedback();
+          const durationCandidates = await findSceneCandidates({
+            start: startPoint,
+            moodId: finalMood,
+            context,
+            minutes,
+            excludeSceneIds: visitedSceneIds,
+            feedback: sceneFeedback,
+            distanceScale: paceDistanceScale,
           });
-        }
 
-        startPoint = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        };
-        context = getLightContext(startPoint, new Date());
+          if (durationCandidates.length === 0) {
+            throw new Error(
+              finalMood === 'food'
+                ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
+                : '附近暫時沒有找到適合現在情境的 Scene。'
+            );
+          }
 
-        advanceTicketProgress(0.24, '位置確認。正在找附近的小發現…');
-
-        const visitedSceneIds = passport
-          .map((entry) => entry.sceneId)
-          .filter((value): value is string => typeof value === 'string');
-        const sceneFeedback = await loadSceneFeedback();
-        const sceneCandidates = await findSceneCandidates({
-          start: startPoint,
-          moodId: finalMood,
-          context,
-          minutes,
-          excludeSceneIds: visitedSceneIds,
-          feedback: sceneFeedback,
-          distanceScale: paceDistanceScale,
-        });
-
-        if (sceneCandidates.length === 0) {
-          throw new Error(
-            finalMood === 'food'
-              ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
-              : '附近暫時沒有找到適合現在情境的 Scene。'
+          rankedCandidates = applyCachedRanking(
+            durationCandidates,
+            cached.rankedIdsByMood[finalMood]
           );
+          rankingUsedAI =
+            finalMood === 'food' || finalMood === 'color'
+              ? false
+              : cached.aiUsedByMood[finalMood] ?? false;
+
+          advanceTicketProgress(
+            0.58,
+            `附近已先準備好。正在確認 ${rankedCandidates.length} 個候選的步行路線…`
+          );
+        } else {
+          advanceTicketProgress(0.12, '正在取得現在位置…');
+
+          let location = await Location.getLastKnownPositionAsync({
+            maxAge: 2 * 60 * 1000,
+            requiredAccuracy: 150,
+          });
+
+          if (!location) {
+            location = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+          }
+
+          startPoint = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          };
+          context = getLightContext(startPoint, new Date());
+
+          advanceTicketProgress(0.24, '位置確認。正在找附近的小發現…');
+
+          const visitedSceneIds = passport
+            .map((entry) => entry.sceneId)
+            .filter((value): value is string => typeof value === 'string');
+          const sceneFeedback = await loadSceneFeedback();
+          const sceneCandidates = await findSceneCandidates({
+            start: startPoint,
+            moodId: finalMood,
+            context,
+            minutes,
+            excludeSceneIds: visitedSceneIds,
+            feedback: sceneFeedback,
+            distanceScale: paceDistanceScale,
+          });
+
+          if (sceneCandidates.length === 0) {
+            throw new Error(
+              finalMood === 'food'
+                ? '附近暫時找不到適合「吃東西」的真實食物 Scene。'
+                : '附近暫時沒有找到適合現在情境的 Scene。'
+            );
+          }
+
+          advanceTicketProgress(
+            0.46,
+            `找到 ${sceneCandidates.length} 個候選。正在確認步行路線…`
+          );
+          rankedCandidates = sceneCandidates;
         }
 
-        advanceTicketProgress(
-          0.46,
-          `找到 ${sceneCandidates.length} 個候選。正在確認步行路線…`
-        );
-        // Local ranking is already good enough to issue. AI taste ranking is
-        // never allowed to hold the printer hostage.
-        rankedCandidates = sceneCandidates;
-        rankingUsedAI = false;
-      }
+        if (rankedCandidates.length === 0) {
+          throw new Error('附近暫時沒有適合的終點。');
+        }
 
-      if (rankedCandidates.length === 0) {
-        throw new Error('附近暫時沒有適合的終點。');
-      }
+        if (finalMood === 'food') {
+          rankedCandidates = applyFoodDestinationWeight(rankedCandidates);
+          rankingUsedAI = false;
+        }
 
-      if (finalMood === 'food') {
-        rankedCandidates = applyFoodDestinationWeight(rankedCandidates);
-        rankingUsedAI = false;
-      }
+        const recentRoutes = passport
+          .slice(0, 6)
+          .map((entry) =>
+            entry.route && entry.route.length >= 2
+              ? entry.route
+              : entry.plannedRoute ?? []
+          )
+          .filter(
+            (route): route is GeoPoint[] =>
+              Array.isArray(route) && route.length >= 2
+          );
 
-      const recentRoutes = passport
-        .slice(0, 6)
-        .map((entry) =>
-          entry.route && entry.route.length >= 2
-            ? entry.route
-            : entry.plannedRoute ?? []
-        )
-        .filter((route): route is GeoPoint[] => Array.isArray(route) && route.length >= 2);
-
-      routed = await resolveRoutedScene({
-        start: startPoint,
-        candidates: rankedCandidates,
-        minutes,
-        distanceScale: paceDistanceScale,
-        sideMissionCount: getJourneyProfile(minutes).sideMissionCount,
-        context: routingContext(context),
-        avoidRoutes: recentRoutes,
-      });
+        routed = await resolveRoutedScene({
+          start: startPoint,
+          candidates: rankedCandidates,
+          minutes,
+          distanceScale: paceDistanceScale,
+          sideEventCount: plannedSideEventCount,
+          context: routingContext(context),
+          avoidRoutes: recentRoutes,
+        });
       }
 
       setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
-
       advanceTicketProgress(
         0.82,
         `步行主線 ${Math.round(routed.route.distanceMeters)}m 已確認。正在出票…`
@@ -2274,6 +1960,7 @@ export function useDetourHomeController() {
         context,
         color: selectedColor,
       });
+
       if (finalMood !== 'color' && finalMood !== 'slow') {
         nextPlan.arrivalMission = buildSceneArrivalMission({
           scene: routed.scene,
@@ -2282,13 +1969,10 @@ export function useDetourHomeController() {
         });
       }
 
-      // Side Quests are intentionally deterministic during field testing.
-      // They must be instantly available and easy to compare across runs.
       const nextNavigationRoute = buildNavigationRouteFromPolyline({
         coordinates: routed.route.coordinates,
         totalDistanceMeters: routed.route.distanceMeters,
         durationSeconds: routed.route.durationSeconds,
-        sideMissionCount: nextPlan.sideMissions.length,
       });
 
       if (nextNavigationRoute.beats.length < 2) {
@@ -2315,9 +1999,7 @@ export function useDetourHomeController() {
       setBeatRemainingMeters(firstBeatDistance);
       beatRemainingMetersRef.current = firstBeatDistance;
       setShowNextBeatMap(false);
-      setSideMissionIndex(0);
-      sideMissionIndexRef.current = 0;
-      setMissionRevealedIndex(null);
+      resetSideEventRuntime();
       setTraveledMeters(0);
       traveledMetersRef.current = 0;
       setLightContext(context);
@@ -2334,15 +2016,11 @@ export function useDetourHomeController() {
 
       setTicketBuildStatus('車票完成');
 
-      // The printer has already shown the leading ticket-stub edge while searching.
-      // Once routing is real, let the sheet feed at a readable mechanical pace
-      // so the stub, destination, trip details, and DETOUR header emerge in order.
       const minimumPrintMs = 300;
       const remainingPrintMs = Math.max(
         0,
         minimumPrintMs - (Date.now() - ticketStartedAt)
       );
-
       if (remainingPrintMs > 0) {
         await new Promise<void>((resolve) => {
           setTimeout(resolve, remainingPrintMs);
@@ -2367,16 +2045,15 @@ export function useDetourHomeController() {
           sceneKind: routed.scene.kind,
           plannedDistanceMeters: routed.route.distanceMeters,
           plannedDurationSeconds: routed.route.durationSeconds,
-          sideMissionsTotal: nextPlan.sideMissions.length,
+          sideEventsPlanned: nextPlan.profile.sideEventCount,
         }).then(setPlaytestSessions);
       }
 
       console.log(
         `[DETOUR TIMING] ticket ready in ${Date.now() - ticketStartedAt}ms`
       );
-      // Keep the exact same printer/ticket tree mounted while the stamp lands.
-      // A normal screen transition would make the freshly printed ticket jump.
       setStage('ready');
+      stageRef.current = 'ready';
     } catch (error) {
       stopLocationWatcher();
 
@@ -2404,11 +2081,8 @@ export function useDetourHomeController() {
   }
 
   async function startDetour() {
-    const startPoint =
-      detourStart;
-
-    const route =
-      navigationRouteRef.current;
+    const startPoint = detourStart;
+    const route = navigationRouteRef.current;
 
     if (
       !startPoint ||
@@ -2421,50 +2095,32 @@ export function useDetourHomeController() {
         '這張票還沒準備好',
         '請回上一頁重新印製 DETOUR 車票。'
       );
-
       return;
     }
 
-    await Haptics.impactAsync(
-      Haptics.ImpactFeedbackStyle.Medium
-    );
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const startedAt =
-      new Date().toISOString();
+    const startedAt = new Date().toISOString();
+    setDetourStartedAt(startedAt);
+    detourStartedAtRef.current = startedAt;
+    effectiveMovingSecondsRef.current = 0;
+    lastMovementSampleAtRef.current = Date.now();
 
-    setDetourStartedAt(
-      startedAt
-    );
-    detourStartedAtRef.current =
-      startedAt;
-
-    const testSessionId =
-      playtestSessionIdRef.current;
-
+    const testSessionId = playtestSessionIdRef.current;
     if (testSessionId) {
       setPlaytestSessions(
-        await updatePlaytestSession(
-          testSessionId,
-          {
-            status: 'started',
-            startedAt,
-          }
-        )
+        await updatePlaytestSession(testSessionId, {
+          status: 'started',
+          startedAt,
+        })
       );
     }
 
-    setActiveTrace([
-      startPoint,
-    ]);
-
-    lastTracePointRef.current =
-      startPoint;
-
+    setActiveTrace([startPoint]);
+    lastTracePointRef.current = startPoint;
+    transitionTo('journey');
     await startTraceWatcher();
     await startHeadingWatcher();
-
-    setMissionRevealedIndex(null);
-    transitionTo('journey');
   }
 
   function setBeat(index: number) {
@@ -2476,29 +2132,23 @@ export function useDetourHomeController() {
 
     setNavigationBeatIndex(index);
     navigationBeatIndexRef.current = index;
-
     setBeatRemainingMeters(beat.segmentDistanceMeters);
     beatRemainingMetersRef.current = beat.segmentDistanceMeters;
-
     setShowNextBeatMap(false);
     return true;
   }
 
   async function reachCurrentNavigationBeat() {
-    if (checkpointLockedRef.current) {
-      return;
-    }
+    if (checkpointLockedRef.current) return;
 
     const route = navigationRouteRef.current;
     if (!route) return;
 
     const beatIndex = navigationBeatIndexRef.current;
     const beat = route.beats[beatIndex];
-
     if (!beat) return;
 
     checkpointLockedRef.current = true;
-
     setLatitude(beat.point.latitude);
     setLongitude(beat.point.longitude);
     setBeatRemainingMeters(0);
@@ -2506,7 +2156,6 @@ export function useDetourHomeController() {
 
     setActiveTrace((trace) => {
       const previous = trace[trace.length - 1];
-
       if (
         previous &&
         getDistanceInMeters(
@@ -2518,81 +2167,17 @@ export function useDetourHomeController() {
       ) {
         return trace;
       }
-
       return [...trace, beat.point];
     });
 
-    const missionIndexAtBeat =
-      beat.missionIndex;
-    const isMissionReveal =
-      missionIndexAtBeat !== undefined &&
-      missionIndexAtBeat >=
-        sideMissionIndexRef.current;
-
-    const isFinal =
-      beatIndex >=
-      route.beats.length - 1;
-
-    if (
-      isMissionReveal &&
-      missionIndexAtBeat !== undefined
-    ) {
-      const activeIndex =
-        sideMissionIndexRef.current;
-
-      if (missionIndexAtBeat > activeIndex) {
-        const previousMission =
-          planRef.current?.sideMissions[
-            activeIndex
-          ];
-
-        if (
-          previousMission &&
-          !missionResultsRef.current[
-            previousMission.id
-          ]
-        ) {
-          recordMissionResult(
-            previousMission,
-            'skipped'
-          );
-        }
-
-        sideMissionIndexRef.current =
-          missionIndexAtBeat;
-        setSideMissionIndex(
-          missionIndexAtBeat
-        );
-      }
-
-      setMissionRevealedIndex(null);
-      setQuestPulse('side');
-
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success
-      );
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 420);
-      });
-
-      setQuestPulse(null);
-      checkpointLockedRef.current = false;
-      transitionTo('mission');
-      return;
-    }
+    const isFinal = beatIndex >= route.beats.length - 1;
 
     if (isFinal) {
       setQuestPulse('final');
-
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success
       );
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 720);
-      });
-
+      await new Promise<void>((resolve) => setTimeout(resolve, 720));
       setQuestPulse(null);
       checkpointLockedRef.current = false;
       transitionTo('arrival');
@@ -2600,7 +2185,6 @@ export function useDetourHomeController() {
     }
 
     await Haptics.selectionAsync();
-
     setBeat(beatIndex + 1);
     checkpointLockedRef.current = false;
   }
@@ -2620,7 +2204,6 @@ export function useDetourHomeController() {
       latitude !== null && longitude !== null
         ? { latitude, longitude }
         : detourStart;
-
     if (!currentPoint) return;
 
     const currentRemaining = beatRemainingMetersRef.current;
@@ -2639,31 +2222,24 @@ export function useDetourHomeController() {
       currentNavigationBeat.point,
       step
     );
-
-    const nextRemaining = Math.max(
-      0,
-      currentRemaining - step
-    );
+    const nextRemaining = Math.max(0, currentRemaining - step);
 
     setLatitude(nextPoint.latitude);
     setLongitude(nextPoint.longitude);
     setBeatRemainingMeters(nextRemaining);
     beatRemainingMetersRef.current = nextRemaining;
 
-    const nextTraveled =
-      traveledMetersRef.current + step;
-
+    const nextTraveled = traveledMetersRef.current + step;
     traveledMetersRef.current = nextTraveled;
     setTraveledMeters(nextTraveled);
-
+    effectiveMovingSecondsRef.current += step / 1.25;
     setActiveTrace((trace) => [...trace, nextPoint]);
+    maybeTriggerSideEvent(nextPoint);
 
     await Haptics.selectionAsync();
 
     if (nextRemaining <= 1.5) {
-      setTimeout(() => {
-        reachCurrentNavigationBeat();
-      }, 100);
+      setTimeout(() => void reachCurrentNavigationBeat(), 100);
     }
   }
 
@@ -2691,125 +2267,11 @@ export function useDetourHomeController() {
     const nextTraveled = traveledMetersRef.current + moved;
     traveledMetersRef.current = nextTraveled;
     setTraveledMeters(nextTraveled);
+    effectiveMovingSecondsRef.current += moved / 1.25;
     setActiveTrace((trace) => [...trace, beat.point]);
+    maybeTriggerSideEvent(beat.point);
     await Haptics.selectionAsync();
     setTimeout(() => void reachCurrentNavigationBeat(), 80);
-  }
-
-  function recordMissionResult(mission: Mission, result: MissionResult) {
-    const next = {
-      ...missionResultsRef.current,
-      [mission.id]: result,
-    };
-
-    missionResultsRef.current = next;
-    setMissionResults(next);
-  }
-
-  async function beginCurrentMissionSearch() {
-    const route = navigationRouteRef.current;
-    if (!route || !currentMission) return;
-
-    await Haptics.selectionAsync();
-
-    const missionIndex =
-      sideMissionIndexRef.current;
-    const beatIndex =
-      navigationBeatIndexRef.current;
-
-    setMissionRevealedIndex(
-      missionIndex
-    );
-
-    transitionTo('journey', () => {
-      if (
-        beatIndex <
-        route.beats.length - 1
-      ) {
-        setBeat(beatIndex + 1);
-      }
-    });
-  }
-
-  async function advanceAfterSideMission() {
-    if (!plan || !navigationRoute) return;
-
-    const nextMissionIndex =
-      sideMissionIndexRef.current + 1;
-    sideMissionIndexRef.current =
-      nextMissionIndex;
-    setMissionRevealedIndex(null);
-
-    const beatIndex =
-      navigationBeatIndexRef.current;
-    const shouldAdvanceBeat =
-      stageRef.current === 'mission';
-
-    if (
-      beatIndex >=
-      navigationRoute.beats.length - 1
-    ) {
-      transitionTo('arrival', () => {
-        setSideMissionIndex(
-          nextMissionIndex
-        );
-      });
-      return;
-    }
-
-    transitionTo('journey', () => {
-      setSideMissionIndex(
-        nextMissionIndex
-      );
-
-      if (shouldAdvanceBeat) {
-        setBeat(beatIndex + 1);
-      }
-    });
-  }
-
-  async function skipCurrentRequiredMission() {
-    if (!currentMission || !currentMission.photo) return;
-
-    recordMissionResult(currentMission, 'skipped');
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Warning
-    );
-
-    await advanceAfterSideMission();
-  }
-
-  async function skipArrivalRequiredMission() {
-    if (!plan?.arrivalMission.photo) return;
-
-    recordMissionResult(plan.arrivalMission, 'skipped');
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Warning
-    );
-
-    await completeDetour();
-  }
-
-  async function completeSideMissionWithoutPhoto() {
-    if (!plan || !currentMission) return;
-
-    recordMissionResult(currentMission, 'completed');
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    );
-
-    await advanceAfterSideMission();
-  }
-
-  async function completeArrivalWithoutPhoto() {
-    if (plan?.arrivalMission) {
-      recordMissionResult(plan.arrivalMission, 'completed');
-    }
-
-    await completeDetour();
   }
 
   function openPassportEntry(entry: PassportEntry) {
@@ -2840,7 +2302,6 @@ export function useDetourHomeController() {
         url: ticketUri,
       });
     } catch {
-      // Sharing should still work even if a device cannot capture the card.
       await Share.share({
         title: '分享這趟 DETOUR',
         message,
@@ -2848,45 +2309,13 @@ export function useDetourHomeController() {
     }
   }
 
-  function reservedMissionPhotoCount() {
-    if (!plan) return 0;
-
-    const remainingSide = plan.sideMissions
-      .slice(sideMissionIndex)
-      .filter(
-        (mission) =>
-          mission.photo &&
-          missionResultsRef.current[mission.id] !== 'completed' &&
-          missionResultsRef.current[mission.id] !== 'skipped'
-      ).length;
-
-    const arrivalReserved =
-      plan.arrivalMission.photo &&
-      missionResultsRef.current[plan.arrivalMission.id] !== 'completed' &&
-      missionResultsRef.current[plan.arrivalMission.id] !== 'skipped'
-        ? 1
-        : 0;
-
-    return remainingSide + arrivalReserved;
-  }
-
   async function openCamera(source: CameraSource) {
     if (photos.length >= rollCapacity) {
-      Alert.alert('這趟已經拍滿了', `每趟 DETOUR 最多留下 ${rollCapacity} 張照片。`);
+      Alert.alert(
+        '這趟已經拍滿了',
+        `每趟 DETOUR 最多留下 ${rollCapacity} 張照片。`
+      );
       return;
-    }
-
-    if (source === 'free') {
-      const reserved = reservedMissionPhotoCount();
-      const freeLimit = Math.max(0, rollCapacity - reserved);
-
-      if (photos.length >= freeLimit) {
-        Alert.alert(
-          '先留幾張給路上的尋找',
-          `剩下 ${reserved} 張底片已保留給還沒完成的拍照尋找。`
-        );
-        return;
-      }
     }
 
     const colorWalkCameraMission: Mission =
@@ -2897,26 +2326,35 @@ export function useDetourHomeController() {
             code: `COLOR · ${selectedColor.code}`,
             title: `拍下${selectedColor.label}。`,
             instruction: `看到${selectedColor.label}就拍；其他時間跟著導航走。`,
-            completion: `這張照片留下今天的${selectedColor.label}。`,
           }
         : FREE_CAMERA_MISSION;
+
+    const sideEventCameraMission: Mission | null =
+      activeSideEventRef.current?.photoSuggested
+        ? {
+            id: activeSideEventRef.current.id,
+            code: 'SIDE EVENT',
+            title: activeSideEventRef.current.title,
+            instruction: activeSideEventRef.current.instruction,
+            completion: '',
+            photo: true,
+            portable: true,
+          }
+        : null;
 
     const missionForCamera: Mission | null =
       source === 'arrival'
         ? plan?.arrivalMission ?? null
         : source === 'free'
           ? colorWalkCameraMission
-          : currentMission;
+          : sideEventCameraMission;
 
     if (!missionForCamera) return;
 
     const requestId = `${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-
     activeCameraRequestRef.current = requestId;
-
-    // 清掉上一次未消化的結果，避免 Fast Refresh / crash 後誤吃舊照片。
     await AsyncStorage.removeItem(CAMERA_RESULT_KEY);
 
     router.push({
@@ -2941,7 +2379,6 @@ export function useDetourHomeController() {
     }
 
     activeCameraRequestRef.current = null;
-
     const nextPhotos = [...photos, result.photo];
     setPhotos(nextPhotos);
 
@@ -2949,30 +2386,9 @@ export function useDetourHomeController() {
       Haptics.NotificationFeedbackType.Success
     );
 
-    if (result.source === 'free') {
-      // 自由拍照只是留下紀錄，不推進主線。
-      return;
+    if (result.source === 'side') {
+      refreshSideEventAfterPhoto();
     }
-
-    const missionForResult =
-      result.source === 'arrival'
-        ? plan?.arrivalMission ?? null
-        : plan?.sideMissions[sideMissionIndex] ?? null;
-
-    // Optional photos are memories only. They must not silently complete
-    // listening / breathing / observation missions.
-    if (!missionForResult?.photo) {
-      return;
-    }
-
-    recordMissionResult(missionForResult, 'completed');
-
-    if (result.source === 'arrival') {
-      await completeDetour(nextPhotos);
-      return;
-    }
-
-    await advanceAfterSideMission();
   }
 
   async function completeDetour(photoOverride?: SessionPhoto[]) {
@@ -2983,22 +2399,8 @@ export function useDetourHomeController() {
       label: '隨便走',
       code: 'WANDER',
     };
-
     const route = activeTrace.length >= 2 ? activeTrace : [];
     const finalPhotos = photoOverride ?? photos;
-    const missionHistory: PassportMission[] = plan
-      ? [...plan.sideMissions, plan.arrivalMission].map((mission) => ({
-          code: mission.code,
-          title: mission.title,
-          instruction: mission.instruction,
-          completion: mission.completion,
-          result: missionResultsRef.current[mission.id] ?? 'completed',
-          photoRequired: mission.photo,
-        }))
-      : [];
-    const discoveries = missionHistory.filter(
-      (mission) => mission.result === 'completed'
-    ).length;
 
     const entry: PassportEntry = {
       id: `${Date.now()}`,
@@ -3008,7 +2410,7 @@ export function useDetourHomeController() {
       moodId: finalMood.id,
       moodLabel: finalMood.label,
       moodCode: finalMood.code,
-      discoveries,
+      discoveries: finalPhotos.length,
       route,
       distanceMeters: getRouteDistance(route),
       contextCode: plan?.contextCode ?? contextCode(lightContext),
@@ -3017,111 +2419,56 @@ export function useDetourHomeController() {
       photoCount: finalPhotos.length,
       rollCapacity,
       photos: finalPhotos,
-      missions: missionHistory,
+      sideEventsShown: sideEventsShownRef.current,
+      sideEventReplacements: sideEventReplacementsRef.current,
       sceneId: selectedScene?.id,
       sceneName: selectedScene?.name,
       sceneKind: selectedScene?.kind,
       sceneLabel: selectedScene?.label,
       scenePoint: selectedScene?.point,
-      plannedRouteDistanceMeters:
-        walkingRoute?.distanceMeters,
-      plannedRouteDurationSeconds:
-        walkingRoute?.durationSeconds,
-      plannedRoute:
-        walkingRoute?.coordinates ?? [],
-      startedAt:
-        detourStartedAtRef.current ??
-        detourStartedAt ??
-        undefined,
-      actualDurationMinutes:
-        detourStartedAtRef.current
-          ? Math.max(
-              1,
-              Math.round(
-                (Date.now() -
-                  new Date(
-                    detourStartedAtRef.current
-                  ).getTime()) /
-                  60000
-              )
+      plannedRouteDistanceMeters: walkingRoute?.distanceMeters,
+      plannedRouteDurationSeconds: walkingRoute?.durationSeconds,
+      plannedRoute: walkingRoute?.coordinates ?? [],
+      startedAt: detourStartedAtRef.current ?? detourStartedAt ?? undefined,
+      actualDurationMinutes: detourStartedAtRef.current
+        ? Math.max(
+            1,
+            Math.round(
+              (Date.now() -
+                new Date(detourStartedAtRef.current).getTime()) /
+                60000
             )
-          : undefined,
-      rerouteCount:
-        rerouteCountRef.current,
-      sceneFailures:
-        sceneFailuresRef.current,
+          )
+        : undefined,
+      rerouteCount: rerouteCountRef.current,
+      sceneFailures: sceneFailuresRef.current,
     };
 
-    const testSessionId =
-      playtestSessionIdRef.current;
-
+    const testSessionId = playtestSessionIdRef.current;
     if (testSessionId) {
-      const sideResults =
-        plan?.sideMissions.map(
-          (mission) =>
-            missionResultsRef.current[
-              mission.id
-            ] ?? 'completed'
-        ) ?? [];
-
-      const arrivalResult =
-        plan?.arrivalMission
-          ? missionResultsRef.current[
-              plan.arrivalMission.id
-            ] ?? 'completed'
-          : 'completed';
-
       setPlaytestSessions(
-        await updatePlaytestSession(
-          testSessionId,
-          {
-            status: 'completed',
-            completedAt:
-              entry.completedAt,
-            actualDurationMinutes:
-              entry.actualDurationMinutes,
-            sideMissionsCompleted:
-              sideResults.filter(
-                (result) =>
-                  result === 'completed'
-              ).length,
-            sideMissionsSkipped:
-              sideResults.filter(
-                (result) =>
-                  result === 'skipped'
-              ).length,
-            arrivalResult,
-            rerouteCount:
-              rerouteCountRef.current,
-            sceneFailureReasons:
-              sceneFailuresRef.current.map(
-                (failure) =>
-                  failure.reason
-              ),
-            photoCount:
-              finalPhotos.length,
-            aiRankingUsed:
-              lastAIResult === 'ai',
-            aiMissionUsed:
-              lastAIResult === 'ai',
-            sceneKind:
-              selectedScene?.kind,
-            plannedDistanceMeters:
-              walkingRoute?.distanceMeters,
-            plannedDurationSeconds:
-              walkingRoute?.durationSeconds,
-          }
-        )
+        await updatePlaytestSession(testSessionId, {
+          status: 'completed',
+          completedAt: entry.completedAt,
+          actualDurationMinutes: entry.actualDurationMinutes,
+          sideEventsShown: sideEventsShownRef.current,
+          sideEventReplacements: sideEventReplacementsRef.current,
+          rerouteCount: rerouteCountRef.current,
+          sceneFailureReasons: sceneFailuresRef.current.map(
+            (failure) => failure.reason
+          ),
+          photoCount: finalPhotos.length,
+          aiRankingUsed: lastAIResult === 'ai',
+          sceneKind: selectedScene?.kind,
+          plannedDistanceMeters: walkingRoute?.distanceMeters,
+          plannedDurationSeconds: walkingRoute?.durationSeconds,
+        })
       );
 
-      setLastCompletedPlaytestSessionId(
-        testSessionId
-      );
+      setLastCompletedPlaytestSessionId(testSessionId);
       setPlaytestRating(null);
       setPlaytestFeedbackReasons([]);
-
-      playtestSessionIdRef.current =
-        null;
+      playtestSessionIdRef.current = null;
     }
 
     const nextPassport = [entry, ...passport];
@@ -3197,10 +2544,10 @@ export function useDetourHomeController() {
     setSceneFailures,
     replacementLoading,
     setReplacementLoading,
-    sideMissionIndex,
-    setSideMissionIndex,
-    missionRevealedIndex,
-    setMissionRevealedIndex,
+    activeSideEvent,
+    sideEventSlot,
+    sideEventsShown,
+    sideEventReplacements,
     traveledMeters,
     setTraveledMeters,
     devMode,
@@ -3211,8 +2558,6 @@ export function useDetourHomeController() {
     setLightContext,
     photos,
     setPhotos,
-    missionResults,
-    setMissionResults,
     passport,
     setPassport,
     passportLoaded,
@@ -3241,7 +2586,6 @@ export function useDetourHomeController() {
     setAIConnectionTesting,
     locationWatcher,
     headingWatcher,
-    missionResultsRef,
     lastTracePointRef,
     planRef,
     navigationRouteRef,
@@ -3255,7 +2599,11 @@ export function useDetourHomeController() {
     rerouteCountRef,
     detourStartedAtRef,
     sceneFailuresRef,
-    sideMissionIndexRef,
+    activeSideEventRef,
+    sideEventSlotRef,
+    sideEventsShownRef,
+    sideEventReplacementsRef,
+    effectiveMovingSecondsRef,
     traveledMetersRef,
     stageRef,
     prewarmRef,
@@ -3287,7 +2635,6 @@ export function useDetourHomeController() {
     previewSliderRatio,
     finishSliderRatio,
     timeSliderResponder,
-    currentMission,
     currentNavigationBeat,
     navigationProgressRatio,
     nextBeatMeters,
@@ -3338,6 +2685,7 @@ export function useDetourHomeController() {
     remainingDetourMinutes,
     replacementDistanceBudget,
     feedbackKindForIssue,
+    replaceActiveSideEvent,
     replaceFailedDestination,
     rerouteFromCurrentPosition,
     startTraceWatcher,
@@ -3349,16 +2697,8 @@ export function useDetourHomeController() {
     reachCurrentNavigationBeat,
     simulateWalk,
     simulateNextBeat,
-    recordMissionResult,
-    beginCurrentMissionSearch,
-    advanceAfterSideMission,
-    skipCurrentRequiredMission,
-    skipArrivalRequiredMission,
-    completeSideMissionWithoutPhoto,
-    completeArrivalWithoutPhoto,
     openPassportEntry,
     shareJourney,
-    reservedMissionPhotoCount,
     openCamera,
     handleCameraRouteResult,
     completeDetour,

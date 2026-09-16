@@ -14,12 +14,6 @@ function softImpact() {
   return Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
 }
 
-/**
- * Adds haptics only to view-owned controls that did not already have them in
- * the controller. Controller actions that already encode meaning (mood pick,
- * completion, skip, etc.) are deliberately left untouched so we never double
- * buzz the same action.
- */
 export function usePhysicalController(
   controller: Controller,
   shellScale: Animated.Value
@@ -71,6 +65,10 @@ export function usePhysicalController(
         }
         return controller.openCamera(...args);
       }) as Controller['openCamera'],
+      replaceActiveSideEvent: ((...args: Parameters<Controller['replaceActiveSideEvent']>) => {
+        void Haptics.selectionAsync();
+        return controller.replaceActiveSideEvent(...args);
+      }) as Controller['replaceActiveSideEvent'],
       replaceFailedDestination: ((...args: Parameters<Controller['replaceFailedDestination']>) => {
         void Haptics.selectionAsync();
         return controller.replaceFailedDestination(...args);
@@ -93,12 +91,6 @@ export function usePhysicalController(
   }, [controller, shellScale]);
 }
 
-/**
- * Haptics tied to the actual printer feed value, not arbitrary timers.
- * Five soft roller bites are enough to feel mechanical without becoming a
- * vibration loop. The controller's existing ready impact remains the final
- * ticket-landed cue.
- */
 export function PrinterPhysicalHaptics({ controller }: { controller: Controller }) {
   const nextTickRef = useRef(0);
   const lastTickAtRef = useRef(0);
@@ -133,17 +125,6 @@ export function useJourneyStageMotion(stage: Controller['stage']) {
 
   useEffect(() => {
     stageX.stopAnimation();
-
-    if (stage === 'mission') {
-      stageX.setValue(24);
-      Animated.timing(stageX, {
-        toValue: 0,
-        duration: 240,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
 
     if (stage === 'arrival') {
       stageX.setValue(8);

@@ -11,8 +11,7 @@ const {
   supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
 } = DETOUR_API_CONFIG;
 
-export const DETOUR_PLAYTEST_VERSION =
-  DETOUR_BUILD_VERSION;
+export const DETOUR_PLAYTEST_VERSION = DETOUR_BUILD_VERSION;
 
 export type PlaytestStatus =
   | 'ticket-failed'
@@ -28,7 +27,7 @@ export type PlaytestRating =
 
 export type PlaytestFeedbackReason =
   | 'destination'
-  | 'mission'
+  | 'side-event'
   | 'distance'
   | 'navigation'
   | 'awkward'
@@ -45,19 +44,17 @@ export type PlaytestSession = {
   sceneKind?: string;
   plannedDistanceMeters?: number;
   plannedDurationSeconds?: number;
-  sideMissionsTotal?: number;
+  sideEventsPlanned?: number;
+  sideEventsShown?: number;
+  sideEventReplacements?: number;
   startedAt?: string;
   completedAt?: string;
   actualDurationMinutes?: number;
-  sideMissionsCompleted?: number;
-  sideMissionsSkipped?: number;
-  arrivalResult?: 'completed' | 'skipped';
   rerouteCount?: number;
   sceneFailureReasons?: string[];
   photoCount?: number;
   failureReason?: string;
   aiRankingUsed?: boolean;
-  aiMissionUsed?: boolean;
   runRating?: PlaytestRating;
   runFeedbackReasons?: PlaytestFeedbackReason[];
 };
@@ -71,7 +68,6 @@ function makeId(prefix: string) {
 export async function getPlaytestTesterId() {
   try {
     const current = await AsyncStorage.getItem(TESTER_KEY);
-
     if (current) return current;
 
     const id = `DTR-${Math.random()
@@ -86,45 +82,26 @@ export async function getPlaytestTesterId() {
   }
 }
 
-async function syncPlaytestSession(
-  session: PlaytestSession
-) {
-  const testerId =
-    await getPlaytestTesterId();
-
-  const controller =
-    new AbortController();
-
-  const timer =
-    setTimeout(
-      () => controller.abort(),
-      5000
-    );
+async function syncPlaytestSession(session: PlaytestSession) {
+  const testerId = await getPlaytestTesterId();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const response =
-      await fetch(
-        PLAYTEST_SYNC_ENDPOINT,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-            apikey:
-              SUPABASE_PUBLISHABLE_KEY,
-          },
-          body:
-            JSON.stringify({
-              mode: 'sync-run',
-              appVersion:
-                DETOUR_PLAYTEST_VERSION,
-              testerId,
-              session,
-            }),
-          signal:
-            controller.signal,
-        }
-      );
+    const response = await fetch(PLAYTEST_SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({
+        mode: 'sync-run',
+        appVersion: DETOUR_PLAYTEST_VERSION,
+        testerId,
+        session,
+      }),
+      signal: controller.signal,
+    });
 
     return response.ok;
   } catch {
@@ -137,31 +114,17 @@ async function syncPlaytestSession(
 export async function syncAllPlaytestSessions(
   sessions?: PlaytestSession[]
 ) {
-  const source =
-    sessions ??
-    (await loadPlaytestSessions());
-
+  const source = sessions ?? (await loadPlaytestSessions());
   let synced = 0;
   let failed = 0;
 
   for (const session of source) {
-    const ok =
-      await syncPlaytestSession(
-        session
-      );
-
-    if (ok) {
-      synced += 1;
-    } else {
-      failed += 1;
-    }
+    const ok = await syncPlaytestSession(session);
+    if (ok) synced += 1;
+    else failed += 1;
   }
 
-  return {
-    synced,
-    failed,
-    total: source.length,
-  };
+  return { synced, failed, total: source.length };
 }
 
 export async function loadPlaytestSessions(): Promise<PlaytestSession[]> {
@@ -176,16 +139,11 @@ export async function loadPlaytestSessions(): Promise<PlaytestSession[]> {
   }
 }
 
-async function savePlaytestSessions(
-  sessions: PlaytestSession[]
-) {
+async function savePlaytestSessions(sessions: PlaytestSession[]) {
   const next = sessions.slice(0, 200);
 
   try {
-    await AsyncStorage.setItem(
-      PLAYTEST_KEY,
-      JSON.stringify(next)
-    );
+    await AsyncStorage.setItem(PLAYTEST_KEY, JSON.stringify(next));
   } catch {
     // Playtest telemetry must never block DETOUR.
   }
@@ -207,10 +165,7 @@ export async function createPlaytestSession(input: {
 
   const current = await loadPlaytestSessions();
   await savePlaytestSessions([session, ...current]);
-
-  void syncPlaytestSession(
-    session
-  );
+  void syncPlaytestSession(session);
 
   return session;
 }
@@ -220,33 +175,16 @@ export async function updatePlaytestSession(
   patch: Partial<PlaytestSession>
 ) {
   const current = await loadPlaytestSessions();
-
-  let changed:
-    | PlaytestSession
-    | null = null;
+  let changed: PlaytestSession | null = null;
 
   const next = current.map((session) => {
-    if (session.id !== id) {
-      return session;
-    }
-
-    changed = {
-      ...session,
-      ...patch,
-    };
-
+    if (session.id !== id) return session;
+    changed = { ...session, ...patch };
     return changed;
   });
 
-  const saved =
-    await savePlaytestSessions(next);
-
-  if (changed) {
-    void syncPlaytestSession(
-      changed
-    );
-  }
-
+  const saved = await savePlaytestSessions(next);
+  if (changed) void syncPlaytestSession(changed);
   return saved;
 }
 
@@ -266,17 +204,13 @@ function percent(a: number, b: number) {
 function average(values: number[]) {
   if (!values.length) return null;
   return Math.round(
-    values.reduce((sum, value) => sum + value, 0) /
-      values.length
+    values.reduce((sum, value) => sum + value, 0) / values.length
   );
 }
 
 function breakdown(
   title: string,
-  rows: Record<
-    string,
-    { total: number; completed: number; rerouted: number }
-  >
+  rows: Record<string, { total: number; completed: number; rerouted: number }>
 ) {
   const body = Object.entries(rows)
     .sort((a, b) => b[1].total - a[1].total)
@@ -297,87 +231,51 @@ export function buildPlaytestReport(
 ) {
   const real = sessions.filter((session) => !session.devMode);
   const indoor = sessions.filter((session) => session.devMode);
-
   const ticketFailed = real.filter(
     (session) => session.status === 'ticket-failed'
   ).length;
-
   const started = real.filter((session) =>
     ['started', 'completed', 'abandoned'].includes(session.status)
   );
-
   const completed = real.filter(
     (session) => session.status === 'completed'
   );
-
   const abandoned = real.filter(
     (session) => session.status === 'abandoned'
   ).length;
-
   const rerouted = completed.filter(
     (session) => (session.rerouteCount ?? 0) > 0
   ).length;
-
-  const rated = completed.filter(
-    (session) =>
-      Boolean(session.runRating)
-  );
-
-  const replayRated =
-    rated.filter(
-      (session) =>
-        session.runRating ===
-        'replay'
-    ).length;
-
-  const okayRated =
-    rated.filter(
-      (session) =>
-        session.runRating ===
-        'okay'
-    ).length;
-
-  const notWorthRated =
-    rated.filter(
-      (session) =>
-        session.runRating ===
-        'not-worth-it'
-    ).length;
-
-  const sideCompleted = completed.reduce(
-    (sum, session) =>
-      sum + (session.sideMissionsCompleted ?? 0),
-    0
-  );
-
-  const sideSkipped = completed.reduce(
-    (sum, session) =>
-      sum + (session.sideMissionsSkipped ?? 0),
-    0
-  );
-
-  const sideTotal = sideCompleted + sideSkipped;
+  const rated = completed.filter((session) => Boolean(session.runRating));
+  const replayRated = rated.filter(
+    (session) => session.runRating === 'replay'
+  ).length;
+  const okayRated = rated.filter(
+    (session) => session.runRating === 'okay'
+  ).length;
+  const notWorthRated = rated.filter(
+    (session) => session.runRating === 'not-worth-it'
+  ).length;
 
   const durations = completed
     .map((session) => session.actualDurationMinutes)
-    .filter(
-      (value): value is number => typeof value === 'number'
-    );
-
+    .filter((value): value is number => typeof value === 'number');
   const distances = completed
     .map((session) => session.plannedDistanceMeters)
-    .filter(
-      (value): value is number => typeof value === 'number'
-    );
+    .filter((value): value is number => typeof value === 'number');
+  const sideEventsShown = completed.map(
+    (session) => session.sideEventsShown ?? 0
+  );
+  const replacements = completed.map(
+    (session) => session.sideEventReplacements ?? 0
+  );
 
   const reasons: Record<string, number> = {};
-
   for (const session of real) {
     for (const reason of session.sceneFailureReasons ?? []) {
       reasons[reason] = (reasons[reason] ?? 0) + 1;
     }
   }
-
   const reasonText =
     Object.entries(reasons)
       .sort((a, b) => b[1] - a[1])
@@ -388,12 +286,10 @@ export function buildPlaytestReport(
     string,
     { total: number; completed: number; rerouted: number }
   > = {};
-
   const byMood: Record<
     string,
     { total: number; completed: number; rerouted: number }
   > = {};
-
   const byTime: Record<
     string,
     { total: number; completed: number; rerouted: number }
@@ -402,13 +298,9 @@ export function buildPlaytestReport(
   for (const session of real) {
     const done = session.status === 'completed';
     const reroute = (session.rerouteCount ?? 0) > 0;
-
     const keys: Array<
       [
-        Record<
-          string,
-          { total: number; completed: number; rerouted: number }
-        >,
+        Record<string, { total: number; completed: number; rerouted: number }>,
         string
       ]
     > = [
@@ -418,12 +310,7 @@ export function buildPlaytestReport(
     ];
 
     for (const [bucket, key] of keys) {
-      bucket[key] ??= {
-        total: 0,
-        completed: 0,
-        rerouted: 0,
-      };
-
+      bucket[key] ??= { total: 0, completed: 0, rerouted: 0 };
       bucket[key].total += 1;
       if (done) bucket[key].completed += 1;
       if (reroute) bucket[key].rerouted += 1;
@@ -432,6 +319,8 @@ export function buildPlaytestReport(
 
   const avgDuration = average(durations);
   const avgDistance = average(distances);
+  const avgSideEvents = average(sideEventsShown);
+  const avgReplacements = average(replacements);
 
   return [
     'DETOUR PLAYTEST REPORT',
@@ -457,10 +346,8 @@ export function buildPlaytestReport(
       rerouted,
       completed.length
     )})`,
-    `Side quests completed: ${sideCompleted}/${sideTotal} (${percent(
-      sideCompleted,
-      sideTotal
-    )})`,
+    `Average side events shown: ${avgSideEvents ?? '—'}`,
+    `Average “換一個” taps: ${avgReplacements ?? '—'}`,
     `Worth rating: ${rated.length} rated · ${replayRated} replay · ${okayRated} okay · ${notWorthRated} not-worth-it`,
     `Average actual duration: ${
       avgDuration === null ? '—' : `${avgDuration} min`

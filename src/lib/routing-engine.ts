@@ -147,10 +147,7 @@ async function waitForInFlightWalkingRoute(
       resolve(route);
     };
 
-    timer = setTimeout(
-      () => finish(null),
-      waitMs
-    );
+    timer = setTimeout(() => finish(null), waitMs);
 
     void inFlight.promise
       .then((route) => finish(route))
@@ -187,13 +184,7 @@ async function fetchWithTimeout(url: string, timeoutMs: number) {
   }
 }
 
-/**
- * Detects a locally dominated dog-leg: a short section whose walked shape is
- * much longer than the chord between the same two points. This is deliberately
- * local (roughly one to four city blocks), so a sensible trip-level arc is not
- * mistaken for the kind of visible triangle shortcut that makes navigation
- * feel broken.
- */
+/** Detects a locally dominated dog-leg rather than penalizing a sensible trip arc. */
 export function measureLocalShortcutRatio(coordinates: GeoPoint[]) {
   if (coordinates.length < 3) return 1;
 
@@ -252,7 +243,6 @@ function routeQualitySignals(route: OsrmRoute, coordinates: GeoPoint[]) {
 
   return {
     turnCount,
-    // A missing steps payload is unknown, not proof of a dark/unnamed route.
     unnamedDistanceRatio:
       stepDistance > 0 ? unnamedDistance / stepDistance : 0.45,
     localShortcutRatio: measureLocalShortcutRatio(coordinates),
@@ -329,8 +319,6 @@ export async function fetchWalkingRoute(
   const cached = getCachedWalkingRoute(start, destination, context);
   if (cached) return cached;
 
-  // Normal callers still share identical work. Ticket selection itself avoids
-  // awaiting a prewarm request by checking in-flight state before calling here.
   const inFlight = walkingRouteInFlight.get(cacheKey);
   if (inFlight) return inFlight.promise;
 
@@ -344,10 +332,7 @@ export async function fetchWalkingRoute(
       options?.deadlineAt === undefined
         ? timeoutMs
         : options.deadlineAt - Date.now();
-    const effectiveTimeout = Math.min(
-      timeoutMs,
-      deadlineRemaining
-    );
+    const effectiveTimeout = Math.min(timeoutMs, deadlineRemaining);
 
     if (effectiveTimeout < 300) {
       throw new Error('Routing deadline reached before fetch');
@@ -407,12 +392,12 @@ export type SlowWalkingRoute = {
 
 function slowRouteTargetSeconds(
   minutes: number,
-  sideMissionCount: number
+  sideEventCount: number
 ) {
   const arrivalSeconds = minutes <= 15 ? 90 : 120;
   return Math.max(
     60,
-    (minutes * 60 * 0.96 - sideMissionCount * 75 - arrivalSeconds) / 1.18
+    (minutes * 60 * 0.96 - sideEventCount * 75 - arrivalSeconds) / 1.18
   );
 }
 
@@ -573,7 +558,7 @@ export async function resolveSlowWalkingRoute(args: {
   start: GeoPoint;
   destination: GeoPoint;
   minutes: number;
-  sideMissionCount: number;
+  sideEventCount: number;
   context?: LightContext;
   avoidRoutes?: GeoPoint[][];
 }): Promise<SlowWalkingRoute> {
@@ -586,14 +571,14 @@ export async function resolveSlowWalkingRoute(args: {
   );
   const targetSeconds = slowRouteTargetSeconds(
     args.minutes,
-    args.sideMissionCount
+    args.sideEventCount
   );
 
   if (directRoute.durationSeconds > targetSeconds * 1.12) {
     const directMinutes = Math.ceil(
       estimatedJourneySeconds(
         directRoute,
-        args.sideMissionCount,
+        args.sideEventCount,
         args.minutes
       ) / 60
     );
@@ -661,18 +646,13 @@ export async function resolveSlowWalkingRoute(args: {
 }
 
 function targetDistance(minutes: number) {
-  const safeMinutes = Math.max(5, Math.min(90, Math.round(minutes / 5) * 5));
+  const safeMinutes = Math.max(10, Math.min(60, Math.round(minutes / 5) * 5));
 
-  if (safeMinutes <= 5) return 220;
   if (safeMinutes <= 10) return 420;
   if (safeMinutes <= 15) return 680;
   if (safeMinutes <= 30) return Math.round(680 + (safeMinutes - 15) * 28);
   if (safeMinutes <= 45) return Math.round(1100 + (safeMinutes - 30) * 22);
-  if (safeMinutes <= 60) return Math.round(1430 + (safeMinutes - 45) * 18);
-
-  // Long Detours reserve more of the time budget for finding and taking
-  // photos instead of stretching the destination proportionally farther.
-  return Math.round(1700 + (safeMinutes - 60) * (400 / 30));
+  return Math.round(1430 + (safeMinutes - 45) * 18);
 }
 
 function routeDistanceProfile(minutes: number, distanceScale = 1) {
@@ -712,9 +692,6 @@ export async function prewarmWalkingRoutes(
   context: LightContext = 'day'
 ) {
   const startedAt = Date.now();
-
-  // Warm only the most likely winner. A second speculative OSRM request has
-  // not earned its latency/throttle cost yet and must never compete with Go.
   const likely = routingShortlist(
     candidates,
     minutes,
@@ -748,11 +725,7 @@ export async function prewarmWalkingRoutes(
       `[DETOUR PREWARM] top route ready in ${Date.now() - startedAt}ms`
     );
   } catch (error) {
-    const reason =
-      error instanceof Error
-        ? error.message
-        : 'unknown';
-
+    const reason = error instanceof Error ? error.message : 'unknown';
     console.log(
       `[DETOUR PREWARM] top route missed in ${Date.now() - startedAt}ms: ${reason}`
     );
@@ -789,9 +762,6 @@ function routeAfterInitialMeters(route: GeoPoint[], ignoreMeters: number) {
 function routeOverlapRatio(route: GeoPoint[], avoidRoutes: GeoPoint[][]) {
   if (route.length < 4 || avoidRoutes.length === 0) return 0;
 
-  // The first few metres out of the user's current position are often
-  // unavoidable. Ignore a fixed walking distance, not a percentage of points,
-  // then treat actual same-street reuse as expensive.
   const usable = routeAfterInitialMeters(
     route,
     ROUTE_REPEAT_START_IGNORE_METERS
@@ -829,15 +799,13 @@ function routeOverlapRatio(route: GeoPoint[], avoidRoutes: GeoPoint[][]) {
 
 function estimatedJourneySeconds(
   route: WalkingRoute,
-  sideMissionCount: number,
+  sideEventCount: number,
   minutes: number
 ) {
-  // OSRM is optimistic in cities. Add crossings / hesitation, then reserve a
-  // compact amount of time for each camera find and the final reveal.
   const cityWalking = route.durationSeconds * 1.18;
-  const findAndPhoto = sideMissionCount * 75;
+  const sideEventTime = sideEventCount * 75;
   const arrival = minutes <= 15 ? 90 : 120;
-  return cityWalking + findAndPhoto + arrival;
+  return cityWalking + sideEventTime + arrival;
 }
 
 type RouteAssessment = {
@@ -855,7 +823,7 @@ function assessRoute(args: {
   profile: ReturnType<typeof routeDistanceProfile>;
   maxDistance: number;
   timeBudgetSeconds: number;
-  sideMissionCount: number;
+  sideEventCount: number;
   minutes: number;
   avoidRoutes: GeoPoint[][];
   straightDistanceMeters: number;
@@ -864,7 +832,7 @@ function assessRoute(args: {
   const overlap = routeOverlapRatio(args.route.coordinates, args.avoidRoutes);
   const estimatedSeconds = estimatedJourneySeconds(
     args.route,
-    args.sideMissionCount,
+    args.sideEventCount,
     args.minutes
   );
   const overtimeSeconds = Math.max(0, estimatedSeconds - args.timeBudgetSeconds);
@@ -873,10 +841,6 @@ function assessRoute(args: {
   const distanceDelta = Math.abs(args.route.distanceMeters - args.profile.target);
   const directnessRatio =
     args.route.distanceMeters / Math.max(80, args.straightDistanceMeters);
-
-  // Detour should come from the destination, not from deliberately inefficient
-  // routing. OSRM supplies the shortest foot leg; if that leg substantially
-  // repeats recent walking or is very circuitous, prefer another Scene.
   const noveltyPenalty = overlap * args.profile.target * 2.4;
   const circuitPenalty =
     Math.max(0, directnessRatio - 1.45) * args.profile.target * 0.9;
@@ -887,10 +851,8 @@ function assessRoute(args: {
     Math.max(0, localShortcutRatio - 1.22) * args.profile.target * 1.25;
   const nightLegibilityPenalty =
     args.context === 'night'
-      ? (
-          args.route.quality.unnamedDistanceRatio * args.profile.target * 0.7 +
-          args.route.quality.turnCount * 16
-        )
+      ? args.route.quality.unnamedDistanceRatio * args.profile.target * 0.7 +
+        args.route.quality.turnCount * 16
       : 0;
   const score =
     distanceDelta * 0.55 +
@@ -943,7 +905,7 @@ function assessRoutedScene(args: {
   profile: ReturnType<typeof routeDistanceProfile>;
   maxDistance: number;
   timeBudgetSeconds: number;
-  sideMissionCount: number;
+  sideEventCount: number;
   minutes: number;
   avoidRoutes: GeoPoint[][];
   context: LightContext;
@@ -958,11 +920,10 @@ function assessRoutedScene(args: {
       profile: args.profile,
       maxDistance: args.maxDistance,
       timeBudgetSeconds: args.timeBudgetSeconds,
-      sideMissionCount: args.sideMissionCount,
+      sideEventCount: args.sideEventCount,
       minutes: args.minutes,
       avoidRoutes: args.avoidRoutes,
-      straightDistanceMeters:
-        args.scene.straightDistanceMeters,
+      straightDistanceMeters: args.scene.straightDistanceMeters,
       context: args.context,
     }),
   };
@@ -974,7 +935,7 @@ export async function resolveRoutedScene(args: {
   minutes: number;
   maxDistanceMeters?: number;
   distanceScale?: number;
-  sideMissionCount?: number;
+  sideEventCount?: number;
   avoidRoutes?: GeoPoint[][];
   context?: LightContext;
 }): Promise<RoutedScene> {
@@ -983,10 +944,10 @@ export async function resolveRoutedScene(args: {
   const distanceScale = args.distanceScale ?? 1;
   const profile = routeDistanceProfile(args.minutes, distanceScale);
   const maxDistance = args.maxDistanceMeters ?? profile.max;
-  const sideMissionCount = args.sideMissionCount ?? 0;
+  const sideEventCount = args.sideEventCount ?? 0;
   const avoidRoutes = args.avoidRoutes ?? [];
   const context = args.context ?? 'day';
-  const timeBudgetSeconds = Math.max(5, args.minutes) * 60;
+  const timeBudgetSeconds = Math.max(10, args.minutes) * 60;
 
   const shortlist = routingShortlist(
     args.candidates,
@@ -1002,8 +963,6 @@ export async function resolveRoutedScene(args: {
   let bestEmergency: RoutedScene | null = null;
   let bestEmergencyScore = Number.POSITIVE_INFINITY;
 
-  // Finished prewarm data is free: inspect it synchronously before touching the
-  // network. Emergency cache results are kept too instead of being discarded.
   for (const scene of shortlist) {
     const route = getCachedWalkingRoute(args.start, scene.point, context);
     if (!route) continue;
@@ -1014,32 +973,21 @@ export async function resolveRoutedScene(args: {
       profile,
       maxDistance,
       timeBudgetSeconds,
-      sideMissionCount,
+      sideEventCount,
       minutes: args.minutes,
       avoidRoutes,
       context,
     });
 
-    if (
-      assessment.preferred &&
-      assessment.score < bestCachedScore
-    ) {
+    if (assessment.preferred && assessment.score < bestCachedScore) {
       bestCached = routed;
       bestCachedScore = assessment.score;
     }
-
-    if (
-      assessment.fallback &&
-      assessment.score < bestFallbackScore
-    ) {
+    if (assessment.fallback && assessment.score < bestFallbackScore) {
       bestFallback = routed;
       bestFallbackScore = assessment.score;
     }
-
-    if (
-      assessment.emergency &&
-      assessment.score < bestEmergencyScore
-    ) {
+    if (assessment.emergency && assessment.score < bestEmergencyScore) {
       bestEmergency = routed;
       bestEmergencyScore = assessment.score;
     }
@@ -1052,8 +1000,6 @@ export async function resolveRoutedScene(args: {
     return bestCached;
   }
 
-  // A running prewarm is only a hint. Give it one tiny grace window, then move
-  // on. The ticket never inherits the prewarm's longer timeout/promise lifetime.
   const busySceneIds = new Set<string>();
 
   for (const scene of shortlist) {
@@ -1065,7 +1011,6 @@ export async function resolveRoutedScene(args: {
       PREWARM_TICKET_GRACE_MS,
       Math.max(0, remaining - 700)
     );
-
     console.log(
       `[DETOUR ROUTE] ${inFlight.purpose} in-flight; grace ${graceMs}ms`
     );
@@ -1084,7 +1029,7 @@ export async function resolveRoutedScene(args: {
         profile,
         maxDistance,
         timeBudgetSeconds,
-        sideMissionCount,
+        sideEventCount,
         minutes: args.minutes,
         avoidRoutes,
         context,
@@ -1096,28 +1041,17 @@ export async function resolveRoutedScene(args: {
         );
         return routed;
       }
-
-      if (
-        assessment.fallback &&
-        assessment.score < bestFallbackScore
-      ) {
+      if (assessment.fallback && assessment.score < bestFallbackScore) {
         bestFallback = routed;
         bestFallbackScore = assessment.score;
       }
-
-      if (
-        assessment.emergency &&
-        assessment.score < bestEmergencyScore
-      ) {
+      if (assessment.emergency && assessment.score < bestEmergencyScore) {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
     } else {
       busySceneIds.add(scene.id);
     }
-
-    // Only one route is allowed to prewarm, so do not spend multiple grace
-    // windows on unrelated background work.
     break;
   }
 
@@ -1126,8 +1060,6 @@ export async function resolveRoutedScene(args: {
   for (const scene of shortlist) {
     if (networkAttempts >= MAX_TICKET_NETWORK_ATTEMPTS) break;
 
-    // If this exact leg is still being warmed, do not await it and do not fire
-    // a duplicate request. Move to another candidate instead.
     if (
       busySceneIds.has(scene.id) &&
       getInFlightWalkingRoute(args.start, scene.point, context)
@@ -1136,8 +1068,6 @@ export async function resolveRoutedScene(args: {
       continue;
     }
 
-    // The prewarm may have finished after the grace window. Re-check cache for
-    // free before spending a network attempt.
     const newlyCached = getCachedWalkingRoute(args.start, scene.point, context);
     if (newlyCached) {
       const { routed, assessment } = assessRoutedScene({
@@ -1146,7 +1076,7 @@ export async function resolveRoutedScene(args: {
         profile,
         maxDistance,
         timeBudgetSeconds,
-        sideMissionCount,
+        sideEventCount,
         minutes: args.minutes,
         avoidRoutes,
         context,
@@ -1158,23 +1088,14 @@ export async function resolveRoutedScene(args: {
         );
         return routed;
       }
-
-      if (
-        assessment.fallback &&
-        assessment.score < bestFallbackScore
-      ) {
+      if (assessment.fallback && assessment.score < bestFallbackScore) {
         bestFallback = routed;
         bestFallbackScore = assessment.score;
       }
-
-      if (
-        assessment.emergency &&
-        assessment.score < bestEmergencyScore
-      ) {
+      if (assessment.emergency && assessment.score < bestEmergencyScore) {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
-
       continue;
     }
 
@@ -1186,7 +1107,6 @@ export async function resolveRoutedScene(args: {
       TICKET_ROUTE_TIMEOUT_MS,
       Math.max(300, remaining - 100)
     );
-
     console.log(
       `[DETOUR ROUTE] network attempt ${networkAttempts} timeout=${timeoutMs}ms`
     );
@@ -1208,7 +1128,7 @@ export async function resolveRoutedScene(args: {
         profile,
         maxDistance,
         timeBudgetSeconds,
-        sideMissionCount,
+        sideEventCount,
         minutes: args.minutes,
         avoidRoutes,
         context,
@@ -1220,31 +1140,19 @@ export async function resolveRoutedScene(args: {
         );
         return routed;
       }
-
-      if (
-        assessment.fallback &&
-        assessment.score < bestFallbackScore
-      ) {
+      if (assessment.fallback && assessment.score < bestFallbackScore) {
         bestFallback = routed;
         bestFallbackScore = assessment.score;
         console.log(
           `[DETOUR ROUTE] kept fallback ${networkAttempts}; checking for a fresher shortest leg`
         );
       }
-
-      if (
-        assessment.emergency &&
-        assessment.score < bestEmergencyScore
-      ) {
+      if (assessment.emergency && assessment.score < bestEmergencyScore) {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
     } catch (error) {
-      const reason =
-        error instanceof Error
-          ? error.message
-          : 'unknown';
-
+      const reason = error instanceof Error ? error.message : 'unknown';
       console.log(
         `[DETOUR ROUTE] attempt ${networkAttempts} missed after ${Date.now() - routingStartedAt}ms: ${reason}`
       );

@@ -29,6 +29,8 @@ export type ColorChoice = {
   hex: string;
 };
 
+// Arrival prompts are still destination-specific and are not part of the
+// side-event scheduler. They are deliberately kept separate from SideEvent.
 export type MissionFamily =
   | 'sound'
   | 'movement'
@@ -46,29 +48,53 @@ export type MissionFamily =
   | 'boundary'
   | 'perspective';
 
-export type MissionGaze = 'up' | 'level' | 'down' | 'flex' | 'self';
-export type MissionKind = 'photo-target' | 'context';
-
 export type Mission = {
   id: string;
   code: string;
   family?: MissionFamily;
-  kind?: MissionKind;
-  gaze?: MissionGaze;
   title: string;
   instruction: string;
   completion: string;
-  // true = photo is required by the current UI. The new product direction
-  // treats photo targets as invitations rather than completion gates.
   photo: boolean;
   portable: boolean;
+};
+
+export type SideEventGaze = 'up' | 'level' | 'down' | 'flex' | 'self';
+export type SideEventKind = 'photo-target' | 'context';
+export type SideEventContext =
+  | 'safe-stop'
+  | 'seat'
+  | 'shade'
+  | 'corner'
+  | 'traffic'
+  | 'busy'
+  | 'quiet'
+  | 'open-space';
+
+export type SideEvent = {
+  id: string;
+  kind: SideEventKind;
+  title: string;
+  instruction: string;
+  photoSuggested: boolean;
+  gaze: SideEventGaze;
+  context?: SideEventContext;
+};
+
+export type SideEventTriggerWindow = {
+  slot: number;
+  targetProgress: number;
+  earliestProgress: number;
+  latestProgress: number;
+  targetMovingSeconds: number;
+  latestMovingSeconds: number;
 };
 
 export type JourneyProfile = {
   minutes: number;
   targetDistanceMeters: number;
-  sideMissionCount: number;
-  milestones: number[];
+  sideEventCount: number;
+  triggerWindows: SideEventTriggerWindow[];
 };
 
 export type JourneyPlan = {
@@ -77,7 +103,6 @@ export type JourneyPlan = {
   contextLabel: string;
   contextNote: string;
   profile: JourneyProfile;
-  sideMissions: Mission[];
   arrivalMission: Mission;
 };
 
@@ -92,13 +117,16 @@ export const COLORS: ColorChoice[] = [
 
 type PhotoTargetDefinition = {
   label: string;
-  gaze: MissionGaze;
+  gaze: SideEventGaze;
 };
 
-// 2026-09-16 pool reset.
-// These 68 photo targets replace the previous Side Quest prompt pools.
-// Keep targets objective and easy to judge at a glance. Do not add subjective
-// qualifiers such as "漂亮", "有趣", "奇怪", etc.
+type ContextEventDefinition = {
+  title: string;
+  context: SideEventContext;
+};
+
+// Reviewed 2026-09-16. Keep these objective and instantly judgeable. New
+// targets can be appended later; this list is a starting pool, not a cap.
 export const PHOTO_TARGETS: readonly PhotoTargetDefinition[] = [
   { label: '冷氣室外機', gaze: 'up' },
   { label: '遮雨棚', gaze: 'up' },
@@ -170,21 +198,52 @@ export const PHOTO_TARGETS: readonly PhotoTargetDefinition[] = [
   { label: '自己的影子', gaze: 'self' },
 ];
 
-// Context side events intentionally do not require photo or completion.
-// They are meant to change the walking rhythm without forcing a detour,
-// turning back, or a fixed success condition.
-export const CONTEXT_SIDE_EVENTS: readonly string[] = [
-  '找個地方坐一下。',
-  '找個不擋路的地方停一下。',
-  '有適合休息的地方，就休息一下。',
-  '有遮蔭的地方，可以停一下。',
-  '在街角停一下，看看人流。',
-  '找個安全的位置停一下，看看車流。',
-  '經過比較熱鬧的地方，可以停一下看看。',
-  '經過比較安靜的地方，可以停一下。',
-  '到比較開闊的地方時，停一下看看周圍。',
-  '前面如果有可以坐的地方，就坐一下再走。',
+export const CONTEXT_SIDE_EVENTS: readonly ContextEventDefinition[] = [
+  { title: '找個地方坐一下。', context: 'seat' },
+  { title: '找個不擋路的地方停一下。', context: 'safe-stop' },
+  { title: '有適合休息的地方，就休息一下。', context: 'safe-stop' },
+  { title: '有遮蔭的地方，可以停一下。', context: 'shade' },
+  { title: '在街角停一下，看看人流。', context: 'corner' },
+  { title: '找個安全的位置停一下，看看車流。', context: 'traffic' },
+  { title: '經過比較熱鬧的地方，可以停一下看看。', context: 'busy' },
+  { title: '經過比較安靜的地方，可以停一下。', context: 'quiet' },
+  { title: '到比較開闊的地方時，停一下看看周圍。', context: 'open-space' },
+  { title: '前面如果有可以坐的地方，就坐一下再走。', context: 'seat' },
 ];
+
+const PHOTO_SIDE_EVENTS: readonly SideEvent[] = PHOTO_TARGETS.map(
+  (target, index) => ({
+    id: `photo-${String(index + 1).padStart(3, '0')}`,
+    kind: 'photo-target',
+    gaze: target.gaze,
+    title:
+      target.gaze === 'self'
+        ? target.label === '現在穿的鞋子'
+          ? '拍一下現在穿的鞋子。'
+          : target.label === '現在手上拿的東西'
+            ? '拍一下現在手上拿的東西。'
+            : target.label === '今天穿的衣服'
+              ? '拍一下今天穿的衣服。'
+              : '拍一下自己的影子。'
+        : target.label === '目前看得到最高的建築'
+          ? '找找看目前看得到最高的建築。'
+          : `找找看有沒有${target.label}。`,
+    instruction: target.gaze === 'self' ? '' : '如果有的話拍下它。',
+    photoSuggested: true,
+  })
+);
+
+const CONTEXT_EVENTS: readonly SideEvent[] = CONTEXT_SIDE_EVENTS.map(
+  (event, index) => ({
+    id: `context-${String(index + 1).padStart(2, '0')}`,
+    kind: 'context',
+    gaze: 'flex',
+    title: event.title,
+    instruction: '',
+    photoSuggested: false,
+    context: event.context,
+  })
+);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -204,9 +263,7 @@ export function getLightContext(
   const latitude = point.latitude * radians;
   const days = dayOfYear(date);
   const localHour =
-    date.getHours() +
-    date.getMinutes() / 60 +
-    date.getSeconds() / 3600;
+    date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
 
   const gamma =
     (2 * Math.PI * (days - 1 + (localHour - 12) / 24)) / 365;
@@ -230,15 +287,10 @@ export function getLightContext(
 
   const timezoneHours = -date.getTimezoneOffset() / 60;
   const localMinutes =
-    date.getHours() * 60 +
-    date.getMinutes() +
-    date.getSeconds() / 60;
+    date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 
   let trueSolarMinutes =
-    localMinutes +
-    equationOfTime +
-    4 * point.longitude -
-    60 * timezoneHours;
+    localMinutes + equationOfTime + 4 * point.longitude - 60 * timezoneHours;
 
   trueSolarMinutes = ((trueSolarMinutes % 1440) + 1440) % 1440;
 
@@ -247,9 +299,7 @@ export function getLightContext(
 
   const cosineZenith = clamp(
     Math.sin(latitude) * Math.sin(declination) +
-      Math.cos(latitude) *
-        Math.cos(declination) *
-        Math.cos(hourAngle),
+      Math.cos(latitude) * Math.cos(declination) * Math.cos(hourAngle),
     -1,
     1
   );
@@ -286,158 +336,106 @@ export function getContextMeta(context: LightContext) {
   };
 }
 
+export function getSideEventCount(minutes: number) {
+  if (minutes <= 15) return 3;
+  if (minutes <= 25) return 5;
+  if (minutes <= 35) return 7;
+  if (minutes <= 45) return 9;
+  return 10;
+}
+
+function targetDistance(minutes: number) {
+  if (minutes <= 10) return 420;
+  if (minutes <= 15) return 680;
+  if (minutes <= 30) return Math.round(680 + (minutes - 15) * 28);
+  if (minutes <= 45) return Math.round(1100 + (minutes - 30) * 22);
+  return Math.round(1430 + (minutes - 45) * 18);
+}
+
+function buildTriggerWindows(minutes: number, count: number) {
+  if (count <= 0) return [];
+
+  const firstProgress = 0.06;
+  const lastProgress = 0.9;
+  const activeMovingBudget = minutes * 60 * 0.82;
+  const firstMovingSeconds = Math.min(90, Math.max(45, minutes * 6));
+  const lastMovingSeconds = activeMovingBudget * 0.92;
+
+  return Array.from({ length: count }, (_, index): SideEventTriggerWindow => {
+    const fraction = count === 1 ? 0 : index / (count - 1);
+    const targetProgress =
+      firstProgress + (lastProgress - firstProgress) * fraction;
+    const targetMovingSeconds =
+      firstMovingSeconds + (lastMovingSeconds - firstMovingSeconds) * fraction;
+
+    return {
+      slot: index,
+      targetProgress: Number(targetProgress.toFixed(3)),
+      earliestProgress: Number(Math.max(0, targetProgress - 0.045).toFixed(3)),
+      latestProgress: Number(Math.min(0.96, targetProgress + 0.055).toFixed(3)),
+      targetMovingSeconds: Math.round(targetMovingSeconds),
+      latestMovingSeconds: Math.round(targetMovingSeconds + Math.max(75, minutes * 4)),
+    };
+  });
+}
+
 export function getJourneyProfile(minutes: number): JourneyProfile {
-  // Keep the existing journey timing behavior for now. The pool reset is
-  // intentionally isolated from the new trigger/count system being designed.
-  const safeMinutes = clamp(Math.round(minutes / 5) * 5, 5, 90);
-  let targetDistanceMeters: number;
-  let sideMissionCount: number;
+  const safeMinutes = clamp(Math.round(minutes / 5) * 5, 10, 60);
+  const sideEventCount = getSideEventCount(safeMinutes);
 
-  if (safeMinutes <= 5) {
-    targetDistanceMeters = 220;
-    sideMissionCount = 1;
-  } else if (safeMinutes <= 10) {
-    targetDistanceMeters = 420;
-    sideMissionCount = 2;
-  } else if (safeMinutes <= 15) {
-    targetDistanceMeters = 680;
-    sideMissionCount = 2;
-  } else if (safeMinutes <= 30) {
-    targetDistanceMeters = Math.round(680 + (safeMinutes - 15) * 28);
-    sideMissionCount = 3;
-  } else if (safeMinutes <= 45) {
-    targetDistanceMeters = Math.round(1100 + (safeMinutes - 30) * 22);
-    sideMissionCount = 4;
-  } else if (safeMinutes <= 60) {
-    targetDistanceMeters = Math.round(1430 + (safeMinutes - 45) * 18);
-    sideMissionCount = 4;
-  } else {
-    targetDistanceMeters = Math.round(1700 + (safeMinutes - 60) * (400 / 30));
-    sideMissionCount = 4;
-  }
-
-  const milestones = Array.from(
-    { length: sideMissionCount },
-    (_, index) =>
-      Number((((index + 1) / (sideMissionCount + 1)) * 0.9).toFixed(2))
-  );
-
-  return { minutes: safeMinutes, targetDistanceMeters, sideMissionCount, milestones };
+  return {
+    minutes: safeMinutes,
+    targetDistanceMeters: targetDistance(safeMinutes),
+    sideEventCount,
+    triggerWindows: buildTriggerWindows(safeMinutes, sideEventCount),
+  };
 }
 
-function photoMissionFamily(gaze: MissionGaze): MissionFamily {
-  if (gaze === 'up') return 'perspective';
-  if (gaze === 'down') return 'texture';
-  if (gaze === 'flex') return 'pattern';
-  if (gaze === 'self') return 'framing';
-  return 'visual';
-}
-
-function photoPrompt(label: string, gaze: MissionGaze) {
-  if (gaze === 'self') {
-    if (label === '現在穿的鞋子') return '拍一下現在穿的鞋子。';
-    if (label === '現在手上拿的東西') return '拍一下現在手上拿的東西。';
-    if (label === '今天穿的衣服') return '拍一下今天穿的衣服。';
-    if (label === '自己的影子') return '拍一下自己的影子。';
-  }
-
-  if (label === '目前看得到最高的建築') {
-    return '找找看目前看得到最高的建築。';
-  }
-
-  return `找找看有沒有${label}。`;
-}
-
-function photoTargetMissions(): Mission[] {
-  return PHOTO_TARGETS.map((target, index) => ({
-    id: `photo-target-${index + 1}`,
-    code: `PHOTO_TARGET_${String(index + 1).padStart(3, '0')}`,
-    family: photoMissionFamily(target.gaze),
-    kind: 'photo-target',
-    gaze: target.gaze,
-    title: photoPrompt(target.label, target.gaze),
-    instruction:
-      target.gaze === 'self'
-        ? ''
-        : '如果有的話拍下它。',
-    completion: '',
-    photo: true,
-    portable: true,
-  }));
-}
-
-function contextSideMissions(): Mission[] {
-  return CONTEXT_SIDE_EVENTS.map((title, index) => ({
-    id: `context-side-event-${index + 1}`,
-    code: `CONTEXT_EVENT_${String(index + 1).padStart(2, '0')}`,
-    family: 'pause',
-    kind: 'context',
-    gaze: 'flex',
-    title,
-    instruction: '',
-    completion: '',
-    photo: false,
-    portable: true,
-  }));
-}
-
-function shuffle<T>(items: T[]): T[] {
+function shuffle<T>(items: readonly T[]) {
   const copy = [...items];
-
   for (let index = copy.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
   }
-
   return copy;
 }
 
-function missionFamily(mission: Mission): MissionFamily {
-  if (mission.family) return mission.family;
-  if (mission.photo) return 'photo';
-  return 'visual';
-}
+export function pickSideEvent(args: {
+  seenIds?: Iterable<string>;
+  previousGaze?: SideEventGaze | null;
+  allowedContexts?: readonly SideEventContext[];
+}) {
+  const seen = new Set(args.seenIds ?? []);
+  const allowedContexts = new Set(args.allowedContexts ?? []);
+  const contextCandidates = CONTEXT_EVENTS.filter(
+    (event) => event.context && allowedContexts.has(event.context)
+  );
 
-function selectVariedMissions(pool: Mission[], count: number) {
-  const shuffled = shuffle(pool);
-  const selected: Mission[] = [];
-  const usedIds = new Set<string>();
+  // Context events are seasoning, not the main loop. When context is actually
+  // available, give it roughly one chance in five.
+  const preferContext =
+    contextCandidates.length > 0 && Math.random() < 0.2;
+  const primary = preferContext ? contextCandidates : PHOTO_SIDE_EVENTS;
+  const secondary = preferContext ? PHOTO_SIDE_EVENTS : contextCandidates;
 
-  while (selected.length < count && usedIds.size < shuffled.length) {
-    const previousFamily =
-      selected.length > 0
-        ? missionFamily(selected[selected.length - 1])
-        : null;
-
-    let candidate =
+  const choose = (pool: readonly SideEvent[]) => {
+    const shuffled = shuffle(pool);
+    return (
       shuffled.find(
-        (mission) =>
-          !usedIds.has(mission.id) &&
-          missionFamily(mission) !== previousFamily
+        (event) =>
+          !seen.has(event.id) &&
+          (!args.previousGaze || event.gaze !== args.previousGaze)
       ) ??
-      shuffled.find((mission) => !usedIds.has(mission.id));
+      shuffled.find((event) => !seen.has(event.id)) ??
+      shuffled.find(
+        (event) => !args.previousGaze || event.gaze !== args.previousGaze
+      ) ??
+      shuffled[0] ??
+      null
+    );
+  };
 
-    if (!candidate) break;
-
-    // Do not begin a Detour by telling the user to stop.
-    if (
-      selected.length === 0 &&
-      missionFamily(candidate) === 'pause'
-    ) {
-      const replacement = shuffled.find(
-        (mission) =>
-          !usedIds.has(mission.id) &&
-          missionFamily(mission) !== 'pause'
-      );
-
-      if (replacement) candidate = replacement;
-    }
-
-    selected.push(candidate);
-    usedIds.add(candidate.id);
-  }
-
-  return selected;
+  return choose(primary) ?? choose(secondary);
 }
 
 function arrivalMission(args: {
@@ -452,45 +450,9 @@ function arrivalMission(args: {
       instruction: args.color
         ? `這趟一路找的是${args.color.label}。看到就拍，沒看到也不用回頭。`
         : '這趟的顏色散步到這裡結束。',
-      completion: '抵達終點就完成這趟 DETOUR。',
+      completion: '',
       photo: false,
       portable: true,
-    };
-  }
-
-  if (args.moodId === 'quiet') {
-    return {
-      id: 'arrival-quiet',
-      code: 'ARRIVAL',
-      title: '到了。先不要離開。',
-      instruction: '找出你現在最近的聲音和最遠的聲音，各聽一次。',
-      completion: '兩個聲音都能指出來，就完成主線。',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (args.moodId === 'weird') {
-    return {
-      id: 'arrival-weird',
-      code: 'ARRIVAL',
-      title: '到了。找一個不合理的細節。',
-      instruction: '只看公共可見範圍。找一個你暫時不知道為什麼會在這裡的東西。',
-      completion: '先猜一個理由，就完成主線。',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (args.moodId === 'food') {
-    return {
-      id: 'arrival-food',
-      code: 'ARRIVAL PROOF',
-      title: '到了。拍下 DETOUR 的最後證據。',
-      instruction: '這裡不再叫你決定要吃什麼。拍下目前最符合這趟「熱食」規則的公開食物線索；真正接回 Scene Engine 後，這一站會直接是一個由 DETOUR 選好的實際食物目的地。',
-      completion: '拍下最後一個食物線索，就完成主線。',
-      photo: true,
-      portable: false,
     };
   }
 
@@ -500,18 +462,18 @@ function arrivalMission(args: {
       code: 'ARRIVAL',
       title: '到了。',
       instruction: '這趟沒有走最快的路，但有好好走到你要去的地方。',
-      completion: '抵達目的地就完成這趟 DETOUR。',
+      completion: '',
       photo: false,
       portable: true,
     };
   }
 
   return {
-    id: 'arrival-wander',
+    id: 'arrival-default',
     code: 'ARRIVAL',
-    title: '到了。找一組反差。',
-    instruction: '站在原地或公共可走範圍內，找兩個靠得很近、但材質、大小或用途明顯不同的東西。',
-    completion: '兩個都指出來，就完成主線。',
+    title: '到了。',
+    instruction: '看看這次 DETOUR 把你帶到哪裡。',
+    completion: '',
     photo: false,
     portable: true,
   };
@@ -523,21 +485,12 @@ export function buildJourneyPlan(args: {
   context: LightContext;
   color?: ColorChoice | null;
 }): JourneyPlan {
-  const profile = getJourneyProfile(args.minutes);
-  const meta = getContextMeta(args.context);
-
-  const pool = [
-    ...photoTargetMissions(),
-    ...contextSideMissions(),
-  ];
-
-  const unique =
+  const baseProfile = getJourneyProfile(args.minutes);
+  const profile =
     args.moodId === 'color'
-      ? []
-      : selectVariedMissions(
-          pool,
-          profile.sideMissionCount
-        );
+      ? { ...baseProfile, sideEventCount: 0, triggerWindows: [] }
+      : baseProfile;
+  const meta = getContextMeta(args.context);
 
   return {
     context: args.context,
@@ -545,7 +498,6 @@ export function buildJourneyPlan(args: {
     contextLabel: meta.label,
     contextNote: meta.note,
     profile,
-    sideMissions: unique,
     arrivalMission: arrivalMission({
       moodId: args.moodId,
       color: args.color,

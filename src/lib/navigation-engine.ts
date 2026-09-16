@@ -18,7 +18,6 @@ export type NavigationBeat = {
   segmentCoordinates: GeoPoint[];
   instruction: string;
   hint: string;
-  missionIndex?: number;
 };
 
 export type NavigationRoute = {
@@ -70,13 +69,9 @@ export function bearingBetween(a: GeoPoint, b: GeoPoint) {
   const y = Math.sin(dLon) * Math.cos(lat2);
   const x =
     Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) *
-      Math.cos(lat2) *
-      Math.cos(dLon);
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
 
-  return normalizeDegrees(
-    toDegrees(Math.atan2(y, x))
-  );
+  return normalizeDegrees(toDegrees(Math.atan2(y, x)));
 }
 
 export function offsetPoint(
@@ -92,9 +87,7 @@ export function offsetPoint(
 
   const lat2 = Math.asin(
     Math.sin(lat1) * Math.cos(angularDistance) +
-      Math.cos(lat1) *
-        Math.sin(angularDistance) *
-        Math.cos(bearing)
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing)
   );
 
   const lon2 =
@@ -103,8 +96,7 @@ export function offsetPoint(
       Math.sin(bearing) *
         Math.sin(angularDistance) *
         Math.cos(lat1),
-      Math.cos(angularDistance) -
-        Math.sin(lat1) * Math.sin(lat2)
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
     );
 
   return {
@@ -124,21 +116,14 @@ export function moveToward(
     return to;
   }
 
-  return offsetPoint(
-    from,
-    distanceMeters,
-    bearingBetween(from, to)
-  );
+  return offsetPoint(from, distanceMeters, bearingBetween(from, to));
 }
 
 function polylineDistance(points: GeoPoint[]) {
   let total = 0;
 
   for (let index = 1; index < points.length; index += 1) {
-    total += distanceBetween(
-      points[index - 1],
-      points[index]
-    );
+    total += distanceBetween(points[index - 1], points[index]);
   }
 
   return total;
@@ -208,49 +193,6 @@ function copyForTurn(
   };
 }
 
-function buildMissionMap(
-  beatCount: number,
-  missionCount: number,
-  missionIndexOffset = 0
-) {
-  const result = new Map<number, number>();
-
-  if (missionCount <= 0) return result;
-
-  for (
-    let missionIndex = 0;
-    missionIndex < missionCount;
-    missionIndex += 1
-  ) {
-    const fraction =
-      (missionIndex + 1) / (missionCount + 1);
-
-    let beatIndex = Math.max(
-      0,
-      Math.min(
-        beatCount - 2,
-        Math.round(
-          fraction * (beatCount - 1)
-        ) - 1
-      )
-    );
-
-    while (
-      result.has(beatIndex) &&
-      beatIndex < beatCount - 2
-    ) {
-      beatIndex += 1;
-    }
-
-    result.set(
-      beatIndex,
-      missionIndex + missionIndexOffset
-    );
-  }
-
-  return result;
-}
-
 function splitPolyline(
   coordinates: GeoPoint[],
   targetSegmentMeters: number
@@ -260,46 +202,24 @@ function splitPolyline(
   }
 
   const segments: GeoPoint[][] = [];
-  let currentSegment: GeoPoint[] = [
-    coordinates[0],
-  ];
+  let currentSegment: GeoPoint[] = [coordinates[0]];
   let accumulated = 0;
 
-  for (
-    let index = 1;
-    index < coordinates.length;
-    index += 1
-  ) {
-    let edgeStart =
-      currentSegment[currentSegment.length - 1];
+  for (let index = 1; index < coordinates.length; index += 1) {
+    let edgeStart = currentSegment[currentSegment.length - 1];
     const edgeEnd = coordinates[index];
-    let edgeDistance = distanceBetween(
-      edgeStart,
-      edgeEnd
-    );
+    let edgeDistance = distanceBetween(edgeStart, edgeEnd);
 
-    while (
-      accumulated + edgeDistance >=
-      targetSegmentMeters
-    ) {
-      const needed =
-        targetSegmentMeters - accumulated;
-
-      const splitPoint = moveToward(
-        edgeStart,
-        edgeEnd,
-        needed
-      );
+    while (accumulated + edgeDistance >= targetSegmentMeters) {
+      const needed = targetSegmentMeters - accumulated;
+      const splitPoint = moveToward(edgeStart, edgeEnd, needed);
 
       currentSegment.push(splitPoint);
       segments.push(currentSegment);
 
       currentSegment = [splitPoint];
       edgeStart = splitPoint;
-      edgeDistance = distanceBetween(
-        edgeStart,
-        edgeEnd
-      );
+      edgeDistance = distanceBetween(edgeStart, edgeEnd);
       accumulated = 0;
 
       if (edgeDistance < 0.5) break;
@@ -312,19 +232,11 @@ function splitPolyline(
   }
 
   if (currentSegment.length >= 2) {
-    const finalDistance =
-      polylineDistance(currentSegment);
+    const finalDistance = polylineDistance(currentSegment);
 
-    if (
-      segments.length > 0 &&
-      finalDistance < targetSegmentMeters * 0.38
-    ) {
+    if (segments.length > 0 && finalDistance < targetSegmentMeters * 0.38) {
       const previous = segments.pop() ?? [];
-      const merged = [
-        ...previous,
-        ...currentSegment.slice(1),
-      ];
-      segments.push(merged);
+      segments.push([...previous, ...currentSegment.slice(1)]);
     } else {
       segments.push(currentSegment);
     }
@@ -335,24 +247,15 @@ function splitPolyline(
 
 function firstUsefulBearing(points: GeoPoint[]) {
   for (let index = 1; index < points.length; index += 1) {
-    const distance = distanceBetween(
-      points[0],
-      points[index]
-    );
+    const distance = distanceBetween(points[0], points[index]);
 
     if (distance >= 4) {
-      return bearingBetween(
-        points[0],
-        points[index]
-      );
+      return bearingBetween(points[0], points[index]);
     }
   }
 
   return points.length >= 2
-    ? bearingBetween(
-        points[0],
-        points[points.length - 1]
-      )
+    ? bearingBetween(points[0], points[points.length - 1])
     : 0;
 }
 
@@ -360,98 +263,41 @@ export function buildNavigationRouteFromPolyline(args: {
   coordinates: GeoPoint[];
   totalDistanceMeters: number;
   durationSeconds?: number;
-  sideMissionCount: number;
-  missionIndexOffset?: number;
 }): NavigationRoute {
-  const minimumBeatCount =
-    args.sideMissionCount + 3;
-
   const distanceBeatCount = Math.max(
     5,
-    Math.ceil(
-      args.totalDistanceMeters / 58
-    )
+    Math.ceil(args.totalDistanceMeters / 58)
   );
-
-  const desiredBeatCount = Math.min(
-    15,
-    Math.max(
-      minimumBeatCount,
-      distanceBeatCount
-    )
-  );
-
+  const desiredBeatCount = Math.min(15, distanceBeatCount);
   const targetSegmentMeters = Math.max(
     32,
-    Math.min(
-      78,
-      args.totalDistanceMeters /
-        desiredBeatCount
-    )
+    Math.min(78, args.totalDistanceMeters / desiredBeatCount)
   );
 
-  let segments = splitPolyline(
-    args.coordinates,
-    targetSegmentMeters
-  );
-
-  // Ensure there are enough hooks for missions.
-  if (
-    segments.length <
-    minimumBeatCount
-  ) {
-    segments = splitPolyline(
-      args.coordinates,
-      Math.max(
-        24,
-        args.totalDistanceMeters /
-          minimumBeatCount
-      )
-    );
-  }
-
-  const missionMap = buildMissionMap(
-    segments.length,
-    args.sideMissionCount,
-    args.missionIndexOffset ?? 0
-  );
-
+  const segments = splitPolyline(args.coordinates, targetSegmentMeters);
   const beats: NavigationBeat[] = [];
   let previousBearing: number | null = null;
 
   segments.forEach((segment, index) => {
-    const isLast =
-      index === segments.length - 1;
-    const bearing =
-      firstUsefulBearing(segment);
-
+    const isLast = index === segments.length - 1;
+    const bearing = firstUsefulBearing(segment);
     const turn =
       index === 0
         ? 'start'
         : isLast
           ? 'arrive'
-          : turnFromDelta(
-              bearing -
-                (previousBearing ?? bearing)
-            );
-
-    const copy = copyForTurn(
-      turn,
-      isLast,
-      index === 0
-    );
+          : turnFromDelta(bearing - (previousBearing ?? bearing));
+    const copy = copyForTurn(turn, isLast, index === 0);
 
     beats.push({
       id: `beat-${index + 1}`,
       point: segment[segment.length - 1],
       turn,
       bearingDegrees: bearing,
-      segmentDistanceMeters:
-        polylineDistance(segment),
+      segmentDistanceMeters: polylineDistance(segment),
       segmentCoordinates: segment,
       instruction: copy.instruction,
       hint: copy.hint,
-      missionIndex: missionMap.get(index),
     });
 
     previousBearing = bearing;
@@ -460,8 +306,7 @@ export function buildNavigationRouteFromPolyline(args: {
   return {
     coordinates: args.coordinates,
     beats,
-    totalDistanceMeters:
-      args.totalDistanceMeters,
+    totalDistanceMeters: args.totalDistanceMeters,
     durationSeconds: args.durationSeconds,
     source: 'real',
   };
@@ -486,53 +331,31 @@ function projectPointToSegment(
       toRadians(value.longitude - point.longitude) *
       Math.cos(originLat) *
       radius,
-    y:
-      toRadians(value.latitude - point.latitude) *
-      radius,
+    y: toRadians(value.latitude - point.latitude) * radius,
   });
 
   const a = toXY(start);
   const b = toXY(end);
   const abX = b.x - a.x;
   const abY = b.y - a.y;
-  const lengthSquared =
-    abX * abX + abY * abY;
-
+  const lengthSquared = abX * abX + abY * abY;
   const rawT =
     lengthSquared <= 0.0001
       ? 0
-      : -(
-          a.x * abX +
-          a.y * abY
-        ) / lengthSquared;
-
-  const t = Math.max(
-    0,
-    Math.min(1, rawT)
-  );
-
-  const projectedX =
-    a.x + abX * t;
-  const projectedY =
-    a.y + abY * t;
+      : -(a.x * abX + a.y * abY) / lengthSquared;
+  const t = Math.max(0, Math.min(1, rawT));
+  const projectedX = a.x + abX * t;
+  const projectedY = a.y + abY * t;
 
   const projectedPoint: GeoPoint = {
-    latitude:
-      point.latitude +
-      toDegrees(projectedY / radius),
+    latitude: point.latitude + toDegrees(projectedY / radius),
     longitude:
       point.longitude +
-      toDegrees(
-        projectedX /
-          (radius * Math.cos(originLat))
-      ),
+      toDegrees(projectedX / (radius * Math.cos(originLat))),
   };
 
   return {
-    distanceMeters: Math.hypot(
-      projectedX,
-      projectedY
-    ),
+    distanceMeters: Math.hypot(projectedX, projectedY),
     t,
     point: projectedPoint,
   };
@@ -548,35 +371,22 @@ function closestPolylinePosition(
       projection: {
         distanceMeters: Infinity,
         t: 0,
-        point:
-          coordinates[0] ?? point,
+        point: coordinates[0] ?? point,
       } satisfies SegmentProjection,
     };
   }
 
   let bestIndex = 0;
-  let best = projectPointToSegment(
-    point,
-    coordinates[0],
-    coordinates[1]
-  );
+  let best = projectPointToSegment(point, coordinates[0], coordinates[1]);
 
-  for (
-    let index = 1;
-    index < coordinates.length - 1;
-    index += 1
-  ) {
-    const projection =
-      projectPointToSegment(
-        point,
-        coordinates[index],
-        coordinates[index + 1]
-      );
+  for (let index = 1; index < coordinates.length - 1; index += 1) {
+    const projection = projectPointToSegment(
+      point,
+      coordinates[index],
+      coordinates[index + 1]
+    );
 
-    if (
-      projection.distanceMeters <
-      best.distanceMeters
-    ) {
+    if (projection.distanceMeters < best.distanceMeters) {
       best = projection;
       bestIndex = index;
     }
@@ -592,10 +402,7 @@ export function distanceToPolyline(
   point: GeoPoint,
   coordinates: GeoPoint[]
 ) {
-  return closestPolylinePosition(
-    point,
-    coordinates
-  ).projection.distanceMeters;
+  return closestPolylinePosition(point, coordinates).projection.distanceMeters;
 }
 
 export function remainingDistanceOnPolyline(
@@ -604,29 +411,18 @@ export function remainingDistanceOnPolyline(
 ) {
   if (coordinates.length < 2) return 0;
 
-  const closest =
-    closestPolylinePosition(
-      point,
-      coordinates
-    );
-
+  const closest = closestPolylinePosition(point, coordinates);
   let total = distanceBetween(
     closest.projection.point,
-    coordinates[
-      closest.segmentIndex + 1
-    ]
+    coordinates[closest.segmentIndex + 1]
   );
 
   for (
-    let index =
-      closest.segmentIndex + 2;
+    let index = closest.segmentIndex + 2;
     index < coordinates.length;
     index += 1
   ) {
-    total += distanceBetween(
-      coordinates[index - 1],
-      coordinates[index]
-    );
+    total += distanceBetween(coordinates[index - 1], coordinates[index]);
   }
 
   return total;
@@ -641,84 +437,50 @@ export function guidanceBearingOnPolyline(
     return 0;
   }
 
-  const closest =
-    closestPolylinePosition(
-      point,
-      coordinates
-    );
-
-  let cursor =
-    closest.projection.point;
-  let remainingLookAhead =
-    lookAheadMeters;
+  const closest = closestPolylinePosition(point, coordinates);
+  let cursor = closest.projection.point;
+  let remainingLookAhead = lookAheadMeters;
 
   for (
-    let index =
-      closest.segmentIndex + 1;
+    let index = closest.segmentIndex + 1;
     index < coordinates.length;
     index += 1
   ) {
-    const target =
-      coordinates[index];
+    const target = coordinates[index];
+    const distance = distanceBetween(cursor, target);
 
-    const distance =
-      distanceBetween(
+    if (distance >= remainingLookAhead) {
+      const lookAheadPoint = moveToward(
         cursor,
-        target
+        target,
+        remainingLookAhead
       );
-
-    if (
-      distance >=
-      remainingLookAhead
-    ) {
-      const lookAheadPoint =
-        moveToward(
-          cursor,
-          target,
-          remainingLookAhead
-        );
-
-      return bearingBetween(
-        point,
-        lookAheadPoint
-      );
+      return bearingBetween(point, lookAheadPoint);
     }
 
     remainingLookAhead -= distance;
     cursor = target;
   }
 
-  return bearingBetween(
-    point,
-    coordinates[
-      coordinates.length - 1
-    ]
-  );
+  return bearingBetween(point, coordinates[coordinates.length - 1]);
 }
 
 export function relativeArrowDegrees(
   routeBearingDegrees: number,
   deviceHeadingDegrees: number
 ) {
-  return signedAngle(
-    routeBearingDegrees -
-      deviceHeadingDegrees
-  );
+  return signedAngle(routeBearingDegrees - deviceHeadingDegrees);
 }
 
 // Kept only as a development fallback utility.
 export function buildPrototypeNavigationRoute(args: {
   start: GeoPoint;
   totalDistanceMeters: number;
-  sideMissionCount: number;
   seed?: number;
 }): NavigationRoute {
   const points: GeoPoint[] = [args.start];
   let cursor = args.start;
-  const count = Math.max(
-    args.sideMissionCount + 3,
-    6
-  );
+  const count = 6;
 
   for (let index = 0; index < count; index += 1) {
     cursor = offsetPoint(
@@ -731,9 +493,6 @@ export function buildPrototypeNavigationRoute(args: {
 
   return buildNavigationRouteFromPolyline({
     coordinates: points,
-    totalDistanceMeters:
-      args.totalDistanceMeters,
-    sideMissionCount:
-      args.sideMissionCount,
+    totalDistanceMeters: args.totalDistanceMeters,
   });
 }
