@@ -216,6 +216,9 @@ export function useDetourHomeController() {
   } = usePassportStore();
 
 
+  const playtestSessionIdRef =
+    useRef<string | null>(null);
+
   const {
     playtestSessions,
     setPlaytestSessions,
@@ -262,8 +265,6 @@ export function useDetourHomeController() {
   const offRouteCountRef = useRef(0);
   const rerouteInFlightRef = useRef(false);
   const checkpointLockedRef = useRef(false);
-  const playtestSessionIdRef =
-    useRef<string | null>(null);
   const rerouteCountRef = useRef(0);
   const detourStartedAtRef = useRef<string | null>(null);
   const sceneFailuresRef =
