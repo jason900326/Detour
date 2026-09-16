@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Image,
+  KeyboardAvoidingView,
   Modal,
   PixelRatio,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -31,6 +33,8 @@ import {
   DETOUR_TICKET_WIDTH,
 } from './ticket-visuals';
 import { CollectionStages } from './home/collection-stages';
+
+const HOME_TIME_LABELS = [10, 20, 30, 40, 50, 60] as const;
 
 export function DetourHomeView({
   controller,
@@ -118,6 +122,7 @@ export function DetourHomeView({
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
+  const [ticketDisplayReady, setTicketDisplayReady] = useState(false);
 
   const printingLayout = useMemo(() => {
     const baseSidePadding = 30;
@@ -165,6 +170,17 @@ export function DetourHomeView({
     windowHeight,
     windowWidth,
   ]);
+
+  useEffect(() => {
+    if (stage === 'preparing') {
+      setTicketDisplayReady(false);
+    }
+  }, [stage]);
+
+  const handleTicketVisualReady = () => {
+    markTicketVisualReady();
+    requestAnimationFrame(() => setTicketDisplayReady(true));
+  };
 
   const chromeDark = stage === 'journey' || stage === 'developing';
 
@@ -435,7 +451,6 @@ export function DetourHomeView({
               />
               {TIME_STEPS.map((minute, index) => {
                 const progress = index / (TIME_STEPS.length - 1);
-                const showLabel = minute === 10 || minute === 60 || minute % 10 === 0;
                 return (
                   <View
                     key={minute}
@@ -448,7 +463,19 @@ export function DetourHomeView({
                         minute <= sliderDisplayMinutes && styles.v35TickActive,
                       ]}
                     />
-                    {showLabel && <Text style={styles.v35TickLabel}>{minute}</Text>}
+                  </View>
+                );
+              })}
+              {HOME_TIME_LABELS.map((minute) => {
+                const index = TIME_STEPS.indexOf(minute);
+                const progress = index / (TIME_STEPS.length - 1);
+                return (
+                  <View
+                    key={`label-${minute}`}
+                    pointerEvents="none"
+                    style={[styles.v35TickWrap, { left: `${progress * 100}%` }]}
+                  >
+                    <Text style={styles.v35TickLabel}>{minute}</Text>
                   </View>
                 );
               })}
@@ -544,8 +571,20 @@ export function DetourHomeView({
                 setSlowDestinationError(null);
               }}
             >
-              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,15,0.48)' }}>
-                <View style={{ paddingTop: 28, paddingHorizontal: 24, paddingBottom: Math.max(28, safeAreaInsets.bottom + 18), borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#F5F1E8' }}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,15,0.48)' }}
+              >
+                <View
+                  style={{
+                    paddingTop: 28,
+                    paddingHorizontal: 24,
+                    paddingBottom: Math.max(28, safeAreaInsets.bottom + 18),
+                    borderTopLeftRadius: 24,
+                    borderTopRightRadius: 24,
+                    backgroundColor: '#F5F1E8',
+                  }}
+                >
                   <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 1.5, color: SIGNAL }}>慢慢走</Text>
                   <Text style={{ marginTop: 8, fontSize: 34, lineHeight: 40, fontWeight: '900', color: INK }}>你要去哪？</Text>
                   <Text style={{ marginTop: 8, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
@@ -555,6 +594,9 @@ export function DetourHomeView({
                     onChangeText={(value) => {
                       setSlowDestinationInput(value);
                       setSlowDestinationError(null);
+                    }}
+                    onSubmitEditing={() => {
+                      if (slowDestinationInput.trim()) void continueFromMood();
                     }}
                     placeholder="輸入地址或地標"
                     placeholderTextColor="#8F8B82"
@@ -573,7 +615,7 @@ export function DetourHomeView({
                     <Text style={{ fontSize: 28, color: INK }}>→</Text>
                   </Pressable>
                 </View>
-              </View>
+              </KeyboardAvoidingView>
             </Modal>
           </View>
         )}
@@ -633,6 +675,7 @@ export function DetourHomeView({
                     {
                       width: printingLayout.slotWidth,
                       alignItems: 'center',
+                      opacity: ticketDisplayReady ? 1 : 0,
                       transform: [
                         {
                           translateY: routeProgress.interpolate({
@@ -652,7 +695,7 @@ export function DetourHomeView({
                     stamped={stage === 'ready'}
                     stampProgress={ticketStamp}
                     renderWidth={printingLayout.ticketWidth}
-                    onVisualReady={markTicketVisualReady}
+                    onVisualReady={handleTicketVisualReady}
                   />
                 </Animated.View>
               </View>
