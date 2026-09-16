@@ -4,7 +4,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
-  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -130,11 +129,7 @@ export function DetourHomeView({
     const availableWidth = Math.max(1, windowWidth - leftPadding - rightPadding);
     const printerWidth = Math.min(availableWidth, 420);
     const slotWidth = Math.max(1, printerWidth - 6);
-    const ticketArtworkWidthPx = 1122;
-    const ticketArtworkRenderScale = 0.75;
-    const ticketWidthFromArtwork =
-      (ticketArtworkWidthPx * ticketArtworkRenderScale) / PixelRatio.get();
-    const paperExitTop = 5;
+    const paperExitTop = 6;
     const chromeAndPrinterTop = 48 + 48 + 67 + 12 + paperExitTop;
     const tearHintReserve = 52 + bottomPadding;
     const maxPaperHeight = Math.max(
@@ -142,10 +137,10 @@ export function DetourHomeView({
       windowHeight - topPadding - chromeAndPrinterTop - tearHintReserve
     );
     const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
-    const ticketWidth = Math.max(
-      1,
-      Math.min(ticketWidthFromArtwork, slotWidth, maxPaperHeight / ticketAspect)
-    );
+    const maxRailWidthByHeight =
+      maxPaperHeight / Math.max(0.85 * ticketAspect, 0.001);
+    const railWidth = Math.max(1, Math.min(slotWidth, maxRailWidthByHeight));
+    const ticketWidth = railWidth * 0.85;
     const ticketHeight = ticketWidth * ticketAspect;
 
     return {
@@ -155,6 +150,7 @@ export function DetourHomeView({
       bottomPadding,
       printerWidth,
       slotWidth,
+      railWidth,
       ticketWidth,
       ticketHeight,
       paperExitTop,
@@ -726,13 +722,8 @@ export function DetourHomeView({
               <View
                 pointerEvents="none"
                 style={[
-                  styles.v50PrinterSlotOnly,
-                  {
-                    width: Math.min(
-                      printingLayout.slotWidth,
-                      printingLayout.ticketWidth + 40
-                    ),
-                  },
+                  styles.v50PrinterRearRail,
+                  { width: printingLayout.railWidth },
                 ]}
               />
               <Animated.View
@@ -740,7 +731,7 @@ export function DetourHomeView({
                   styles.v48PaperViewport,
                   {
                     top: printingLayout.paperExitTop,
-                    width: printingLayout.slotWidth,
+                    width: printingLayout.railWidth,
                     height: routeProgress.interpolate({
                       inputRange: [0, 1],
                       outputRange: [0, printingLayout.paperViewportHeight],
@@ -752,7 +743,7 @@ export function DetourHomeView({
                   style={[
                     styles.v48PaperTrack,
                     {
-                      width: printingLayout.slotWidth,
+                      width: printingLayout.railWidth,
                       alignItems: 'center',
                       opacity: ticketDisplayReady ? 1 : 0,
                       transformOrigin: '50% 0%',
@@ -786,6 +777,13 @@ export function DetourHomeView({
                   />
                 </Animated.View>
               </Animated.View>
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.v50PrinterSlotOnly,
+                  { width: printingLayout.railWidth },
+                ]}
+              />
             </View>
 
             {stage === 'ready' && ticketReadyUnlocked && (
