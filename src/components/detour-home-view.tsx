@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -119,6 +120,10 @@ export function DetourHomeView({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const [ticketDisplayReady, setTicketDisplayReady] = useState(false);
+  const completionIris = useRef(new Animated.Value(1)).current;
+  const [completionIrisActive, setCompletionIrisActive] = useState(false);
+  const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] = useState(false);
+  const arrivalPhotoStartCountRef = useRef(0);
 
   const printingLayout = useMemo(() => {
     const baseSidePadding = 30;
@@ -166,6 +171,43 @@ export function DetourHomeView({
     windowWidth,
   ]);
 
+  const irisDiameter = Math.hypot(windowWidth, windowHeight) + 48;
+  const irisRadius = irisDiameter / 2;
+  const irisBorderWidth = completionIris.interpolate({
+    inputRange: [0, 1],
+    outputRange: [irisRadius, 0],
+    extrapolate: 'clamp',
+  });
+
+  async function finishDetourWithIris(photoOverride = photos) {
+    if (completionIrisActive) return;
+
+    setArrivalPhotoFinishPending(false);
+    setCompletionIrisActive(true);
+    completionIris.stopAnimation();
+    completionIris.setValue(1);
+
+    await new Promise<void>((resolve) => {
+      Animated.timing(completionIris, {
+        toValue: 0,
+        duration: 320,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => resolve());
+    });
+
+    try {
+      await completeDetour(photoOverride);
+    } catch {
+      Animated.timing(completionIris, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => setCompletionIrisActive(false));
+    }
+  }
+
   useEffect(() => {
     if (stage === 'preparing') {
       setTicketDisplayReady(false);
@@ -180,6 +222,34 @@ export function DetourHomeView({
     }
   }, [stage, selectedMood]);
 
+  useEffect(() => {
+    if (!arrivalPhotoFinishPending || stage !== 'arrival') return;
+    if (photos.length <= arrivalPhotoStartCountRef.current) return;
+
+    setArrivalPhotoFinishPending(false);
+    void finishDetourWithIris(photos);
+  }, [arrivalPhotoFinishPending, photos, stage]);
+
+  useEffect(() => {
+    if (!completionIrisActive || stage !== 'developing') return;
+    const timer = setTimeout(() => transitionTo('finish'), 20);
+    return () => clearTimeout(timer);
+  }, [completionIrisActive, stage]);
+
+  useEffect(() => {
+    if (!completionIrisActive || stage !== 'finish') return;
+
+    completionIris.stopAnimation();
+    Animated.timing(completionIris, {
+      toValue: 1,
+      duration: 380,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) setCompletionIrisActive(false);
+    });
+  }, [completionIrisActive, stage]);
+
   const handleTicketVisualReady = () => {
     markTicketVisualReady();
     requestAnimationFrame(() => setTicketDisplayReady(true));
@@ -191,7 +261,8 @@ export function DetourHomeView({
     setSlowDestinationError(null);
   };
 
-  const chromeDark = stage === 'journey' || stage === 'developing';
+  const chromeDark =
+    stage === 'journey' || stage === 'developing' || completionIrisActive;
 
   return (
     <View style={[styles.app, chromeDark ? styles.appDark : styles.appLight]}>
@@ -977,14 +1048,32 @@ export function DetourHomeView({
             <View style={styles.cleanArrivalBottom}>
               <View style={styles.cleanArrivalActions}>
                 <Pressable
-                  onPress={() => completeDetour()}
+                  onPress={() => {
+                    arrivalPhotoStartCountRef.current = photos.length;
+                    setArrivalPhotoFinishPending(true);
+                    void openCamera('arrival');
+                  }}
                   style={[styles.cleanArrivalPrimary, styles.cleanArrivalPrimaryFlexible]}
                 >
-                  <Text style={styles.cleanArrivalPrimaryText}>完成這次 DETOUR</Text>
-                  <Text style={styles.cleanArrivalPrimaryArrow}>→</Text>
+                  <Text style={styles.cleanArrivalPrimaryText}>拍最後一張</Text>
+                  <Text style={{ fontSize: 23 }}>📷</Text>
                 </Pressable>
-                <Pressable onPress={() => openCamera('arrival')} style={styles.cleanArrivalCamera}>
-                  <Text style={styles.cleanArrivalCameraIcon}>📷</Text>
+                <Pressable
+                  onPress={() => void finishDetourWithIris()}
+                  style={[
+                    styles.cleanArrivalCamera,
+                    {
+                      width: 112,
+                      paddingHorizontal: 13,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderColor: INK,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: INK }}>完成</Text>
+                  <Text style={{ fontSize: 24, lineHeight: 26, color: INK }}>→</Text>
                 </Pressable>
               </View>
 
@@ -1038,8 +1127,7 @@ export function DetourHomeView({
                       <Text style={styles.reissueChoiceTitle}>{title}</Text>
                       <Text style={styles.reissueChoiceNote}>{note}</Text>
                     </Pressable>
-                  )
-                )}
+                  )}
               </View>
 
               {replacementLoading && (
@@ -1054,6 +1142,34 @@ export function DetourHomeView({
 
         <CollectionStages controller={controller} />
       </Animated.View>
+
+      {completionIrisActive && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            zIndex: 9999,
+          }}
+        >
+          <Animated.View
+            style={{
+              width: irisDiameter,
+              height: irisDiameter,
+              borderRadius: irisRadius,
+              borderColor: INK,
+              borderWidth: irisBorderWidth,
+              backgroundColor: 'transparent',
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }
