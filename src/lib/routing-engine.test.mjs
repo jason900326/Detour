@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildSlowRouteArcWaypoints,
+  chooseSlowWalkingRoute,
   chooseWalkingRouteForContext,
   measureLocalShortcutRatio,
+  measureRouteSelfOverlapRatio,
 } from './routing-engine.ts';
 
 const point = (latitude, longitude) => ({ latitude, longitude });
@@ -95,5 +98,66 @@ test('night profile never buys legibility with an excessive detour', () => {
   assert.equal(
     chooseWalkingRouteForContext([shortest, tooLong], 'night'),
     shortest
+  );
+});
+
+test('slow route arc creates two same-side waypoints instead of a turn-back point', () => {
+  const start = point(25, 121);
+  const destination = point(25, 121.012);
+  const [first, second] = buildSlowRouteArcWaypoints(
+    start,
+    destination,
+    1900,
+    1
+  );
+
+  assert.ok(first.longitude > start.longitude);
+  assert.ok(second.longitude > first.longitude);
+  assert.ok(first.latitude > start.latitude);
+  assert.ok(second.latitude > start.latitude);
+});
+
+test('self-overlap rejects a route that walks out and returns on itself', () => {
+  const clean = Array.from({ length: 12 }, (_, index) =>
+    point(25, 121 + index * 0.0003)
+  );
+  const outAndBack = [
+    ...clean,
+    ...clean.slice(1, -1).reverse(),
+  ];
+
+  assert.equal(measureRouteSelfOverlapRatio(clean), 0);
+  assert.ok(measureRouteSelfOverlapRatio(outAndBack) > 0.08);
+});
+
+test('slow route falls back to direct when extension repeats streets', () => {
+  const direct = route({
+    distanceMeters: 900,
+    durationSeconds: 650,
+    unnamedDistanceRatio: 0.1,
+  });
+  direct.coordinates = Array.from({ length: 12 }, (_, index) =>
+    point(25, 121 + index * 0.0003)
+  );
+
+  const repeated = route({
+    distanceMeters: 1500,
+    durationSeconds: 1050,
+    unnamedDistanceRatio: 0.1,
+  });
+  repeated.coordinates = [
+    ...direct.coordinates,
+    ...direct.coordinates.slice(1, -1).reverse(),
+  ];
+
+  assert.equal(
+    chooseSlowWalkingRoute({
+      directRoute: direct,
+      candidates: [repeated],
+      targetSeconds: 1050,
+      maximumSeconds: 1150,
+      context: 'day',
+    }),
+    direct
   );
 });

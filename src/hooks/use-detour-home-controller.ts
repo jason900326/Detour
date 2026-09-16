@@ -60,6 +60,8 @@ import {
   fetchWalkingRoute,
   prewarmWalkingRoutes,
   resolveRoutedScene,
+  resolveSlowWalkingRoute,
+  type RoutedScene,
   type WalkingRoute,
 } from '../lib/routing-engine';
 
@@ -155,6 +157,8 @@ export function useDetourHomeController() {
   const [sliderDisplayMinutes, setSliderDisplayMinutes] = useState(15);
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [selectedColor, setSelectedColor] = useState<ColorChoice | null>(null);
+  const [slowDestinationInput, setSlowDestinationInput] = useState('');
+  const [slowDestinationError, setSlowDestinationError] = useState<string | null>(null);
 
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
@@ -1082,7 +1086,8 @@ export function useDetourHomeController() {
   async function chooseMood(moodId: MoodId) {
     await Haptics.selectionAsync();
     setSelectedMood(moodId);
-    void prewarmDetour(moodId);
+    setSlowDestinationError(null);
+    if (moodId !== 'slow') void prewarmDetour(moodId);
 
     // Color Walk draws once per Detour session. Switching away and back keeps
     // the same draw, so there is no hidden reroll interaction.
@@ -1094,6 +1099,12 @@ export function useDetourHomeController() {
 
   async function continueFromMood() {
     if (!selectedMood) return;
+
+    if (selectedMood === 'slow' && !slowDestinationInput.trim()) {
+      setSlowDestinationError('先告訴 DETOUR 你要去哪裡。');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
 
     // Reset the visual gate before the printing screen mounts. The ticket
     // component will reopen it only after ticket-base is decoded by Skia.
@@ -1159,6 +1170,8 @@ export function useDetourHomeController() {
     setSelectedTime('15');
     setSelectedMood(null);
     setSelectedColor(null);
+    setSlowDestinationInput('');
+    setSlowDestinationError(null);
     setLatitude(null);
     setLongitude(null);
     setDetourStart(null);
@@ -1875,7 +1888,7 @@ export function useDetourHomeController() {
 
   async function prewarmDetour(moodOverride?: MoodId) {
     const targetMood = moodOverride ?? selectedMood;
-    if (!targetMood) return;
+    if (!targetMood || targetMood === 'slow') return;
 
     const cached = prewarmRef.current;
     if (
@@ -2025,7 +2038,103 @@ export function useDetourHomeController() {
       let context: LightContext;
       let rankedCandidates: SceneCandidate[];
       let rankingUsedAI = false;
+      let routed: RoutedScene;
 
+      if (finalMood === 'slow') {
+        advanceTicketProgress(0.16, '正在確認現在位置…');
+
+        let location = await Location.getLastKnownPositionAsync({
+          maxAge: 2 * 60 * 1000,
+          requiredAccuracy: 150,
+        });
+
+        if (!location) {
+          location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
+
+        startPoint = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        };
+        context = getLightContext(startPoint, new Date());
+
+        advanceTicketProgress(0.3, '正在找你輸入的目的地…');
+        const destinationLabel = slowDestinationInput.trim();
+        const geocoded = await Location.geocodeAsync(destinationLabel);
+        const match = geocoded[0];
+
+        if (!match) {
+          throw new Error('找不到這個目的地。請輸入更完整的地址或地標名稱。');
+        }
+
+        const destinationPoint: GeoPoint = {
+          latitude: match.latitude,
+          longitude: match.longitude,
+        };
+
+        if (
+          destinationPoint.latitude < 21.5 ||
+          destinationPoint.latitude > 26.5 ||
+          destinationPoint.longitude < 119 ||
+          destinationPoint.longitude > 123
+        ) {
+          throw new Error('目前「慢慢走」先支援台灣境內的目的地。');
+        }
+
+        const destinationScene: SceneCandidate = {
+          id: `user-destination:${destinationPoint.latitude.toFixed(5)},${destinationPoint.longitude.toFixed(5)}`,
+          osmType: 'node',
+          osmId: -1,
+          point: destinationPoint,
+          kind: 'pedestrian',
+          label: '你的目的地',
+          name: destinationLabel,
+          tags: { source: 'user-destination' },
+          straightDistanceMeters: getDistanceInMeters(
+            startPoint.latitude,
+            startPoint.longitude,
+            destinationPoint.latitude,
+            destinationPoint.longitude
+          ),
+          score: 100,
+          qualityScore: 100,
+          oddityScore: 0,
+          visualScore: 0,
+          foodCommitmentScore: null,
+          traits: ['user-destination'],
+          tier: 'primary',
+          previouslyVisited: false,
+          scoreReasons: ['使用者指定目的地'],
+        };
+        const recentRoutes = passport
+          .slice(0, 6)
+          .map((entry) =>
+            entry.route && entry.route.length >= 2
+              ? entry.route
+              : entry.plannedRoute ?? []
+          )
+          .filter((route): route is GeoPoint[] =>
+            Array.isArray(route) && route.length >= 2
+          );
+
+        advanceTicketProgress(0.5, '先算最快路線，再找自然的繞法…');
+        const slowRoute = await resolveSlowWalkingRoute({
+          start: startPoint,
+          destination: destinationPoint,
+          minutes,
+          sideMissionCount: getJourneyProfile(minutes).sideMissionCount,
+          context: routingContext(context),
+          avoidRoutes: recentRoutes,
+        });
+
+        routed = {
+          scene: destinationScene,
+          route: slowRoute.route,
+        };
+        rankingUsedAI = false;
+      } else {
       const cachedCandidates = cached?.candidatesByMood[finalMood] ?? [];
 
       if (cached) {
@@ -2132,8 +2241,6 @@ export function useDetourHomeController() {
         rankingUsedAI = false;
       }
 
-      setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
-
       const recentRoutes = passport
         .slice(0, 6)
         .map((entry) =>
@@ -2143,7 +2250,7 @@ export function useDetourHomeController() {
         )
         .filter((route): route is GeoPoint[] => Array.isArray(route) && route.length >= 2);
 
-      const routed = await resolveRoutedScene({
+      routed = await resolveRoutedScene({
         start: startPoint,
         candidates: rankedCandidates,
         minutes,
@@ -2152,6 +2259,9 @@ export function useDetourHomeController() {
         context: routingContext(context),
         avoidRoutes: recentRoutes,
       });
+      }
+
+      setLastAIResult(rankingUsedAI ? 'ai' : 'fallback');
 
       advanceTicketProgress(
         0.82,
@@ -2164,7 +2274,7 @@ export function useDetourHomeController() {
         context,
         color: selectedColor,
       });
-      if (finalMood !== 'color') {
+      if (finalMood !== 'color' && finalMood !== 'slow') {
         nextPlan.arrivalMission = buildSceneArrivalMission({
           scene: routed.scene,
           moodId: finalMood,
@@ -3045,6 +3155,10 @@ export function useDetourHomeController() {
     setSelectedMood,
     selectedColor,
     setSelectedColor,
+    slowDestinationInput,
+    setSlowDestinationInput,
+    slowDestinationError,
+    setSlowDestinationError,
     latitude,
     setLatitude,
     longitude,

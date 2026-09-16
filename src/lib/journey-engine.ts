@@ -9,7 +9,8 @@ export type MoodId =
   | 'quiet'
   | 'weird'
   | 'color'
-  | 'surprise';
+  | 'surprise'
+  | 'slow';
 
 export type LightContext = 'day' | 'twilight' | 'night';
 
@@ -490,6 +491,18 @@ function arrivalMission(args: {
       completion: '拍下最後一個食物線索，就完成主線。',
       photo: true,
       portable: false,
+    };
+  }
+
+  if (args.moodId === 'slow') {
+    return {
+      id: 'arrival-slow',
+      code: 'ARRIVAL',
+      title: '到了。',
+      instruction: '這趟沒有走最快的路，但有好好走到你要去的地方。',
+      completion: '抵達目的地就完成這趟 DETOUR。',
+      photo: false,
+      portable: true,
     };
   }
 

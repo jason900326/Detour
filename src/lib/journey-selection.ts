@@ -22,6 +22,10 @@ export function moodHint(moodId: MoodId) {
     return '整趟只追同一個顏色。';
   }
 
+  if (moodId === 'slow') {
+    return '你決定去哪，DETOUR 決定怎麼繞。';
+  }
+
   return '今天的方向完全交給 DETOUR。';
 }
 

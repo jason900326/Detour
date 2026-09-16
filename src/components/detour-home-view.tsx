@@ -12,6 +12,7 @@ import {
   Share,
   StatusBar,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -174,6 +175,10 @@ export function DetourHomeView({
     setSelectedMood,
     selectedColor,
     setSelectedColor,
+    slowDestinationInput,
+    setSlowDestinationInput,
+    slowDestinationError,
+    setSlowDestinationError,
     latitude,
     setLatitude,
     longitude,
@@ -1129,7 +1134,7 @@ export function DetourHomeView({
             </View>
 
             <View style={styles.v45MoodGrid}>
-              {MOODS.filter((item) => item.id !== 'surprise').map((item) => {
+              {MOODS.map((item) => {
                 const active = selectedMood === item.id;
                 return (
                   <Pressable
@@ -1167,6 +1172,64 @@ export function DetourHomeView({
               <Text style={styles.v45MoodCtaArrow}>→</Text>
             </Pressable>
             <V45Skyline />
+
+            <Modal
+              visible={stage === 'mood' && selectedMood === 'slow'}
+              transparent
+              animationType="fade"
+              statusBarTranslucent
+              onRequestClose={() => {
+                setSelectedMood(null);
+                setSlowDestinationError(null);
+              }}
+            >
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,15,0.48)' }}>
+                <View style={{ paddingTop: 28, paddingHorizontal: 24, paddingBottom: Math.max(28, safeAreaInsets.bottom + 18), borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#F5F1E8' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 1.5, color: SIGNAL }}>慢慢走</Text>
+                  <Text style={{ marginTop: 8, fontSize: 34, lineHeight: 40, fontWeight: '900', letterSpacing: -1.3, color: INK }}>你要去哪？</Text>
+                  <Text style={{ marginTop: 8, fontSize: 16, lineHeight: 23, fontWeight: '500', color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
+
+                  <TextInput
+                    autoFocus
+                    value={slowDestinationInput}
+                    onChangeText={(value) => {
+                      setSlowDestinationInput(value);
+                      setSlowDestinationError(null);
+                    }}
+                    onSubmitEditing={() => {
+                      if (slowDestinationInput.trim()) void continueFromMood();
+                    }}
+                    placeholder="輸入地址或地標"
+                    placeholderTextColor="#8F8B82"
+                    returnKeyType="go"
+                    style={{ marginTop: 22, minHeight: 58, paddingHorizontal: 16, borderWidth: 2, borderColor: slowDestinationError ? SIGNAL : INK, borderRadius: 8, backgroundColor: '#FFFDF7', fontSize: 18, fontWeight: '700', color: INK }}
+                  />
+
+                  {slowDestinationError && (
+                    <Text style={{ marginTop: 9, fontSize: 14, lineHeight: 20, fontWeight: '700', color: SIGNAL }}>{slowDestinationError}</Text>
+                  )}
+
+                  <Pressable
+                    disabled={!slowDestinationInput.trim()}
+                    onPress={continueFromMood}
+                    style={({ pressed }) => [{ marginTop: 18, minHeight: 60, paddingHorizontal: 18, borderRadius: 4, backgroundColor: slowDestinationInput.trim() ? SIGNAL : '#E6B19E', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, pressed && Boolean(slowDestinationInput.trim()) && styles.v45MoodCtaPressed]}
+                  >
+                    <Text style={{ fontSize: 20, fontWeight: '900', color: INK }}>找一條慢慢走的路</Text>
+                    <Text style={{ fontSize: 28, color: INK }}>→</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      setSelectedMood(null);
+                      setSlowDestinationError(null);
+                    }}
+                    style={{ minHeight: 50, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: MUTED }}>換一個玩法</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Modal>
           </View>
         )}
 
@@ -1512,22 +1575,24 @@ export function DetourHomeView({
                 </View>
               )}
 
-              <Pressable
-                onPress={() =>
-                  transitionTo('sceneIssue')
-                }
-                style={({ pressed }) => [
-                  styles.cleanArrivalProblem,
-                  pressed && styles.pressedLight,
-                ]}
-              >
-                <Text style={styles.cleanArrivalProblemText}>
-                  這裡不行
-                </Text>
-                <Text style={styles.cleanArrivalProblemArrow}>
-                  →
-                </Text>
-              </Pressable>
+              {selectedMood !== 'slow' && (
+                <Pressable
+                  onPress={() =>
+                    transitionTo('sceneIssue')
+                  }
+                  style={({ pressed }) => [
+                    styles.cleanArrivalProblem,
+                    pressed && styles.pressedLight,
+                  ]}
+                >
+                  <Text style={styles.cleanArrivalProblemText}>
+                    這裡不行
+                  </Text>
+                  <Text style={styles.cleanArrivalProblemArrow}>
+                    →
+                  </Text>
+                </Pressable>
+              )}
 
               <Text style={[styles.cleanArrivalSource, styles.v41ReadableMeta]}>
                 地圖資料：OpenStreetMap

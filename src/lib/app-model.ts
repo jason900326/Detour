@@ -132,10 +132,8 @@ export const TIME_MAX = TIME_STEPS[TIME_STEPS.length - 1];
 export const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
   { id: 'wander', label: '隨便走', code: 'WANDER' },
   { id: 'food', label: '吃東西', code: 'FOOD' },
-  { id: 'quiet', label: '想安靜', code: 'QUIET' },
-  { id: 'weird', label: '這是哪', code: 'WEIRD' },
   { id: 'color', label: '色色的', code: 'COLOR' },
-  { id: 'surprise', label: '命運', code: 'SURPRISE' },
+  { id: 'slow', label: '慢慢走', code: 'SLOW' },
 ];
 
 export const FREE_CAMERA_MISSION: Mission = {

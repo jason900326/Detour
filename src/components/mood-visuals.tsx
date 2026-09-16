@@ -78,6 +78,16 @@ export function MoodGlyph({ moodId, active }: MoodGlyphProps) {
     );
   }
 
+  if (moodId === 'slow') {
+    return (
+      <View style={rootStyle}>
+        <View style={{ position: 'absolute', left: 18, top: 45, width: 30, height: 5, borderRadius: 3, backgroundColor: '#11110F', transform: [{ rotate: '-24deg' }] }} />
+        <View style={{ position: 'absolute', left: 42, top: 30, width: 29, height: 5, borderRadius: 3, backgroundColor: '#11110F', transform: [{ rotate: '18deg' }] }} />
+        <View style={{ position: 'absolute', left: 65, top: 34, width: 15, height: 15, borderRadius: 8, borderWidth: 4, borderColor: '#FF6A2A' }} />
+      </View>
+    );
+  }
+
   return (
     <View style={rootStyle}>
       <View style={styles.v44FateDie}>
@@ -131,5 +141,17 @@ export function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: numb
   if (moodId === 'quiet') return <MoodQuietIcon {...commonProps} />;
   if (moodId === 'weird') return <MoodWeirdIcon {...commonProps} />;
   if (moodId === 'color') return <MoodColorIcon {...commonProps} />;
+  if (moodId === 'slow') {
+    const scale = size / 76;
+    return (
+      <View style={{ width: size, height: size }}>
+        <View style={{ position: 'absolute', left: 5 * scale, top: 48 * scale, width: 28 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '-31deg' }] }} />
+        <View style={{ position: 'absolute', left: 28 * scale, top: 31 * scale, width: 27 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '19deg' }] }} />
+        <View style={{ position: 'absolute', left: 50 * scale, top: 35 * scale, width: 18 * scale, height: 6 * scale, borderRadius: 3 * scale, backgroundColor: '#11110F', transform: [{ rotate: '-22deg' }] }} />
+        <View style={{ position: 'absolute', left: 2 * scale, top: 50 * scale, width: 12 * scale, height: 12 * scale, borderRadius: 6 * scale, backgroundColor: '#FF6A2A' }} />
+        <View style={{ position: 'absolute', right: 1 * scale, top: 26 * scale, width: 20 * scale, height: 20 * scale, borderRadius: 10 * scale, borderWidth: 5 * scale, borderColor: '#FF6A2A', backgroundColor: '#F5F1E8' }} />
+      </View>
+    );
+  }
   return <MoodSurpriseIcon {...commonProps} />;
 }
