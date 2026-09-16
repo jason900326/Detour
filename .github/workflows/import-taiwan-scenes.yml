@@ -47,6 +47,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends osmium-tool
           osmium --version
 
+      - name: Test Scene V2 preprocessing
+        shell: bash
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Download Taiwan OSM extract
         shell: bash
         run: |
@@ -69,7 +73,12 @@ jobs:
             'nwr/amenity=marketplace,fountain,public_bookcase,arts_centre,community_centre,restaurant,fast_food,cafe,food_court,ice_cream' \
             'nwr/shop=bakery,confectionery,deli,pastry,beverages,coffee,tea' \
             'nwr/leisure=park,garden' \
-            'nwr/historic'
+            'nwr/historic' \
+            'nwr/highway=steps,pedestrian' \
+            'wr/bridge' \
+            'nwr/heritage' \
+            'nwr/denotation=natural_monument,landmark' \
+            'nwr/protection_title=natural_monument'
           ls -lh /tmp/detour-scenes.osm.pbf
 
       - name: Export filtered objects as GeoJSON sequence
@@ -93,8 +102,18 @@ jobs:
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
             python scripts/import_osm_scenes.py \
               --input /tmp/detour-scenes.geojsonseq \
-              --dry-run
+              --dry-run \
+              --report-output /tmp/detour-scene-import-report.json
           else
             python scripts/import_osm_scenes.py \
-              --input /tmp/detour-scenes.geojsonseq
+              --input /tmp/detour-scenes.geojsonseq \
+              --report-output /tmp/detour-scene-import-report.json
           fi
+
+      - name: Upload Scene import report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detour-scene-import-report
+          path: /tmp/detour-scene-import-report.json
+          if-no-files-found: ignore

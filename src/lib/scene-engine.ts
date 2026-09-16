@@ -48,6 +48,10 @@ export type SceneCandidate = {
   straightDistanceMeters: number;
   score: number;
   qualityScore: number;
+  oddityScore: number;
+  visualScore: number;
+  foodCommitmentScore: number | null;
+  traits: string[];
   tier: 'primary' | 'fallback';
   previouslyVisited: boolean;
   scoreReasons: string[];
@@ -440,6 +444,41 @@ function qualityScoreForScene(
   if (tags.lit === 'yes') score += 3;
 
   return score;
+}
+
+function precomputedScore(
+  tags: Record<string, string>,
+  key: string,
+  fallback: number
+) {
+  const value = Number(tags[key]);
+
+  if (
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100
+  ) {
+    return Math.round(value);
+  }
+
+  return fallback;
+}
+
+function optionalPrecomputedScore(
+  tags: Record<string, string>,
+  key: string
+) {
+  if (!tags[key]) return null;
+  return precomputedScore(tags, key, 0);
+}
+
+function precomputedTraits(
+  tags: Record<string, string>
+) {
+  return (tags['detour:traits'] ?? '')
+    .split(',')
+    .map((trait) => trait.trim())
+    .filter(Boolean);
 }
 
 function destinationTier(
@@ -1222,10 +1261,30 @@ export async function findSceneCandidates(args: {
 
     if (distanceScore <= -900) continue;
 
-    const qualityScore = qualityScoreForScene(
-      classification.kind,
-      tags
+    const qualityScore = precomputedScore(
+      tags,
+      'detour:quality_score',
+      qualityScoreForScene(
+        classification.kind,
+        tags
+      )
     );
+    const oddityScore = precomputedScore(
+      tags,
+      'detour:oddity_score',
+      0
+    );
+    const visualScore = precomputedScore(
+      tags,
+      'detour:visual_score',
+      0
+    );
+    const foodCommitmentScore =
+      optionalPrecomputedScore(
+        tags,
+        'detour:food_commitment_score'
+      );
+    const traits = precomputedTraits(tags);
 
     const tier = destinationTier(
       classification.kind,
@@ -1285,6 +1344,18 @@ export async function findSceneCandidates(args: {
       `QUALITY ${qualityScore}`
     );
 
+    if (oddityScore > 0) {
+      reasons.push(
+        `ODDITY ${oddityScore}`
+      );
+    }
+
+    if (visualScore > 0) {
+      reasons.push(
+        `VISUAL ${visualScore}`
+      );
+    }
+
     if (distanceScore >= 15) {
       reasons.push('DISTANCE FIT');
     } else if (distanceScore < 0) {
@@ -1341,6 +1412,10 @@ export async function findSceneCandidates(args: {
       straightDistanceMeters,
       score,
       qualityScore,
+      oddityScore,
+      visualScore,
+      foodCommitmentScore,
+      traits,
       tier,
       previouslyVisited,
       scoreReasons: reasons,

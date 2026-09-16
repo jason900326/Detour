@@ -1,0 +1,9 @@
+{"type":"Feature","properties":{"@type":"node","@id":1,"@timestamp":1735466949,"tourism":"artwork","artwork_type":"mural","name":"巷口壁畫"},"geometry":{"type":"Point","coordinates":[121.5654,25.033]}}
+{"type":"Feature","properties":{"@type":"way","@id":2,"@timestamp":1735466949,"highway":"steps"},"geometry":{"type":"LineString","coordinates":[[121.565,25.033],[121.5652,25.0332]]}}
+{"type":"Feature","properties":{"@type":"way","@id":3,"@timestamp":1735466949,"highway":"footway","bridge":"yes","name":"小人行橋"},"geometry":{"type":"LineString","coordinates":[[121.566,25.033],[121.5662,25.0332]]}}
+{"type":"Feature","properties":{"@type":"node","@id":4,"@timestamp":1735466949,"natural":"tree","denotation":"natural_monument","name":"老樹"},"geometry":{"type":"Point","coordinates":[121.567,25.033]}}
+{"type":"Feature","properties":{"@type":"node","@id":5,"@timestamp":1735466949,"shop":"tea","name":"茶店","takeaway":"yes"},"geometry":{"type":"Point","coordinates":[121.568,25.033]}}
+{"type":"Feature","properties":{"@type":"node","@id":6,"@timestamp":1735466949,"amenity":"hospital","tourism":"artwork","name":"醫院公共藝術"},"geometry":{"type":"Point","coordinates":[121.569,25.033]}}
+{"type":"Feature","properties":{"@type":"node","@id":7,"@timestamp":1735466949,"amenity":"place_of_worship","historic":"wayside_shrine"},"geometry":{"type":"Point","coordinates":[121.57,25.033]}}
+{"type":"Feature","properties":{"@type":"way","@id":8,"@timestamp":1735466949,"highway":"primary","bridge":"yes"},"geometry":{"type":"LineString","coordinates":[[121.571,25.033],[121.572,25.034]]}}
+

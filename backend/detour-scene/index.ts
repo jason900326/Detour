@@ -8,7 +8,8 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const QUERY_VERSION = 5;
+const QUERY_VERSION = 6;
+const SCENE_SCHEMA_VERSION = 2;
 const DATABASE_LIMIT = 180;
 
 type SceneFamily = "general" | "food";
@@ -30,7 +31,13 @@ type SceneRow = {
   longitude: number;
   tags: Record<string, string> | null;
   kind: string;
+  scene_family: SceneFamily | "detour";
   quality_score: number;
+  oddity_score: number;
+  visual_score: number;
+  food_commitment_score: number | null;
+  traits: string[] | null;
+  scoring_version: number;
   distance_m: number;
 };
 
@@ -230,7 +237,24 @@ function sceneRowsToElements(rows: SceneRow[]): OverpassElement[] {
     const id = Number(row.osm_id);
     if (!Number.isFinite(id)) continue;
 
-    const tags = row.tags ?? {};
+    const traits = Array.isArray(row.traits)
+      ? row.traits.filter((trait): trait is string => typeof trait === "string")
+      : [];
+    const tags: Record<string, string> = {
+      ...(row.tags ?? {}),
+      "detour:scene_family": row.scene_family,
+      "detour:quality_score": String(row.quality_score),
+      "detour:oddity_score": String(row.oddity_score),
+      "detour:visual_score": String(row.visual_score),
+      "detour:traits": traits.join(","),
+      "detour:scoring_version": String(row.scoring_version),
+    };
+
+    if (row.food_commitment_score !== null) {
+      tags["detour:food_commitment_score"] = String(
+        row.food_commitment_score,
+      );
+    }
     if (isUnsafeOrRestrictedScene(tags)) continue;
 
     elements.push({
@@ -386,6 +410,7 @@ Deno.serve(async (req: Request) => {
           ok: true,
           source: "postgis-scenes",
           queryVersion: QUERY_VERSION,
+          sceneSchemaVersion: SCENE_SCHEMA_VERSION,
           failOpen: true,
           overpassInCriticalPath: false,
         });
