@@ -842,6 +842,27 @@ export function useDetourHomeController() {
     });
   }
 
+  async function toggleNightRoutePreference() {
+    await Haptics.selectionAsync();
+
+    await savePreferences({
+      ...preferences,
+      preferLegibleRoutesAtNight:
+        !preferences.preferLegibleRoutesAtNight,
+    });
+  }
+
+  function routingContext(context: LightContext): LightContext {
+    if (
+      context === 'night' &&
+      !preferences.preferLegibleRoutesAtNight
+    ) {
+      return 'day';
+    }
+
+    return context;
+  }
+
   async function completeOnboarding() {
     const nextPreferences = {
       ...preferences,
@@ -1495,6 +1516,7 @@ export function useDetourHomeController() {
           maxDistanceMeters:
             distanceBudget,
           sideMissionCount: 0,
+          context: routingContext(recoveryContext),
           avoidRoutes: [
             activeTrace,
             ...passport.slice(0, 5).map((entry) =>
@@ -1673,7 +1695,9 @@ export function useDetourHomeController() {
       const nextWalkingRoute =
         await fetchWalkingRoute(
           currentPoint,
-          scene.point
+          scene.point,
+          undefined,
+          { context: routingContext(lightContext ?? 'day') }
         );
 
       const remainingMissionCount =
@@ -1920,7 +1944,8 @@ export function useDetourHomeController() {
         candidates,
         2,
         minutes,
-        paceDistanceScale
+        paceDistanceScale,
+        routingContext(context)
       );
     } catch {
       // Prewarming is an optimization. Ticket issue remains available.
@@ -2124,6 +2149,7 @@ export function useDetourHomeController() {
         minutes,
         distanceScale: paceDistanceScale,
         sideMissionCount: getJourneyProfile(minutes).sideMissionCount,
+        context: routingContext(context),
         avoidRoutes: recentRoutes,
       });
 
@@ -3167,6 +3193,7 @@ export function useDetourHomeController() {
     initializeApp,
     savePreferences,
     setWalkingPace,
+    toggleNightRoutePreference,
     completeOnboarding,
     refreshPlaytestSessions,
     syncPlaytestDataNow,

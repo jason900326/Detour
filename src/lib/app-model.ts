@@ -28,12 +28,14 @@ export type WalkingPace = 'relaxed' | 'normal' | 'brisk';
 export type DetourPreferences = {
   onboardingComplete: boolean;
   walkingPace: WalkingPace;
+  preferLegibleRoutesAtNight: boolean;
   indoorTest: boolean;
 };
 
 export const DEFAULT_PREFERENCES: DetourPreferences = {
   onboardingComplete: false,
   walkingPace: 'normal',
+  preferLegibleRoutesAtNight: true,
   indoorTest: false,
 };
 

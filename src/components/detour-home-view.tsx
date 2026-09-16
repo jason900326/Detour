@@ -322,6 +322,7 @@ export function DetourHomeView({
     initializeApp,
     savePreferences,
     setWalkingPace,
+    toggleNightRoutePreference,
     completeOnboarding,
     refreshPlaytestSessions,
     syncPlaytestDataNow,
@@ -665,6 +666,37 @@ export function DetourHomeView({
                     </Pressable>
                   );
                 })}
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionLabel}>
+                  夜間路線
+                </Text>
+
+                <Pressable
+                  onPress={toggleNightRoutePreference}
+                  style={({ pressed }) => [
+                    styles.settingsChoice,
+                    preferences.preferLegibleRoutesAtNight &&
+                      styles.settingsChoiceActive,
+                    pressed && styles.pressedLight,
+                  ]}
+                >
+                  <View>
+                    <Text style={styles.settingsChoiceLabel}>
+                      優先走明亮大路
+                    </Text>
+                    <Text style={styles.settingsChoiceNote}>
+                      天黑後盡量避開無名小路，路程可能稍長。
+                    </Text>
+                  </View>
+
+                  <View style={styles.settingsChoiceRight}>
+                    <Text style={styles.settingsChoiceMark}>
+                      {preferences.preferLegibleRoutesAtNight ? '●' : '○'}
+                    </Text>
+                  </View>
+                </Pressable>
               </View>
 
               {developerToolsUnlocked && (

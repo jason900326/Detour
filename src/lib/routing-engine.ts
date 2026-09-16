@@ -1,10 +1,17 @@
-import type { GeoPoint } from './journey-engine';
+import type { GeoPoint, LightContext } from './journey-engine';
 import type { SceneCandidate } from './scene-engine';
 
 export type WalkingRoute = {
   coordinates: GeoPoint[];
   distanceMeters: number;
   durationSeconds: number;
+  quality: RouteQualitySignals;
+};
+
+export type RouteQualitySignals = {
+  turnCount: number;
+  unnamedDistanceRatio: number;
+  localShortcutRatio: number;
 };
 
 export type RoutedScene = {
@@ -12,16 +19,28 @@ export type RoutedScene = {
   route: WalkingRoute;
 };
 
+type OsrmRoute = {
+  distance: number;
+  duration: number;
+  geometry?: {
+    type: 'LineString';
+    coordinates: [number, number][];
+  };
+  legs?: Array<{
+    steps?: Array<{
+      distance?: number;
+      name?: string;
+      maneuver?: {
+        type?: string;
+        modifier?: string;
+      };
+    }>;
+  }>;
+};
+
 type OsrmResponse = {
   code?: string;
-  routes?: Array<{
-    distance: number;
-    duration: number;
-    geometry?: {
-      type: 'LineString';
-      coordinates: [number, number][];
-    };
-  }>;
+  routes?: OsrmRoute[];
 };
 
 type RouteRequestPurpose = 'prewarm' | 'interactive';
@@ -51,6 +70,11 @@ const ROUTE_OVERLAP_EMERGENCY_MAX = 0.42;
 const ROUTE_DIRECTNESS_PREFERRED_MAX = 1.85;
 const ROUTE_DIRECTNESS_FALLBACK_MAX = 2.2;
 const ROUTE_DIRECTNESS_EMERGENCY_MAX = 2.7;
+const LOCAL_SHORTCUT_PREFERRED_MAX = 1.38;
+const LOCAL_SHORTCUT_FALLBACK_MAX = 1.58;
+const LOCAL_SHORTCUT_EMERGENCY_MAX = 1.82;
+const NIGHT_ALTERNATIVE_DISTANCE_MAX = 1.1;
+const NIGHT_ALTERNATIVE_DURATION_MAX = 1.12;
 
 const walkingRouteCache = new Map<
   string,
@@ -58,16 +82,22 @@ const walkingRouteCache = new Map<
 >();
 const walkingRouteInFlight = new Map<string, InFlightWalkingRoute>();
 
-function walkingRouteCacheKey(start: GeoPoint, destination: GeoPoint) {
+function walkingRouteCacheKey(
+  start: GeoPoint,
+  destination: GeoPoint,
+  context: LightContext = 'day'
+) {
   const round = (value: number) => value.toFixed(5);
-  return `${round(start.latitude)},${round(start.longitude)}>${round(destination.latitude)},${round(destination.longitude)}`;
+  const profile = context === 'night' ? 'night' : 'day';
+  return `${profile}:${round(start.latitude)},${round(start.longitude)}>${round(destination.latitude)},${round(destination.longitude)}`;
 }
 
 function getCachedWalkingRoute(
   start: GeoPoint,
-  destination: GeoPoint
+  destination: GeoPoint,
+  context: LightContext = 'day'
 ): WalkingRoute | null {
-  const cacheKey = walkingRouteCacheKey(start, destination);
+  const cacheKey = walkingRouteCacheKey(start, destination, context);
   const cached = walkingRouteCache.get(cacheKey);
 
   if (!cached) return null;
@@ -82,10 +112,11 @@ function getCachedWalkingRoute(
 
 function getInFlightWalkingRoute(
   start: GeoPoint,
-  destination: GeoPoint
+  destination: GeoPoint,
+  context: LightContext = 'day'
 ) {
   return walkingRouteInFlight.get(
-    walkingRouteCacheKey(start, destination)
+    walkingRouteCacheKey(start, destination, context)
   ) ?? null;
 }
 
@@ -96,9 +127,10 @@ function wait(ms: number) {
 async function waitForInFlightWalkingRoute(
   start: GeoPoint,
   destination: GeoPoint,
-  waitMs: number
+  waitMs: number,
+  context: LightContext = 'day'
 ): Promise<WalkingRoute | null> {
-  const inFlight = getInFlightWalkingRoute(start, destination);
+  const inFlight = getInFlightWalkingRoute(start, destination, context);
   if (!inFlight || waitMs <= 0) return null;
 
   return await new Promise<WalkingRoute | null>((resolve) => {
@@ -152,6 +184,133 @@ async function fetchWithTimeout(url: string, timeoutMs: number) {
   }
 }
 
+/**
+ * Detects a locally dominated dog-leg: a short section whose walked shape is
+ * much longer than the chord between the same two points. This is deliberately
+ * local (roughly one to four city blocks), so a sensible trip-level arc is not
+ * mistaken for the kind of visible triangle shortcut that makes navigation
+ * feel broken.
+ */
+export function measureLocalShortcutRatio(coordinates: GeoPoint[]) {
+  if (coordinates.length < 3) return 1;
+
+  const cumulative = [0];
+  for (let index = 1; index < coordinates.length; index += 1) {
+    cumulative.push(
+      cumulative[index - 1] +
+        distanceBetweenPoints(coordinates[index - 1], coordinates[index])
+    );
+  }
+
+  const stride = Math.max(1, Math.floor((coordinates.length - 1) / 72));
+  let worst = 1;
+
+  for (let start = 0; start < coordinates.length - 2; start += stride) {
+    for (let end = start + 2; end < coordinates.length; end += stride) {
+      const walked = cumulative[end] - cumulative[start];
+      if (walked < 120) continue;
+      if (walked > 460) break;
+
+      const direct = distanceBetweenPoints(
+        coordinates[start],
+        coordinates[end]
+      );
+      if (direct < 80) continue;
+
+      worst = Math.max(worst, walked / direct);
+    }
+  }
+
+  return worst;
+}
+
+function routeQualitySignals(route: OsrmRoute, coordinates: GeoPoint[]) {
+  const steps = route.legs?.flatMap((leg) => leg.steps ?? []) ?? [];
+  const stepDistance = steps.reduce(
+    (sum, step) => sum + Math.max(0, step.distance ?? 0),
+    0
+  );
+  const unnamedDistance = steps.reduce(
+    (sum, step) =>
+      String(step.name ?? '').trim()
+        ? sum
+        : sum + Math.max(0, step.distance ?? 0),
+    0
+  );
+  const turnCount = steps.filter((step) => {
+    const type = step.maneuver?.type ?? '';
+    const modifier = step.maneuver?.modifier ?? '';
+    if (['depart', 'arrive', 'notification'].includes(type)) return false;
+    if (type === 'continue' && (!modifier || modifier === 'straight')) {
+      return false;
+    }
+    return true;
+  }).length;
+
+  return {
+    turnCount,
+    // A missing steps payload is unknown, not proof of a dark/unnamed route.
+    unnamedDistanceRatio:
+      stepDistance > 0 ? unnamedDistance / stepDistance : 0.45,
+    localShortcutRatio: measureLocalShortcutRatio(coordinates),
+  } satisfies RouteQualitySignals;
+}
+
+function normalizeOsrmRoute(route: OsrmRoute): WalkingRoute | null {
+  if (!route.geometry?.coordinates?.length) return null;
+
+  const coordinates = route.geometry.coordinates.map(
+    ([longitude, latitude]) => ({ latitude, longitude })
+  );
+
+  return {
+    coordinates,
+    distanceMeters: route.distance,
+    durationSeconds: route.duration,
+    quality: routeQualitySignals(route, coordinates),
+  };
+}
+
+export function chooseWalkingRouteForContext(
+  routes: WalkingRoute[],
+  context: LightContext
+) {
+  if (routes.length === 0) return null;
+
+  const byDuration = [...routes].sort(
+    (a, b) => a.durationSeconds - b.durationSeconds
+  );
+  if (context !== 'night') return byDuration[0];
+
+  const shortest = byDuration[0];
+  const eligible = byDuration.filter(
+    (route) =>
+      route.distanceMeters <=
+        shortest.distanceMeters * NIGHT_ALTERNATIVE_DISTANCE_MAX &&
+      route.durationSeconds <=
+        shortest.durationSeconds * NIGHT_ALTERNATIVE_DURATION_MAX
+  );
+
+  return eligible.sort((a, b) => {
+    const score = (route: WalkingRoute) => {
+      const distanceOverhead =
+        route.distanceMeters / Math.max(1, shortest.distanceMeters) - 1;
+      const turnDensity =
+        route.quality.turnCount /
+        Math.max(0.4, route.distanceMeters / 1000);
+
+      return (
+        route.quality.unnamedDistanceRatio * 620 +
+        turnDensity * 11 +
+        Math.max(0, route.quality.localShortcutRatio - 1.2) * 360 +
+        Math.max(0, distanceOverhead) * 900
+      );
+    };
+
+    return score(a) - score(b);
+  })[0];
+}
+
 export async function fetchWalkingRoute(
   start: GeoPoint,
   destination: GeoPoint,
@@ -159,10 +318,12 @@ export async function fetchWalkingRoute(
   options?: {
     purpose?: RouteRequestPurpose;
     deadlineAt?: number;
+    context?: LightContext;
   }
 ): Promise<WalkingRoute> {
-  const cacheKey = walkingRouteCacheKey(start, destination);
-  const cached = getCachedWalkingRoute(start, destination);
+  const context = options?.context ?? 'day';
+  const cacheKey = walkingRouteCacheKey(start, destination, context);
+  const cached = getCachedWalkingRoute(start, destination, context);
   if (cached) return cached;
 
   // Normal callers still share identical work. Ticket selection itself avoids
@@ -196,33 +357,29 @@ export async function fetchWalkingRoute(
 
     const url =
       `${FOOT_ROUTER}/${coordinates}` +
-      '?overview=full&geometries=geojson&steps=true&alternatives=false';
+      `?overview=full&geometries=geojson&steps=true&alternatives=${
+        context === 'night' ? '2' : 'false'
+      }`;
     const response = await fetchWithTimeout(url, effectiveTimeout);
 
     if (!response.ok) throw new Error(`Walking router ${response.status}`);
 
     const data = (await response.json()) as OsrmResponse;
-    const route = data.routes?.[0];
+    const routes = (data.routes ?? [])
+      .map(normalizeOsrmRoute)
+      .filter((route): route is WalkingRoute => route !== null);
+    const route = chooseWalkingRouteForContext(routes, context);
 
-    if (data.code !== 'Ok' || !route || !route.geometry?.coordinates?.length) {
+    if (data.code !== 'Ok' || !route) {
       throw new Error('No walking route');
     }
 
-    const normalized: WalkingRoute = {
-      coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({
-        latitude,
-        longitude,
-      })),
-      distanceMeters: route.distance,
-      durationSeconds: route.duration,
-    };
-
     walkingRouteCache.set(cacheKey, {
       expiresAt: Date.now() + WALKING_ROUTE_CACHE_TTL,
-      route: normalized,
+      route,
     });
 
-    return normalized;
+    return route;
   })().finally(() => {
     const current = walkingRouteInFlight.get(cacheKey);
     if (current?.promise === request) {
@@ -287,7 +444,8 @@ export async function prewarmWalkingRoutes(
   candidates: SceneCandidate[],
   limit = 1,
   minutes = 15,
-  distanceScale = 1
+  distanceScale = 1,
+  context: LightContext = 'day'
 ) {
   const startedAt = Date.now();
 
@@ -307,7 +465,7 @@ export async function prewarmWalkingRoutes(
 
   const scene = likely[0];
 
-  if (getCachedWalkingRoute(start, scene.point)) {
+  if (getCachedWalkingRoute(start, scene.point, context)) {
     console.log(
       `[DETOUR PREWARM] cache already ready in ${Date.now() - startedAt}ms`
     );
@@ -319,7 +477,7 @@ export async function prewarmWalkingRoutes(
       start,
       scene.point,
       PREWARM_ROUTE_TIMEOUT_MS,
-      { purpose: 'prewarm' }
+      { purpose: 'prewarm', context }
     );
 
     console.log(
@@ -425,6 +583,7 @@ type RouteAssessment = {
   emergency: boolean;
   overlapRatio: number;
   directnessRatio: number;
+  localShortcutRatio: number;
 };
 
 function assessRoute(args: {
@@ -436,6 +595,7 @@ function assessRoute(args: {
   minutes: number;
   avoidRoutes: GeoPoint[][];
   straightDistanceMeters: number;
+  context: LightContext;
 }): RouteAssessment {
   const overlap = routeOverlapRatio(args.route.coordinates, args.avoidRoutes);
   const estimatedSeconds = estimatedJourneySeconds(
@@ -444,6 +604,8 @@ function assessRoute(args: {
     args.minutes
   );
   const overtimeSeconds = Math.max(0, estimatedSeconds - args.timeBudgetSeconds);
+  const targetJourneySeconds = args.timeBudgetSeconds * 0.96;
+  const timeDeltaSeconds = Math.abs(estimatedSeconds - targetJourneySeconds);
   const distanceDelta = Math.abs(args.route.distanceMeters - args.profile.target);
   const directnessRatio =
     args.route.distanceMeters / Math.max(80, args.straightDistanceMeters);
@@ -455,33 +617,59 @@ function assessRoute(args: {
   const circuitPenalty =
     Math.max(0, directnessRatio - 1.45) * args.profile.target * 0.9;
   const overtimePenalty = overtimeSeconds * 1.4;
+  const timeFitPenalty = timeDeltaSeconds * 0.55;
+  const localShortcutRatio = args.route.quality.localShortcutRatio;
+  const localShortcutPenalty =
+    Math.max(0, localShortcutRatio - 1.22) * args.profile.target * 1.25;
+  const nightLegibilityPenalty =
+    args.context === 'night'
+      ? (
+          args.route.quality.unnamedDistanceRatio * args.profile.target * 0.7 +
+          args.route.quality.turnCount * 16
+        )
+      : 0;
   const score =
-    distanceDelta + noveltyPenalty + circuitPenalty + overtimePenalty;
+    distanceDelta * 0.55 +
+    timeFitPenalty +
+    noveltyPenalty +
+    circuitPenalty +
+    overtimePenalty +
+    localShortcutPenalty +
+    nightLegibilityPenalty;
 
   const distanceFits =
     args.route.distanceMeters >= args.profile.min &&
     args.route.distanceMeters <= args.maxDistance;
-  const timeFits = estimatedSeconds <= args.timeBudgetSeconds;
+  const minimumJourneySeconds = args.timeBudgetSeconds * 0.82;
+  const preferredShortcutLimit =
+    args.context === 'night'
+      ? Math.min(LOCAL_SHORTCUT_PREFERRED_MAX, 1.34)
+      : LOCAL_SHORTCUT_PREFERRED_MAX;
 
   return {
     score,
     preferred:
       distanceFits &&
-      timeFits &&
+      estimatedSeconds >= minimumJourneySeconds &&
+      estimatedSeconds <= args.timeBudgetSeconds * 1.1 &&
       overlap <= ROUTE_OVERLAP_PREFERRED_MAX &&
-      directnessRatio <= ROUTE_DIRECTNESS_PREFERRED_MAX,
+      directnessRatio <= ROUTE_DIRECTNESS_PREFERRED_MAX &&
+      localShortcutRatio <= preferredShortcutLimit,
     fallback:
       args.route.distanceMeters >= 70 &&
       estimatedSeconds <= args.timeBudgetSeconds * 1.12 &&
       overlap <= ROUTE_OVERLAP_FALLBACK_MAX &&
-      directnessRatio <= ROUTE_DIRECTNESS_FALLBACK_MAX,
+      directnessRatio <= ROUTE_DIRECTNESS_FALLBACK_MAX &&
+      localShortcutRatio <= LOCAL_SHORTCUT_FALLBACK_MAX,
     emergency:
       args.route.distanceMeters >= 70 &&
       estimatedSeconds <= args.timeBudgetSeconds * 1.3 &&
       overlap <= ROUTE_OVERLAP_EMERGENCY_MAX &&
-      directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX,
+      directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX &&
+      localShortcutRatio <= LOCAL_SHORTCUT_EMERGENCY_MAX,
     overlapRatio: overlap,
     directnessRatio,
+    localShortcutRatio,
   };
 }
 
@@ -494,6 +682,7 @@ function assessRoutedScene(args: {
   sideMissionCount: number;
   minutes: number;
   avoidRoutes: GeoPoint[][];
+  context: LightContext;
 }) {
   return {
     routed: {
@@ -510,6 +699,7 @@ function assessRoutedScene(args: {
       avoidRoutes: args.avoidRoutes,
       straightDistanceMeters:
         args.scene.straightDistanceMeters,
+      context: args.context,
     }),
   };
 }
@@ -522,6 +712,7 @@ export async function resolveRoutedScene(args: {
   distanceScale?: number;
   sideMissionCount?: number;
   avoidRoutes?: GeoPoint[][];
+  context?: LightContext;
 }): Promise<RoutedScene> {
   const routingStartedAt = Date.now();
   const deadlineAt = routingStartedAt + TICKET_ROUTING_BUDGET_MS;
@@ -530,7 +721,8 @@ export async function resolveRoutedScene(args: {
   const maxDistance = args.maxDistanceMeters ?? profile.max;
   const sideMissionCount = args.sideMissionCount ?? 0;
   const avoidRoutes = args.avoidRoutes ?? [];
-  const timeBudgetSeconds = Math.max(5, args.minutes) * 60 * 1.05;
+  const context = args.context ?? 'day';
+  const timeBudgetSeconds = Math.max(5, args.minutes) * 60;
 
   const shortlist = routingShortlist(
     args.candidates,
@@ -549,7 +741,7 @@ export async function resolveRoutedScene(args: {
   // Finished prewarm data is free: inspect it synchronously before touching the
   // network. Emergency cache results are kept too instead of being discarded.
   for (const scene of shortlist) {
-    const route = getCachedWalkingRoute(args.start, scene.point);
+    const route = getCachedWalkingRoute(args.start, scene.point, context);
     if (!route) continue;
 
     const { routed, assessment } = assessRoutedScene({
@@ -561,6 +753,7 @@ export async function resolveRoutedScene(args: {
       sideMissionCount,
       minutes: args.minutes,
       avoidRoutes,
+      context,
     });
 
     if (
@@ -600,7 +793,7 @@ export async function resolveRoutedScene(args: {
   const busySceneIds = new Set<string>();
 
   for (const scene of shortlist) {
-    const inFlight = getInFlightWalkingRoute(args.start, scene.point);
+    const inFlight = getInFlightWalkingRoute(args.start, scene.point, context);
     if (!inFlight) continue;
 
     const remaining = deadlineAt - Date.now();
@@ -616,7 +809,8 @@ export async function resolveRoutedScene(args: {
     const hintedRoute = await waitForInFlightWalkingRoute(
       args.start,
       scene.point,
-      graceMs
+      graceMs,
+      context
     );
 
     if (hintedRoute) {
@@ -629,6 +823,7 @@ export async function resolveRoutedScene(args: {
         sideMissionCount,
         minutes: args.minutes,
         avoidRoutes,
+        context,
       });
 
       if (assessment.preferred) {
@@ -671,7 +866,7 @@ export async function resolveRoutedScene(args: {
     // a duplicate request. Move to another candidate instead.
     if (
       busySceneIds.has(scene.id) &&
-      getInFlightWalkingRoute(args.start, scene.point)
+      getInFlightWalkingRoute(args.start, scene.point, context)
     ) {
       console.log('[DETOUR ROUTE] skipped busy prewarm candidate');
       continue;
@@ -679,7 +874,7 @@ export async function resolveRoutedScene(args: {
 
     // The prewarm may have finished after the grace window. Re-check cache for
     // free before spending a network attempt.
-    const newlyCached = getCachedWalkingRoute(args.start, scene.point);
+    const newlyCached = getCachedWalkingRoute(args.start, scene.point, context);
     if (newlyCached) {
       const { routed, assessment } = assessRoutedScene({
         scene,
@@ -690,6 +885,7 @@ export async function resolveRoutedScene(args: {
         sideMissionCount,
         minutes: args.minutes,
         avoidRoutes,
+        context,
       });
 
       if (assessment.preferred) {
@@ -739,6 +935,7 @@ export async function resolveRoutedScene(args: {
         {
           purpose: 'interactive',
           deadlineAt,
+          context,
         }
       );
       const { routed, assessment } = assessRoutedScene({
@@ -750,6 +947,7 @@ export async function resolveRoutedScene(args: {
         sideMissionCount,
         minutes: args.minutes,
         avoidRoutes,
+        context,
       });
 
       if (assessment.preferred) {
