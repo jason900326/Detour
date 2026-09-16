@@ -746,15 +746,7 @@ export function DetourHomeView({
                       width: printingLayout.railWidth,
                       alignItems: 'center',
                       opacity: ticketDisplayReady ? 1 : 0,
-                      transformOrigin: '50% 0%',
                       transform: [
-                        { perspective: 900 },
-                        {
-                          rotateX: routeProgress.interpolate({
-                            inputRange: [0, 0.72, 1],
-                            outputRange: ['0deg', '0deg', '4deg'],
-                          }),
-                        },
                         {
                           translateY: routeProgress.interpolate({
                             inputRange: [0, 0.72, 1],
