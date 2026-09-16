@@ -1,9 +1,9 @@
 import { StyleSheet } from 'react-native';
 
-// The printer is intentionally split into depth planes instead of drawing a
-// single metal bar over the ticket. The slot/body sit furthest back, the
-// lower guide rail sits behind the paper, and the paper itself becomes the
-// front-most moving surface once it leaves the slot.
+// Printing is intentionally built as a few simple depth planes. The housing is
+// the back plane, the dark slit is the actual paper mouth, and the ticket starts
+// exactly where that slit ends. Keeping the mouth thin makes it obvious that the
+// ticket is coming through the opening instead of appearing underneath a bar.
 export const printerOverrides = StyleSheet.create({
   v50PrinterBody: {
     position: 'absolute',
@@ -24,47 +24,43 @@ export const printerOverrides = StyleSheet.create({
   },
   v50PrinterSlotShell: {
     position: 'absolute',
-    left: 3,
-    right: 3,
-    top: 31,
-    height: 29,
-    borderRadius: 10,
-    backgroundColor: '#5E5B55',
+    left: 18,
+    right: 18,
+    top: 47,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#6B6862',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.34,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  // Width and height are supplied by the responsive printer geometry so the
-  // clipping window always matches the native slot and the scaled full ticket.
+  v50PrinterSlot: {
+    width: '100%',
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#11110F',
+  },
+  // The animated viewport still owns the reveal. The ticket track is lifted by
+  // the temporary lead area added in the previous pass, so that lead never
+  // becomes a second visible sheet behind the actual ticket.
+  v48PaperTrack: {
+    top: -38,
+  },
   v48PaperViewport: {
     position: 'absolute',
-    top: 47,
     overflow: 'hidden',
     alignItems: 'center',
     zIndex: 3,
     elevation: 3,
   },
+  // No separate lower lip: the paper now meets the lower edge of the slit
+  // directly, which makes the mouth itself read as the source of the ticket.
   v50PrinterFrontLip: {
-    position: 'absolute',
-    left: 4,
-    right: 4,
-    top: 51,
-    height: 9,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-    backgroundColor: '#77746E',
-    borderTopWidth: 1,
-    borderTopColor: '#96938C',
-    zIndex: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
+    display: 'none',
   },
   // V45Ticket still owns the barcode view structurally, but the current ticket
   // design intentionally omits it. Overriding the shared style keeps all
