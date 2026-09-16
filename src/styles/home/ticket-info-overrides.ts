@@ -43,7 +43,8 @@ export const ticketInfoOverrides = StyleSheet.create({
   },
 
   // Legacy route glyph pieces remain hidden. The lower-right cell now belongs
-  // entirely to the active Mood icon.
+  // entirely to the active Mood icon; V45Ticket anchors its bottom edge to the
+  // same lower information baseline as the destination value.
   v46ArtMiniStart: {
     display: 'none',
   },
