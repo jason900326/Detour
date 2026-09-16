@@ -27,7 +27,7 @@ export type PlaytestRating =
 
 export type PlaytestFeedbackReason =
   | 'destination'
-  | 'mission'
+  | 'side-event'
   | 'distance'
   | 'navigation'
   | 'awkward'
