@@ -1127,7 +1127,7 @@ export function DetourHomeView({
                       <Text style={styles.reissueChoiceTitle}>{title}</Text>
                       <Text style={styles.reissueChoiceNote}>{note}</Text>
                     </Pressable>
-                  )}
+                  ))}
               </View>
 
               {replacementLoading && (
