@@ -8,8 +8,7 @@ export const STAGE_TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   mood: ['time', 'preparing'],
   preparing: ['mood', 'ready'],
   ready: ['mood', 'journey'],
-  journey: ['mission', 'arrival', 'sceneIssue', 'finish'],
-  mission: ['journey', 'arrival', 'sceneIssue', 'finish'],
+  journey: ['arrival', 'sceneIssue', 'finish'],
   arrival: ['journey', 'sceneIssue', 'developing', 'finish'],
   sceneIssue: ['arrival', 'journey'],
   developing: ['finish'],
@@ -21,7 +20,6 @@ export const STAGE_TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
 export const ABANDONABLE_STAGES: ReadonlySet<Stage> = new Set([
   'ready',
   'journey',
-  'mission',
   'arrival',
   'sceneIssue',
 ]);
