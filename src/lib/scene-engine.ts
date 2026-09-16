@@ -5,28 +5,17 @@ import type {
   MoodId,
 } from './journey-engine';
 
+import { DETOUR_API_CONFIG } from './app-config';
+
 import {
   getSceneFeedbackBias,
   type SceneFeedbackRecord,
 } from './scene-feedback';
 
-declare const process: {
-  env: Record<string, string | undefined>;
-};
-
-const DEFAULT_SCENE_ENDPOINT =
-  'https://ldlhzyfubjbuumikrkuv.supabase.co/functions/v1/detour-scene';
-
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
-  'sb_publishable_qhZ09r25etnEi-0dURQCYw_EStro0t_';
-
-const SCENE_ENDPOINT =
-  process.env.EXPO_PUBLIC_DETOUR_SCENE_URL?.trim() ||
-  DEFAULT_SCENE_ENDPOINT;
-
-const SUPABASE_PUBLISHABLE_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-  DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+const {
+  sceneEndpoint: SCENE_ENDPOINT,
+  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
+} = DETOUR_API_CONFIG;
 
 export type SceneKind =
   | 'mural'

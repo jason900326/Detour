@@ -125,6 +125,7 @@ import {
   moodHint,
 } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance, offsetPoint } from '../lib/geo-utils';
+import { ABANDONABLE_STAGES, canTransition } from '../lib/stage-flow';
 import {
   contextCode,
   formatClockTime,
@@ -1204,6 +1205,15 @@ export function useDetourHomeController() {
   }
 
   function transitionTo(next: Stage, beforeEnter?: () => void) {
+    const current = stageRef.current;
+
+    if (!canTransition(current, next)) {
+      console.warn(
+        `[DETOUR FLOW] blocked invalid transition ${current} -> ${next}`
+      );
+      return;
+    }
+
     Animated.parallel([
       Animated.timing(screenOpacity, {
         toValue: 0,
@@ -1317,13 +1327,7 @@ export function useDetourHomeController() {
 
     if (
       testSessionId &&
-      [
-        'ready',
-        'journey',
-        'mission',
-        'arrival',
-        'recovery',
-      ].includes(stageRef.current)
+      ABANDONABLE_STAGES.has(stageRef.current)
     ) {
       void updatePlaytestSession(
         testSessionId,

@@ -1,16 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { DETOUR_API_CONFIG } from './app-config';
+import { DETOUR_BUILD_VERSION } from './build-info';
+
 const PLAYTEST_KEY = '@detour/playtest/v1';
 const TESTER_KEY = '@detour/playtest-tester/v1';
 
-const PLAYTEST_SYNC_ENDPOINT =
-  'https://ldlhzyfubjbuumikrkuv.supabase.co/functions/v1/detour-playtest';
-
-const SUPABASE_PUBLISHABLE_KEY =
-  'sb_publishable_qhZ09r25etnEi-0dURQCYw_EStro0t_';
+const {
+  playtestEndpoint: PLAYTEST_SYNC_ENDPOINT,
+  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
+} = DETOUR_API_CONFIG;
 
 export const DETOUR_PLAYTEST_VERSION =
-  '0.39.0';
+  DETOUR_BUILD_VERSION;
 
 export type PlaytestStatus =
   | 'ticket-failed'

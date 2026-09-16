@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { DETOUR_API_CONFIG } from './app-config';
+
 import type {
   LightContext,
   Mission,
@@ -11,26 +13,10 @@ import type {
   SceneCandidate,
 } from './scene-engine';
 
-declare const process: {
-  env: Record<string, string | undefined>;
-};
-
-// These two values are intentionally safe to ship in the mobile client.
-// They identify the public Supabase project/function; they are NOT secrets.
-// Environment variables can still override them for future staging projects.
-const DEFAULT_AI_ENDPOINT =
-  'https://ldlhzyfubjbuumikrkuv.supabase.co/functions/v1/detour-ai';
-
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
-  'sb_publishable_qhZ09r25etnEi-0dURQCYw_EStro0t_';
-
-const AI_ENDPOINT =
-  process.env.EXPO_PUBLIC_DETOUR_AI_URL?.trim() ||
-  DEFAULT_AI_ENDPOINT;
-
-const SUPABASE_PUBLISHABLE_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-  DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+const {
+  aiEndpoint: AI_ENDPOINT,
+  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
+} = DETOUR_API_CONFIG;
 
 const SAFE_TAG_KEYS = [
   'amenity',
