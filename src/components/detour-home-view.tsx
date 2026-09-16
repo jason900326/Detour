@@ -175,9 +175,23 @@ export function DetourHomeView({
     }
   }, [stage]);
 
+  useEffect(() => {
+    if (stage === 'time' && selectedMood === 'slow') {
+      controller.setSelectedMood(null);
+      setSlowDestinationInput('');
+      setSlowDestinationError(null);
+    }
+  }, [stage, selectedMood]);
+
   const handleTicketVisualReady = () => {
     markTicketVisualReady();
     requestAnimationFrame(() => setTicketDisplayReady(true));
+  };
+
+  const dismissSlowMood = () => {
+    controller.setSelectedMood(null);
+    setSlowDestinationInput('');
+    setSlowDestinationError(null);
   };
 
   const chromeDark = stage === 'journey' || stage === 'developing';
@@ -412,7 +426,7 @@ export function DetourHomeView({
               </Pressable>
             </View>
 
-            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}> 
+            <Animated.View style={[styles.v35RouteSketch, { opacity: homeEntrance }]}>
               <Image
                 source={require('../../assets/detour/home-hero-route.png')}
                 style={styles.v46HomeHeroRoute}
@@ -432,7 +446,14 @@ export function DetourHomeView({
                 },
               ]}
             >
-              <Text style={styles.v35MinuteNumber}>{sliderDisplayMinutes}</Text>
+              <Text
+                style={[
+                  styles.v35MinuteNumber,
+                  { letterSpacing: 0, paddingHorizontal: 5, overflow: 'visible' },
+                ]}
+              >
+                {sliderDisplayMinutes}
+              </Text>
               <Text style={styles.v35MinuteUnit}>分</Text>
             </Animated.View>
 
@@ -592,10 +613,7 @@ export function DetourHomeView({
               transparent
               animationType="fade"
               statusBarTranslucent
-              onRequestClose={() => {
-                controller.setSelectedMood(null);
-                setSlowDestinationError(null);
-              }}
+              onRequestClose={dismissSlowMood}
             >
               <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -611,9 +629,27 @@ export function DetourHomeView({
                     backgroundColor: '#F5F1E8',
                   }}
                 >
+                  <Pressable
+                    onPress={dismissSlowMood}
+                    hitSlop={12}
+                    style={{
+                      position: 'absolute',
+                      top: 14,
+                      right: 18,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#EAE5DB',
+                      zIndex: 2,
+                    }}
+                  >
+                    <Text style={{ marginTop: -2, fontSize: 28, lineHeight: 30, color: INK }}>×</Text>
+                  </Pressable>
                   <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 1.5, color: SIGNAL }}>慢慢走</Text>
                   <Text style={{ marginTop: 8, fontSize: 34, lineHeight: 40, fontWeight: '900', color: INK }}>你要去哪？</Text>
-                  <Text style={{ marginTop: 8, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
+                  <Text style={{ marginTop: 8, paddingRight: 42, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
                   <TextInput
                     autoFocus
                     value={slowDestinationInput}
