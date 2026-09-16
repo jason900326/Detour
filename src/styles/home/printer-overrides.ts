@@ -1,35 +1,49 @@
 import { StyleSheet } from 'react-native';
 
-// Treat the printer mouth as a real depth stack, not a single line:
+// The feed mouth is a three-plane stack:
 //   front silver rail  -> always above the ticket
 //   ticket             -> feeds between the rails
 //   rear silver rail   -> always behind the ticket
-// The ticket itself is still bottom-anchored inside the growing viewport, so
-// its bottom edge appears first and its top edge is the last part out.
+// Both rails receive the exact same responsive width from the printing layout.
 export const printerOverrides = StyleSheet.create({
-  // Front / upper rail. This is the physical lip that visually clamps the
-  // ticket and must always paint above it.
   v50PrinterSlotOnly: {
     position: 'absolute',
     top: 0,
+    alignSelf: 'center',
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#C8C6C0',
+    backgroundColor: '#BBB8B1',
     borderTopWidth: 1,
-    borderTopColor: '#F5F3EE',
+    borderTopColor: '#F4F1EB',
     borderBottomWidth: 1,
-    borderBottomColor: '#77746E',
+    borderBottomColor: '#68645D',
     zIndex: 6,
     elevation: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
 
-  // The full ticket stays anchored to the bottom of the reveal viewport. A
-  // moving paper shadow makes the feed motion much easier to read while keeping
-  // the paper itself rigid enough to avoid distortion artifacts.
+  v50PrinterRearRail: {
+    position: 'absolute',
+    top: 7,
+    alignSelf: 'center',
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#8E8A83',
+    borderTopWidth: 1,
+    borderTopColor: '#C9C6BF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#5F5B55',
+    zIndex: 1,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
   v48PaperTrack: {
     position: 'absolute',
     left: 0,
@@ -44,18 +58,12 @@ export const printerOverrides = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
   },
 
-  // Rear / lower rail. It is painted as the top edge of the reveal viewport,
-  // which sits behind the child ticket. The viewport is nudged down just enough
-  // for the front and rear rails to read as two separate metal planes.
   v48PaperViewport: {
     position: 'absolute',
     overflow: 'hidden',
     alignItems: 'center',
-    transform: [{ translateY: 3 }],
-    borderTopWidth: 7,
-    borderTopColor: '#9D9A93',
-    zIndex: 2,
-    elevation: 2,
+    zIndex: 3,
+    elevation: 3,
   },
 
   v46ArtBarcode: {
