@@ -134,7 +134,7 @@ export function DetourHomeView({
     const ticketArtworkRenderScale = 0.75;
     const ticketWidthFromArtwork =
       (ticketArtworkWidthPx * ticketArtworkRenderScale) / PixelRatio.get();
-    const paperExitTop = 59;
+    const paperExitTop = 5;
     const chromeAndPrinterTop = 48 + 48 + 67 + 12 + paperExitTop;
     const tearHintReserve = 52 + bottomPadding;
     const maxPaperHeight = Math.max(
@@ -147,7 +147,6 @@ export function DetourHomeView({
       Math.min(ticketWidthFromArtwork, slotWidth, maxPaperHeight / ticketAspect)
     );
     const ticketHeight = ticketWidth * ticketAspect;
-    const paperLeadHeight = Math.max(28, Math.round(ticketWidth * 0.13));
 
     return {
       leftPadding,
@@ -159,7 +158,6 @@ export function DetourHomeView({
       ticketWidth,
       ticketHeight,
       paperExitTop,
-      paperLeadHeight,
       paperViewportHeight: ticketHeight + 2,
       assemblyHeight: paperExitTop + ticketHeight + 2,
     };
@@ -725,12 +723,18 @@ export function DetourHomeView({
                 },
               ]}
             >
-              <View pointerEvents="none" style={styles.v50PrinterBody}>
-                <View style={styles.v50PrinterHighlight} />
-                <View style={styles.v50PrinterSlotShell}>
-                  <View style={styles.v50PrinterSlot} />
-                </View>
-              </View>
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.v50PrinterSlotOnly,
+                  {
+                    width: Math.min(
+                      printingLayout.slotWidth,
+                      printingLayout.ticketWidth + 40
+                    ),
+                  },
+                ]}
+              />
               <Animated.View
                 style={[
                   styles.v48PaperViewport,
@@ -751,44 +755,37 @@ export function DetourHomeView({
                       width: printingLayout.slotWidth,
                       alignItems: 'center',
                       opacity: ticketDisplayReady ? 1 : 0,
+                      transformOrigin: '50% 0%',
+                      transform: [
+                        { perspective: 900 },
+                        {
+                          rotateX: routeProgress.interpolate({
+                            inputRange: [0, 0.72, 1],
+                            outputRange: ['0deg', '0deg', '4deg'],
+                          }),
+                        },
+                        {
+                          translateY: routeProgress.interpolate({
+                            inputRange: [0, 0.72, 1],
+                            outputRange: [0, 0, 2],
+                          }),
+                        },
+                      ],
                     },
                   ]}
                 >
-                  <View
-                    style={{
-                      width: printingLayout.ticketWidth,
-                      height: printingLayout.ticketHeight,
-                      position: 'relative',
-                      backgroundColor: '#F2ECE2',
-                    }}
-                  >
-                    <V45Ticket
-                      timeLabel={selectedTime ?? '10'}
-                      moodId={selectedMood ?? 'wander'}
-                      moodLabel={mood?.label ?? '—'}
-                      serial={ticketSerial(selectedTime, selectedMood)}
-                      stamped={stage === 'ready'}
-                      stampProgress={ticketStamp}
-                      renderWidth={printingLayout.ticketWidth}
-                      onVisualReady={handleTicketVisualReady}
-                    />
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: -1,
-                        right: -1,
-                        height: printingLayout.paperLeadHeight,
-                        borderTopLeftRadius: 9,
-                        borderTopRightRadius: 9,
-                        backgroundColor: '#F2ECE2',
-                      }}
-                    />
-                  </View>
+                  <V45Ticket
+                    timeLabel={selectedTime ?? '10'}
+                    moodId={selectedMood ?? 'wander'}
+                    moodLabel={mood?.label ?? '—'}
+                    serial={ticketSerial(selectedTime, selectedMood)}
+                    stamped={stage === 'ready'}
+                    stampProgress={ticketStamp}
+                    renderWidth={printingLayout.ticketWidth}
+                    onVisualReady={handleTicketVisualReady}
+                  />
                 </Animated.View>
               </Animated.View>
-              <View pointerEvents="none" style={styles.v50PrinterFrontLip} />
             </View>
 
             {stage === 'ready' && ticketReadyUnlocked && (
