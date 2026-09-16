@@ -53,7 +53,7 @@
     "web": "expo start --web",
     "lint": "node scripts/lint-architecture.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types src/lib/*.test.ts",
+    "test": "node --test --experimental-strip-types src/lib/*.test.mjs",
     "quality": "npm run lint && npm run typecheck && npm test",
     "lint:expo": "expo lint"
   },

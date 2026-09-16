@@ -49,7 +49,7 @@ test('invalid jumps and stale recovery stage are rejected', () => {
   );
   assert.equal(
     [...ABANDONABLE_STAGES].includes(
-      'recovery' as never
+      'recovery'
     ),
     false
   );
