@@ -2,12 +2,10 @@ import { StyleSheet } from 'react-native';
 
 import { INK } from '../../theme/detour-theme';
 
-// Ticket overlay refinements only. V45Ticket now renders these native text
-// layers at the final ticket size, so they stay sharp even when the artwork is
-// scaled by Skia underneath.
+// Ticket overlay refinements only. V45Ticket renders these native text layers
+// at their final size, so iOS never has to raster-upscale the copy, stamp, or
+// Mood icon together with the paper artwork.
 export const ticketInfoOverrides = StyleSheet.create({
-  // Mood copy is text-only in the upper-right cell. The active Mood icon now
-  // lives in the lower-right cell and is rendered separately by V45Ticket.
   v46ArtTicketMoodRow: {
     marginTop: 7,
     position: 'relative',
@@ -44,8 +42,8 @@ export const ticketInfoOverrides = StyleSheet.create({
     color: INK,
   },
 
-  // Legacy mini-route pieces remain hidden; the lower-right cell is reserved
-  // for the current Mood icon.
+  // Legacy route glyph pieces remain hidden. The lower-right cell now belongs
+  // entirely to the active Mood icon.
   v46ArtMiniStart: {
     display: 'none',
   },
