@@ -5,6 +5,11 @@ import { StyleSheet } from 'react-native';
 //   ticket             -> feeds between the rails
 //   rear silver rail   -> always behind the ticket
 // Both rails receive the exact same responsive width from the printing layout.
+// The existing layout allocates 85% of that width to the paper. Scaling the
+// reveal plane by 95 / 85 keeps the print mask and ticket together, so the
+// ticket remains proportional while reading visually as 95% of the silver rail.
+const TICKET_TO_RAIL_SCALE = 0.95 / 0.85;
+
 export const printerOverrides = StyleSheet.create({
   v50PrinterSlotOnly: {
     position: 'absolute',
@@ -64,6 +69,8 @@ export const printerOverrides = StyleSheet.create({
     alignItems: 'center',
     zIndex: 3,
     elevation: 3,
+    transformOrigin: '50% 0%',
+    transform: [{ scale: TICKET_TO_RAIL_SCALE }],
   },
 
   v46ArtBarcode: {
