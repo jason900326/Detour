@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Image,
+  PixelRatio,
   StyleSheet,
   Text,
   View,
@@ -286,6 +287,12 @@ export function V45Ticket({
   const { enabled: tearEnabled, onTorn } = useTicketTear();
   const seamY = DETOUR_TICKET_HEIGHT * DETOUR_TICKET_TEAR_SEAM_RATIO;
   const gestureTop = seamY - TEAR_HIT_HEIGHT / 2;
+  const safeRenderWidth = Math.max(1, renderWidth);
+  const renderScale = safeRenderWidth / DETOUR_TICKET_WIDTH;
+  const renderedHeight = DETOUR_TICKET_HEIGHT * renderScale;
+  const snap = (value: number) => PixelRatio.roundToNearestPixel(value);
+  const renderArtPx = (value: number) => snap(artPx(value) * renderScale);
+  const renderUiPx = (value: number) => snap(value * renderScale);
 
   const clearTear = () => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -565,13 +572,18 @@ export function V45Ticket({
       Gesture.Pan()
         .runOnJS(true)
         .minDistance(0)
-        .onBegin((event) => beginDrag(event.x, event.y))
-        .onUpdate((event) => updateDrag(event.translationX, event.translationY))
+        .onBegin((event) => beginDrag(event.x / renderScale, event.y / renderScale))
+        .onUpdate((event) =>
+          updateDrag(
+            event.translationX / renderScale,
+            event.translationY / renderScale
+          )
+        )
         .onEnd(endDrag)
         .onFinalize(() => {
           activeDragRef.current.active = false;
         }),
-    [tearEnabled, gestureTop, seamY]
+    [tearEnabled, gestureTop, seamY, renderScale]
   );
 
   const livePoints = ordered(tearPoints);
@@ -613,9 +625,6 @@ export function V45Ticket({
     ? stampProgress.interpolate({ inputRange: [0, 1], outputRange: [1.28, 1] })
     : 1;
   const stampOpacity = stampProgress ?? (stamped ? 1 : 0);
-  const safeRenderWidth = Math.max(1, renderWidth);
-  const renderScale = safeRenderWidth / DETOUR_TICKET_WIDTH;
-  const renderedHeight = DETOUR_TICKET_HEIGHT * renderScale;
 
   const feedStyle = {
     transform: [
@@ -640,10 +649,12 @@ export function V45Ticket({
     ],
   };
 
-  // Printing and tearing always use the same decoded Skia image. This avoids
-  // swapping from a React Native Image to Canvas at the ready-state boundary.
+  // Skia scales only the bitmap / tear artwork. Native text, the stamp, and SVG
+  // mood icon are laid out at their final size so iOS never raster-scales them.
   const skiaArtworkReady = artworkVisible && !!ticketImage;
   const ticketVisualReady = !artworkVisible || skiaArtworkReady;
+  const moodIconSize = renderUiPx(60);
+  const lowerInfoHeight = renderUiPx(14 + 5 + 45);
 
   return (
     <Animated.View
@@ -656,76 +667,78 @@ export function V45Ticket({
       <View
         style={[
           styles.v46ArtTicket,
-          { width: DETOUR_TICKET_WIDTH, height: DETOUR_TICKET_HEIGHT, transform: [{ scale: renderScale }] },
+          { width: safeRenderWidth, height: renderedHeight },
         ]}
       >
       {skiaArtworkReady && (
         <Canvas style={StyleSheet.absoluteFill}>
-          {!hasTear && (
-            <SkiaImage
-              image={ticketImage}
-              x={0}
-              y={0}
-              width={DETOUR_TICKET_WIDTH}
-              height={DETOUR_TICKET_HEIGHT}
-              fit="contain"
-            />
-          )}
+          <Group transform={[{ scale: renderScale }]}>
+            {!hasTear && (
+              <SkiaImage
+                image={ticketImage}
+                x={0}
+                y={0}
+                width={DETOUR_TICKET_WIDTH}
+                height={DETOUR_TICKET_HEIGHT}
+                fit="contain"
+              />
+            )}
 
-          {hasTear && regionPath && (
-            <>
-              <Group clip={regionPath} invertClip>
-                <SkiaImage
-                  image={ticketImage}
-                  x={0}
-                  y={0}
-                  width={DETOUR_TICKET_WIDTH}
-                  height={DETOUR_TICKET_HEIGHT}
-                  fit="contain"
-                />
-              </Group>
+            {hasTear && regionPath && (
+              <>
+                <Group clip={regionPath} invertClip>
+                  <SkiaImage
+                    image={ticketImage}
+                    x={0}
+                    y={0}
+                    width={DETOUR_TICKET_WIDTH}
+                    height={DETOUR_TICKET_HEIGHT}
+                    fit="contain"
+                  />
+                </Group>
 
-              <Group
-                clip={regionPath}
-                origin={pieceOrigin}
-                transform={[
-                  { translateX: pieceX },
-                  { translateY: pieceY },
-                  { rotate: pieceRotation },
-                ]}
-              >
-                <SkiaImage
-                  image={ticketImage}
-                  x={0}
-                  y={0}
-                  width={DETOUR_TICKET_WIDTH}
-                  height={DETOUR_TICKET_HEIGHT}
-                  fit="contain"
-                />
-              </Group>
+                <Group
+                  clip={regionPath}
+                  origin={pieceOrigin}
+                  transform={[
+                    { translateX: pieceX },
+                    { translateY: pieceY },
+                    { rotate: pieceRotation },
+                  ]}
+                >
+                  <SkiaImage
+                    image={ticketImage}
+                    x={0}
+                    y={0}
+                    width={DETOUR_TICKET_WIDTH}
+                    height={DETOUR_TICKET_HEIGHT}
+                    fit="contain"
+                  />
+                </Group>
 
-              {edgeShadowPath && (
-                <SkiaPathView
-                  path={edgeShadowPath}
-                  color="rgba(66,49,34,0.28)"
-                  style="stroke"
-                  strokeWidth={1.55}
-                  strokeCap="round"
-                  strokeJoin="round"
-                />
-              )}
-              {edgePath && (
-                <SkiaPathView
-                  path={edgePath}
-                  color="rgba(255,253,246,0.98)"
-                  style="stroke"
-                  strokeWidth={1.35}
-                  strokeCap="round"
-                  strokeJoin="round"
-                />
-              )}
-            </>
-          )}
+                {edgeShadowPath && (
+                  <SkiaPathView
+                    path={edgeShadowPath}
+                    color="rgba(66,49,34,0.28)"
+                    style="stroke"
+                    strokeWidth={1.55}
+                    strokeCap="round"
+                    strokeJoin="round"
+                  />
+                )}
+                {edgePath && (
+                  <SkiaPathView
+                    path={edgePath}
+                    color="rgba(255,253,246,0.98)"
+                    style="stroke"
+                    strokeWidth={1.35}
+                    strokeCap="round"
+                    strokeJoin="round"
+                  />
+                )}
+              </>
+            )}
+          </Group>
         </Canvas>
       )}
 
@@ -740,30 +753,87 @@ export function V45Ticket({
           style={[
             ticketOverlayStyles.header,
             {
-              left: artPx(110),
-              right: artPx(112),
-              top: artPx(205),
+              left: renderArtPx(110),
+              right: renderArtPx(112),
+              top: renderArtPx(205),
             },
           ]}
         >
-          <Text style={styles.v46ArtTicketBrand}>DETOUR</Text>
-          <Text style={styles.v46ArtTicketSerial}>{serial}</Text>
+          <Text
+            style={[
+              styles.v46ArtTicketBrand,
+              {
+                fontSize: renderUiPx(25),
+                lineHeight: renderUiPx(29),
+                letterSpacing: renderUiPx(-1.5),
+              },
+            ]}
+          >
+            DETOUR
+          </Text>
+          <Text
+            style={[
+              styles.v46ArtTicketSerial,
+              {
+                paddingBottom: renderUiPx(2),
+                fontSize: renderUiPx(8),
+                letterSpacing: renderUiPx(0.9),
+              },
+            ]}
+          >
+            {serial}
+          </Text>
         </View>
 
         <View
           style={[
             ticketOverlayStyles.block,
             {
-              left: artPx(112),
-              top: artPx(402),
-              width: artPx(392),
+              left: renderArtPx(112),
+              top: renderArtPx(402),
+              width: renderArtPx(392),
             },
           ]}
         >
-          <Text style={styles.v46ArtTicketLabel}>旅程時間</Text>
-          <View style={styles.v46ArtTicketTimeRow}>
-            <Text style={styles.v46ArtTicketMinutes}>{timeLabel}</Text>
-            <Text style={styles.v46ArtTicketMinutesUnit}>分鐘</Text>
+          <Text
+            style={[
+              styles.v46ArtTicketLabel,
+              { fontSize: renderUiPx(10), lineHeight: renderUiPx(14) },
+            ]}
+          >
+            旅程時間
+          </Text>
+          <View
+            style={[
+              styles.v46ArtTicketTimeRow,
+              { marginTop: renderUiPx(2) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.v46ArtTicketMinutes,
+                {
+                  fontSize: renderUiPx(40),
+                  lineHeight: renderUiPx(43),
+                  letterSpacing: renderUiPx(-2.3),
+                },
+              ]}
+            >
+              {timeLabel}
+            </Text>
+            <Text
+              style={[
+                styles.v46ArtTicketMinutesUnit,
+                {
+                  marginLeft: renderUiPx(3),
+                  marginBottom: renderUiPx(4),
+                  fontSize: renderUiPx(14),
+                  lineHeight: renderUiPx(18),
+                },
+              ]}
+            >
+              分鐘
+            </Text>
           </View>
         </View>
 
@@ -771,16 +841,38 @@ export function V45Ticket({
           style={[
             ticketOverlayStyles.block,
             {
-              left: artPx(612),
-              top: artPx(402),
-              width: artPx(382),
+              left: renderArtPx(612),
+              top: renderArtPx(402),
+              width: renderArtPx(382),
             },
           ]}
         >
-          <Text style={styles.v46ArtTicketLabel}>此趟心情</Text>
-          <View style={styles.v46ArtTicketMoodRow}>
-            <V45MoodIcon moodId={moodId} size={30} />
-            <Text style={styles.v46ArtTicketMoodText}>{moodLabel}</Text>
+          <Text
+            style={[
+              styles.v46ArtTicketLabel,
+              { fontSize: renderUiPx(10), lineHeight: renderUiPx(14) },
+            ]}
+          >
+            此趟心情
+          </Text>
+          <View
+            style={[
+              styles.v46ArtTicketMoodRow,
+              { marginTop: renderUiPx(7) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.v46ArtTicketMoodText,
+                {
+                  fontSize: renderUiPx(24),
+                  lineHeight: renderUiPx(27),
+                  letterSpacing: renderUiPx(-0.8),
+                },
+              ]}
+            >
+              {moodLabel}
+            </Text>
           </View>
         </View>
 
@@ -788,18 +880,38 @@ export function V45Ticket({
           style={[
             ticketOverlayStyles.block,
             {
-              left: artPx(112),
-              top: artPx(720),
-              width: artPx(392),
+              left: renderArtPx(112),
+              top: renderArtPx(720),
+              width: renderArtPx(392),
             },
           ]}
         >
-          <Text style={styles.v46ArtTicketLabel}>目的地</Text>
-          <View style={styles.v46ArtTicketUnknownRow}>
-            <View style={styles.v46ArtTicketPin}>
-              <View style={styles.v46ArtTicketPinCore} />
-            </View>
-            <Text style={styles.v46ArtTicketUnknown}>???</Text>
+          <Text
+            style={[
+              styles.v46ArtTicketLabel,
+              { fontSize: renderUiPx(10), lineHeight: renderUiPx(14) },
+            ]}
+          >
+            目的地
+          </Text>
+          <View
+            style={[
+              styles.v46ArtTicketUnknownRow,
+              { marginTop: renderUiPx(5) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.v46ArtTicketUnknown,
+                {
+                  fontSize: renderUiPx(42),
+                  lineHeight: renderUiPx(45),
+                  letterSpacing: renderUiPx(2.6),
+                },
+              ]}
+            >
+              ???
+            </Text>
           </View>
         </View>
 
@@ -807,19 +919,16 @@ export function V45Ticket({
           style={[
             ticketOverlayStyles.route,
             {
-              left: artPx(620),
-              top: artPx(725),
-              width: artPx(360),
-              height: artPx(210),
+              left: renderArtPx(620),
+              top: renderArtPx(720),
+              width: renderArtPx(360),
+              height: lowerInfoHeight,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
             },
           ]}
         >
-          <View style={styles.v46ArtMiniStart} />
-          <View style={[styles.v46ArtMiniDash, { left: 13, top: 23, transform: [{ rotate: '12deg' }] }]} />
-          <View style={styles.v46ArtMiniTree} />
-          <View style={[styles.v46ArtMiniDash, { left: 59, top: 18, transform: [{ rotate: '-17deg' }] }]} />
-          <View style={styles.v46ArtMiniFlagPole} />
-          <View style={styles.v46ArtMiniFlag} />
+          <V45MoodIcon moodId={moodId} size={moodIconSize} />
         </View>
 
         {showBarcode && (
@@ -827,9 +936,11 @@ export function V45Ticket({
             style={[
               ticketOverlayStyles.barcode,
               {
-                left: artPx(790),
-                top: artPx(292),
-                width: artPx(205),
+                left: renderArtPx(790),
+                top: renderArtPx(292),
+                width: renderArtPx(205),
+                height: renderUiPx(26),
+                gap: renderUiPx(2),
               },
             ]}
           >
@@ -838,7 +949,11 @@ export function V45Ticket({
                 key={`art-barcode-${index}`}
                 style={[
                   styles.v46ArtBarcodeBar,
-                  { width: index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4 },
+                  {
+                    width: renderUiPx(
+                      index % 7 === 0 ? 4 : index % 3 === 0 ? 2.4 : 1.4
+                    ),
+                  },
                 ]}
               />
             ))}
@@ -850,14 +965,27 @@ export function V45Ticket({
             style={[
               ticketOverlayStyles.secretStamp,
               {
-                left: artPx(655),
-                top: artPx(535),
+                left: renderArtPx(655),
+                top: renderArtPx(535),
+                borderWidth: renderUiPx(2),
+                paddingHorizontal: renderUiPx(9),
+                paddingVertical: renderUiPx(6),
                 opacity: stampOpacity,
                 transform: [{ rotate: '-8deg' }, { scale: stampScale }],
               },
             ]}
           >
-            <Text style={styles.v46ArtSecretStampText}>終點保密</Text>
+            <Text
+              style={[
+                styles.v46ArtSecretStampText,
+                {
+                  fontSize: renderUiPx(14),
+                  lineHeight: renderUiPx(18),
+                },
+              ]}
+            >
+              終點保密
+            </Text>
           </Animated.View>
         )}
       </View>
@@ -870,9 +998,9 @@ export function V45Ticket({
             style={[
               ticketOverlayStyles.gestureStrip,
               {
-                top: gestureTop,
-                width: DETOUR_TICKET_WIDTH,
-                height: TEAR_HIT_HEIGHT,
+                top: renderUiPx(gestureTop),
+                width: safeRenderWidth,
+                height: renderUiPx(TEAR_HIT_HEIGHT),
               },
             ]}
           />
