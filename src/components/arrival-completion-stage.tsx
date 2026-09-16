@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
 import type { SessionPhoto } from '../lib/app-model';
@@ -41,7 +41,6 @@ export function ArrivalCompletionStage({
   const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] =
     useState(false);
   const arrivalPhotoStartCountRef = useRef(0);
-  const completionPhotosRef = useRef<SessionPhoto[]>(photos);
   const irisRunningRef = useRef(false);
 
   const beginCompletion = useCallback(
@@ -49,13 +48,11 @@ export function ArrivalCompletionStage({
       if (irisRunningRef.current) return;
 
       irisRunningRef.current = true;
-      completionPhotosRef.current = photoOverride;
       setArrivalPhotoFinishPending(false);
 
-      // Mark the runtime as finishing immediately so completeDetour's legacy
-      // transition cannot start a second RN animation underneath this one.
-      // Persistence runs in parallel with the Skia close animation instead of
-      // blocking the fully-closed frame.
+      // Persistence begins alongside the Skia close animation. Marking the
+      // runtime as finishing prevents completeDetour's legacy RN transition
+      // from starting underneath this dedicated transition.
       stageRef.current = 'finish';
       void completeDetour(photoOverride).catch(() => {
         // The completion screen can still render from the in-memory journey
@@ -69,7 +66,7 @@ export function ArrivalCompletionStage({
 
   const handleIrisClosed = useCallback(() => {
     // Swap the render tree only while the Skia iris is fully closed. Do not use
-    // transitionTo here: its opacity/translate animation would fight the iris.
+    // transitionTo here: its opacity/translate motion would fight the iris.
     screenOpacity.stopAnimation();
     screenY.stopAnimation();
     screenOpacity.setValue(1);
@@ -97,7 +94,11 @@ export function ArrivalCompletionStage({
   return (
     <View
       pointerEvents={stage === 'arrival' && irisPhase === 'idle' ? 'auto' : 'none'}
-      style={styles.cleanArrivalScreen}
+      style={[
+        StyleSheet.absoluteFill,
+        styles.cleanArrivalScreen,
+        { zIndex: 200 },
+      ]}
     >
       {stage === 'arrival' && plan && (
         <>
