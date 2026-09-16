@@ -1,3 +1,5 @@
-// Lightweight marker so preview releases can be identified in Git history.
-// v0.46.3: pin the printer below the title and reveal ticket artwork/content atomically.
-export const DETOUR_BUILD_VERSION = '0.46.3';
+import Constants from 'expo-constants';
+
+// package.json is the release version source. app.config.js exposes it to Expo.
+export const DETOUR_BUILD_VERSION =
+  Constants.expoConfig?.version ?? '0.0.0';

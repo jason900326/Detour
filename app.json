@@ -2,7 +2,6 @@
   "expo": {
     "name": "detour",
     "slug": "detour",
-    "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
