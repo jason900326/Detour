@@ -1,6 +1,6 @@
 # Detour — Scene V2
 
-> 狀態：IMPLEMENTED / 等待 dry-run 與正式重匯
+> 狀態：IMPLEMENTED / 全台正式重匯完成
 > scoring version：2
 
 ## 目的
@@ -44,6 +44,7 @@ Hard Reject 被排除的資料不會分類、不會打分，也不會寫入 Supa
 - 執勤中的警察、消防、救護設施
 - 軍事區與監獄
 - 一般政府辦公設施
+- 里民活動中心、社區協會等一般 civic facilities
 - 學校、幼兒園、大專院校與教育用地
 - 墓園、墓地與殯葬設施
 - 人工 route anchor
@@ -92,6 +93,12 @@ Food Pool 的預選權重：
 
 RPC 最多回 180 筆，真實 routing 不會對全部候選執行。
 
+為避免某一種資料量大的 Scene 淹沒候選池：
+
+- primary Scene 永遠排在 fallback Scene 前面。
+- 匿名階梯、人行橋、步行街段與缺乏辨識資料的歷史物件只作為 fallback。
+- Detour Pool 每個 kind 最多進入 40 筆；Food Pool 不套用此限制。
+
 ## 安全部署順序
 
 1. 執行 backend/detour-scene/scenes-v4.sql。
@@ -102,4 +109,3 @@ RPC 最多回 180 筆，真實 routing 不會對全部候選執行。
 6. 用台北、台中、台南、高雄、花蓮座標各抽查一次候選。
 
 正式匯入只在全部新 rows 上傳成功後呼叫 finalize_osm_scene_import()；中途失敗不會停用上一批資料。
-

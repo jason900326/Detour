@@ -41,6 +41,7 @@ class HardRejectTests(unittest.TestCase):
             ({"amenity": "police"}, "police_fire_emergency"),
             ({"landuse": "military"}, "military_prison"),
             ({"office": "government"}, "government"),
+            ({"amenity": "community_centre"}, "civic_facility"),
             ({"amenity": "school"}, "education"),
             ({"landuse": "cemetery"}, "cemetery_funeral"),
         ]
@@ -55,6 +56,11 @@ class HardRejectTests(unittest.TestCase):
             "tourism": "museum",
             "name": "消防博物館",
         }
+        self.assertIsNone(hard_reject_reason(tags))
+        self.assertEqual(classify(tags), ("culture", "文化空間"))
+
+    def test_keeps_arts_centre_as_culture(self) -> None:
+        tags = {"amenity": "arts_centre", "name": "表演藝術中心"}
         self.assertIsNone(hard_reject_reason(tags))
         self.assertEqual(classify(tags), ("culture", "文化空間"))
 
@@ -171,4 +177,3 @@ class NormalizationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

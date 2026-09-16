@@ -140,7 +140,6 @@ def is_clearly_public_destination(tags: dict[str, str]) -> bool:
         or tags.get("amenity")
         in {
             "arts_centre",
-            "community_centre",
             "library",
             "marketplace",
             "public_bookcase",
@@ -257,6 +256,12 @@ def hard_reject_reason(tags: dict[str, str]) -> str | None:
     if is_government and not is_clearly_public_destination(tags):
         return "government"
 
+    # Community centres are useful civic facilities, but not intentional
+    # Detour destinations.  OSM also uses this tag for neighbourhood offices,
+    # resident associations and temporary campaign headquarters.
+    if amenity == "community_centre":
+        return "civic_facility"
+
     if (
         amenity in {"school", "kindergarten", "college", "university", "childcare"}
         or landuse == "education"
@@ -336,9 +341,6 @@ def classify(tags: dict[str, str]) -> tuple[str, str] | None:
 
     if tags.get("leisure") in {"park", "garden"}:
         return "green-space", "戶外空間"
-
-    if tags.get("amenity") == "community_centre":
-        return "culture", "公共空間"
 
     if tags.get("amenity") == "fountain":
         return "fountain", "噴泉"

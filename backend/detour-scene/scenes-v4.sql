@@ -22,6 +22,17 @@ where scene_family is distinct from case
   else 'detour'
 end;
 
+-- OSM community_centre includes neighbourhood offices, resident associations
+-- and temporary campaign headquarters.  These are civic facilities rather
+-- than intentional Detour destinations; the V2 importer rejects them too.
+update public.scenes
+set active = false
+where active = true
+  and source = 'osm'
+  and scene_family = 'detour'
+  and kind = 'culture'
+  and tags->>'amenity' = 'community_centre';
+
 do $$
 begin
   alter table public.scenes
@@ -123,54 +134,107 @@ set search_path = ''
 as $$
   with origin as (
     select extensions.st_point(p_lon, p_lat)::extensions.geography as point
+  ),
+  eligible as (
+    select
+      s.*,
+      extensions.st_distance(s.location, o.point) as distance_m,
+      (
+        coalesce(s.name, '') <> ''
+        or coalesce(s.tags->>'image', '') <> ''
+        or coalesce(s.tags->>'wikimedia_commons', '') <> ''
+        or coalesce(s.tags->>'wikipedia', '') <> ''
+        or coalesce(s.tags->>'wikidata', '') <> ''
+        or coalesce(s.tags->>'artist_name', '') <> ''
+        or coalesce(s.tags->>'description', '') <> ''
+        or coalesce(s.tags->>'inscription', '') <> ''
+        or coalesce(s.tags->>'heritage', '') <> ''
+      ) as strong_identity
+    from public.scenes s
+    cross join origin o
+    where
+      s.active = true
+      and s.scene_family = case
+        when coalesce(p_family, 'detour') = 'food' then 'food'
+        else 'detour'
+      end
+      and (
+        s.scene_family <> 'food'
+        or coalesce(s.name, '') <> ''
+      )
+      and extensions.st_dwithin(
+        s.location,
+        o.point,
+        greatest(100, least(coalesce(p_radius_m, 1000), 2500))
+      )
+  ),
+  scored as (
+    select
+      e.*,
+      case
+        when e.scene_family = 'food' then 0
+        when e.kind in ('steps', 'footbridge', 'pedestrian')
+          and not e.strong_identity then 1
+        when e.kind = 'historic'
+          and not e.strong_identity then 1
+        when e.kind in ('mural', 'street-art', 'artwork', 'statue')
+          then case when e.quality_score >= 30 then 0 else 1 end
+        when e.kind in ('culture', 'public-bookcase', 'heritage-tree')
+          then case when e.quality_score >= 26 then 0 else 1 end
+        when e.kind = 'green-space' then 1
+        when e.quality_score >= 24 then 0
+        else 1
+      end as tier_rank,
+      case
+        when e.scene_family = 'food'
+          then (
+            e.quality_score * 0.65
+            + coalesce(e.food_commitment_score, 0) * 0.35
+          )
+        else (
+          e.quality_score * 0.35
+          + e.oddity_score * 0.45
+          + e.visual_score * 0.20
+        )
+      end as rank_score
+    from eligible e
+  ),
+  balanced as (
+    select
+      s.*,
+      row_number() over (
+        partition by s.kind
+        order by
+          s.tier_rank asc,
+          s.rank_score desc,
+          s.distance_m asc
+      ) as kind_rank
+    from scored s
   )
   select
-    s.id,
-    s.osm_type,
-    s.osm_id,
-    s.latitude,
-    s.longitude,
-    s.tags,
-    s.kind,
-    s.scene_family,
-    s.quality_score,
-    s.oddity_score::integer,
-    s.visual_score::integer,
-    s.food_commitment_score::integer,
-    s.traits,
-    s.scoring_version::integer,
-    extensions.st_distance(s.location, o.point) as distance_m
-  from public.scenes s
-  cross join origin o
+    b.id,
+    b.osm_type,
+    b.osm_id,
+    b.latitude,
+    b.longitude,
+    b.tags,
+    b.kind,
+    b.scene_family,
+    b.quality_score,
+    b.oddity_score::integer,
+    b.visual_score::integer,
+    b.food_commitment_score::integer,
+    b.traits,
+    b.scoring_version::integer,
+    b.distance_m
+  from balanced b
   where
-    s.active = true
-    and s.scene_family = case
-      when coalesce(p_family, 'detour') = 'food' then 'food'
-      else 'detour'
-    end
-    and (
-      s.scene_family <> 'food'
-      or coalesce(s.name, '') <> ''
-    )
-    and extensions.st_dwithin(
-      s.location,
-      o.point,
-      greatest(100, least(coalesce(p_radius_m, 1000), 2500))
-    )
+    b.scene_family = 'food'
+    or b.kind_rank <= 40
   order by
-    case
-      when s.scene_family = 'food'
-        then (
-          s.quality_score * 0.65
-          + coalesce(s.food_commitment_score, 0) * 0.35
-        )
-      else (
-        s.quality_score * 0.35
-        + s.oddity_score * 0.45
-        + s.visual_score * 0.20
-      )
-    end desc,
-    extensions.st_distance(s.location, o.point) asc
+    b.tier_rank asc,
+    b.rank_score desc,
+    b.distance_m asc
   limit greatest(1, least(coalesce(p_limit, 180), 240));
 $$;
 
@@ -189,4 +253,3 @@ grant execute on function public.nearby_detour_scenes(
   text,
   integer
 ) to service_role;
-
