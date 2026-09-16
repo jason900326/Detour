@@ -138,9 +138,9 @@ export function DetourHomeView({
     );
     const ticketAspect = DETOUR_TICKET_HEIGHT / DETOUR_TICKET_WIDTH;
     const maxRailWidthByHeight =
-      maxPaperHeight / Math.max(0.85 * ticketAspect, 0.001);
+      maxPaperHeight / Math.max(0.95 * ticketAspect, 0.001);
     const railWidth = Math.max(1, Math.min(slotWidth, maxRailWidthByHeight));
-    const ticketWidth = railWidth * 0.85;
+    const ticketWidth = railWidth * 0.95;
     const ticketHeight = ticketWidth * ticketAspect;
 
     return {
