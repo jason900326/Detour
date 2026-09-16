@@ -126,6 +126,8 @@ import {
 } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance, offsetPoint } from '../lib/geo-utils';
 import { ABANDONABLE_STAGES, canTransition } from '../lib/stage-flow';
+import { usePassportStore } from './use-passport-store';
+import { usePlaytestStore } from './use-playtest-store';
 import {
   contextCode,
   formatClockTime,
@@ -197,36 +199,49 @@ export function useDetourHomeController() {
   const [missionResults, setMissionResults] =
     useState<Record<string, MissionResult>>({});
 
-  const [passport, setPassport] = useState<PassportEntry[]>([]);
-  const [passportLoaded, setPassportLoaded] = useState(false);
-  const [lastCompletedEntry, setLastCompletedEntry] =
-    useState<PassportEntry | null>(null);
-  const [selectedPassportId, setSelectedPassportId] =
-    useState<string | null>(null);
-  const [passportPhotoIndex, setPassportPhotoIndex] = useState(0);
+  const {
+    passport,
+    setPassport,
+    passportLoaded,
+    setPassportLoaded,
+    lastCompletedEntry,
+    setLastCompletedEntry,
+    selectedPassportId,
+    setSelectedPassportId,
+    passportPhotoIndex,
+    setPassportPhotoIndex,
+    loadPassport,
+    savePassport,
+    clearPassport,
+  } = usePassportStore();
 
-  const [playtestSessions, setPlaytestSessions] =
-    useState<PlaytestSession[]>([]);
-  const [playtestTesterId, setPlaytestTesterId] =
-    useState('DTR-LOCAL');
-  const [
+
+  const playtestSessionIdRef =
+    useRef<string | null>(null);
+
+  const {
+    playtestSessions,
+    setPlaytestSessions,
+    playtestTesterId,
+    setPlaytestTesterId,
     lastCompletedPlaytestSessionId,
     setLastCompletedPlaytestSessionId,
-  ] = useState<string | null>(null);
-  const [
     playtestRating,
     setPlaytestRating,
-  ] = useState<PlaytestRating | null>(null);
-  const [
     playtestFeedbackReasons,
     setPlaytestFeedbackReasons,
-  ] = useState<
-    PlaytestFeedbackReason[]
-  >([]);
-  const [
     playtestSyncing,
     setPlaytestSyncing,
-  ] = useState(false);
+    refreshPlaytestSessions,
+    syncPlaytestDataNow,
+    rateCompletedDetour,
+    togglePlaytestFeedbackReason,
+    sharePlaytestData,
+    clearPlaytestData,
+  } = usePlaytestStore(
+    playtestSessionIdRef
+  );
+
   const [lastAIResult, setLastAIResult] =
     useState<
       'not-run' | 'ai' | 'fallback'
@@ -250,8 +265,6 @@ export function useDetourHomeController() {
   const offRouteCountRef = useRef(0);
   const rerouteInFlightRef = useRef(false);
   const checkpointLockedRef = useRef(false);
-  const playtestSessionIdRef =
-    useRef<string | null>(null);
   const rerouteCountRef = useRef(0);
   const detourStartedAtRef = useRef<string | null>(null);
   const sceneFailuresRef =
@@ -854,127 +867,6 @@ export function useDetourHomeController() {
     );
   }
 
-  async function refreshPlaytestSessions() {
-    const sessions =
-      await loadPlaytestSessions();
-
-    setPlaytestSessions(sessions);
-    return sessions;
-  }
-
-  async function syncPlaytestDataNow() {
-    if (playtestSyncing) return;
-
-    setPlaytestSyncing(true);
-
-    try {
-      const sessions =
-        await refreshPlaytestSessions();
-
-      const result =
-        await syncAllPlaytestSessions(
-          sessions
-        );
-
-      if (result.failed === 0) {
-        await Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success
-        );
-
-        Alert.alert(
-          '測試資料已同步',
-          `${result.synced} 筆匿名 run 已送到 Detour。`
-        );
-      } else {
-        Alert.alert(
-          '部分資料還沒同步',
-          `${result.synced} 筆成功，${result.failed} 筆失敗。App 仍保留本機資料，之後可再試。`
-        );
-      }
-    } finally {
-      setPlaytestSyncing(false);
-    }
-  }
-
-  async function rateCompletedDetour(
-    rating: PlaytestRating
-  ) {
-    const sessionId =
-      lastCompletedPlaytestSessionId;
-
-    if (!sessionId) return;
-
-    await Haptics.selectionAsync();
-
-    const nextReasons =
-      rating === 'not-worth-it'
-        ? playtestFeedbackReasons
-        : [];
-
-    setPlaytestRating(rating);
-
-    if (rating !== 'not-worth-it') {
-      setPlaytestFeedbackReasons([]);
-    }
-
-    setPlaytestSessions(
-      await updatePlaytestSession(
-        sessionId,
-        {
-          runRating: rating,
-          runFeedbackReasons:
-            nextReasons,
-        }
-      )
-    );
-  }
-
-  async function togglePlaytestFeedbackReason(
-    reason: PlaytestFeedbackReason
-  ) {
-    const sessionId =
-      lastCompletedPlaytestSessionId;
-
-    if (
-      !sessionId ||
-      playtestRating !==
-        'not-worth-it'
-    ) {
-      return;
-    }
-
-    await Haptics.selectionAsync();
-
-    const next =
-      playtestFeedbackReasons.includes(
-        reason
-      )
-        ? playtestFeedbackReasons.filter(
-            (item) =>
-              item !== reason
-          )
-        : [
-            ...playtestFeedbackReasons,
-            reason,
-          ];
-
-    setPlaytestFeedbackReasons(
-      next
-    );
-
-    setPlaytestSessions(
-      await updatePlaytestSession(
-        sessionId,
-        {
-          runRating:
-            'not-worth-it',
-          runFeedbackReasons:
-            next,
-        }
-      )
-    );
-  }
-
   async function runAIConnectionTest() {
     if (aiConnectionTesting) return;
 
@@ -1008,60 +900,6 @@ export function useDetourHomeController() {
     }
   }
 
-  async function sharePlaytestData() {
-    const sessions =
-      await refreshPlaytestSessions();
-
-    if (sessions.length === 0) {
-      Alert.alert(
-        '還沒有測試資料',
-        '完成或嘗試幾趟 DETOUR 後，這裡才會產生報告。'
-      );
-      return;
-    }
-
-    const testerId =
-      await getPlaytestTesterId();
-
-    setPlaytestTesterId(testerId);
-
-    await Share.share({
-      title: 'DETOUR Playtest Report',
-      message:
-        buildPlaytestReport(
-          sessions,
-          testerId
-        ),
-    });
-  }
-
-  function clearPlaytestData() {
-    Alert.alert(
-      '清除測試統計？',
-      '只會刪除此手機的匿名 Playtest 統計，不會清除 Passport。',
-      [
-        {
-          text: '取消',
-          style: 'cancel',
-        },
-        {
-          text: '清除',
-          style: 'destructive',
-          onPress: async () => {
-            await clearPlaytestSessions();
-            setPlaytestSessions([]);
-            playtestSessionIdRef.current =
-              null;
-
-            await Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Warning
-            );
-          },
-        },
-      ]
-    );
-  }
-
   function replayOnboarding() {
     setOnboardingFromSettings(true);
     setOnboardingStep(0);
@@ -1078,64 +916,6 @@ export function useDetourHomeController() {
 
     setOnboardingStep(
       (value) => value + 1
-    );
-  }
-
-  async function loadPassport() {
-    try {
-      const raw = await AsyncStorage.getItem(PASSPORT_KEY);
-
-      if (raw) {
-        const parsed = JSON.parse(raw) as PassportEntry[];
-        if (Array.isArray(parsed)) setPassport(parsed);
-      }
-    } catch {
-      // Local history must never block the prototype.
-    } finally {
-      setPassportLoaded(true);
-    }
-  }
-
-  async function savePassport(nextPassport: PassportEntry[]) {
-    setPassport(nextPassport);
-
-    try {
-      await AsyncStorage.setItem(PASSPORT_KEY, JSON.stringify(nextPassport));
-    } catch {
-      Alert.alert(
-        'Passport 暫時無法儲存',
-        '這次 DETOUR 可以完成，但紀錄可能不會保留。'
-      );
-    }
-  }
-
-  async function clearPassport() {
-    Alert.alert(
-      '清除測試 Passport？',
-      '這會刪除目前手機上的所有 DETOUR 測試紀錄。',
-      [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '清除',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem(PASSPORT_KEY);
-
-            try {
-              const photoDirectory = new Directory(Paths.document, 'detour-photos');
-              if (photoDirectory.exists) photoDirectory.delete();
-            } catch {
-              // Passport metadata is already gone; stale local files should
-              // never make clearing the collection fail.
-            }
-
-            setPassport([]);
-            await Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Warning
-            );
-          },
-        },
-      ]
     );
   }
 
