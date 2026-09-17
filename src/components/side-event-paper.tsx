@@ -54,10 +54,16 @@ function buildParagraph(
   }
 ) {
   const fontFamilies = Platform.OS === 'ios' ? ['PingFang TC', 'Helvetica'] : ['sans-serif'];
-  return Skia.ParagraphBuilder.Make({
-    maxLines: options.maxLines,
-    ellipsis: options.ellipsis,
-  })
+  const paragraphStyle = options.ellipsis
+    ? {
+        maxLines: options.maxLines ?? 1,
+        ellipsis: options.ellipsis,
+      }
+    : options.maxLines !== undefined
+      ? { maxLines: options.maxLines }
+      : {};
+
+  return Skia.ParagraphBuilder.Make(paragraphStyle)
     .pushStyle({
       color: Skia.Color(options.color),
       fontFamilies,
