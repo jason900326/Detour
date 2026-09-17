@@ -10,13 +10,11 @@ import {
 import {
   Canvas,
   Group,
-  Image as SkiaImage,
   ImageShader,
   Paragraph,
   Rect,
   Skia,
   Vertices,
-  useImage,
   useTexture,
   vec,
 } from '@shopify/react-native-skia';
@@ -36,11 +34,36 @@ import { INK, MUTED } from '../theme/detour-theme';
 const COLLAPSED_HEIGHT = 62;
 const EXPANDED_HEIGHT = 184;
 const CANVAS_HEIGHT = 202;
-const GRID_COLUMNS = 6;
-const GRID_ROWS = 4;
-const PAPER_TEXTURE = require('../../assets/detour/paper-fiber.jpg');
-const PAPER_BASE = '#F3EFE5';
-const PAPER_LINE = '#C9C2B4';
+const GRID_COLUMNS = 7;
+const GRID_ROWS = 5;
+const PAPER_BASE = '#F8F5EC';
+const PAPER_WARM = 'rgba(218, 207, 184, 0.10)';
+const PAPER_COOL = 'rgba(255, 255, 255, 0.24)';
+const PAPER_LINE = '#D3CCBF';
+
+function hash01(value: number) {
+  const raw = Math.sin(value * 12.9898 + 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
+function buildPaperFibers(width: number) {
+  return Array.from({ length: 58 }, (_, index) => {
+    const x = hash01(index * 3 + 1) * width;
+    const y = hash01(index * 5 + 2) * EXPANDED_HEIGHT;
+    const fiberWidth = 5 + hash01(index * 7 + 3) * 23;
+    const fiberHeight = index % 6 === 0 ? 1.05 : 0.55;
+    const warm = index % 3 === 0;
+    return {
+      x,
+      y,
+      width: fiberWidth,
+      height: fiberHeight,
+      color: warm
+        ? 'rgba(125, 111, 86, 0.055)'
+        : 'rgba(255, 255, 255, 0.30)',
+    };
+  });
+}
 
 function buildParagraph(
   text: string,
@@ -97,7 +120,7 @@ const MESH_INDICES = buildMeshIndices();
 const MESH_VERTEX_COUNT = (GRID_COLUMNS + 1) * (GRID_ROWS + 1);
 const SHADOW_COLORS = Array.from(
   { length: MESH_VERTEX_COUNT },
-  () => 'rgba(0,0,0,0.20)'
+  () => 'rgba(0,0,0,0.11)'
 );
 
 export function SideEventPaper({
@@ -112,7 +135,7 @@ export function SideEventPaper({
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const width = Math.max(248, Math.min(396, screenWidth - 54));
-  const paperFiber = useImage(PAPER_TEXTURE);
+  const paperFibers = useMemo(() => buildPaperFibers(width), [width]);
   const [displayedEvent, setDisplayedEvent] = useState(event);
   const [expanded, setExpanded] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -167,6 +190,9 @@ export function SideEventPaper({
     []
   );
 
+  // A designed paper texture instead of a photo texture: warm-white stock,
+  // soft pulp variation and sparse fibres. The irregular silhouette still
+  // comes from the mesh, so the result reads as paper rather than a UI card.
   const paperTexture = useTexture(
     <>
       <Rect
@@ -176,17 +202,30 @@ export function SideEventPaper({
         height={EXPANDED_HEIGHT}
         color={PAPER_BASE}
       />
-      {paperFiber ? (
-        <SkiaImage
-          image={paperFiber}
-          x={0}
-          y={0}
-          width={width}
-          height={EXPANDED_HEIGHT}
-          fit="fill"
-          opacity={0.82}
+      <Rect
+        x={0}
+        y={22}
+        width={width}
+        height={44}
+        color={PAPER_COOL}
+      />
+      <Rect
+        x={0}
+        y={96}
+        width={width}
+        height={58}
+        color={PAPER_WARM}
+      />
+      {paperFibers.map((fiber, index) => (
+        <Rect
+          key={`paper-fiber-${index}`}
+          x={fiber.x}
+          y={fiber.y}
+          width={fiber.width}
+          height={fiber.height}
+          color={fiber.color}
         />
-      ) : null}
+      ))}
     </>,
     { width, height: EXPANDED_HEIGHT }
   );
@@ -209,9 +248,6 @@ export function SideEventPaper({
   );
   const replaceArrowY = useDerivedValue(() => paperTop.value + 146);
 
-  // Text is intentionally decoupled from the mesh. It stays razor sharp while
-  // the paper is flat, disappears before the crumple starts, and only returns
-  // once the replacement sheet has fully unfolded.
   const inkOpacity = useDerivedValue(
     () => Math.max(0, Math.min(1, reveal.value * inkReveal.value))
   );
@@ -225,7 +261,7 @@ export function SideEventPaper({
     const eased = progress * progress * (3 - 2 * progress);
     const foldStrength = Math.sin(Math.PI * progress);
     const revealOffset = (1 - reveal.value) * 42;
-    const centerX = width * 0.53;
+    const centerX = width * 0.52;
     const centerY = CANVAS_HEIGHT - EXPANDED_HEIGHT * 0.46;
 
     for (let row = 0; row <= GRID_ROWS; row += 1) {
@@ -236,28 +272,33 @@ export function SideEventPaper({
         let baseX = nx * width;
         let baseY = top + ny * height;
 
+        // Slightly torn, asymmetric edges and a tiny natural lean. These stay
+        // restrained so the sheet still feels designed rather than distressed.
+        baseY += (nx - 0.5) * 2.2;
         if (column === 0) {
-          baseX += 3 + Math.sin((row + 1) * 2.13) * 2.8;
+          baseX += 2.6 + Math.sin((row + 1) * 2.13) * 2.2;
         }
         if (column === GRID_COLUMNS) {
-          baseX -= 3 + Math.cos((row + 2) * 1.77) * 2.5;
+          baseX -= 2.6 + Math.cos((row + 2) * 1.77) * 2.0;
         }
         if (row === 0) {
-          baseY += 2.5 + Math.sin((column + 1) * 1.93) * 2.2;
+          baseY += 2.2 + Math.sin((column + 1) * 1.93) * 1.8;
         }
         if (row === GRID_ROWS) {
-          baseY -= 2.5 + Math.cos((column + 2) * 2.21) * 2.1;
+          baseY -= 2.2 + Math.cos((column + 2) * 2.21) * 1.8;
         }
 
         const phase = index * 1.618 + row * 0.73 - column * 0.41;
+        const packetX = (nx - 0.5) * 70;
+        const packetY = (ny - 0.5) * 30;
         const targetX =
-          centerX + Math.sin(phase * 2.17) * (15 + ((index * 7) % 13));
+          centerX + packetX + Math.sin(phase * 2.17) * (8 + ((index * 7) % 8));
         const targetY =
-          centerY + Math.cos(phase * 1.63) * (12 + ((index * 5) % 11));
+          centerY + packetY + Math.cos(phase * 1.63) * (6 + ((index * 5) % 6));
         const wrinkleX =
-          Math.sin(phase * 4.7 + progress * 5.4) * 10 * foldStrength;
+          Math.sin(phase * 4.7 + progress * 5.4) * 11 * foldStrength;
         const wrinkleY =
-          Math.cos(phase * 3.9 - progress * 4.1) * 8 * foldStrength;
+          Math.cos(phase * 3.9 - progress * 4.1) * 9 * foldStrength;
 
         points.push(
           vec(
@@ -272,7 +313,7 @@ export function SideEventPaper({
   });
 
   const shadowVertices = useDerivedValue(() =>
-    paperVertices.value.map((point) => vec(point.x + 5, point.y + 7))
+    paperVertices.value.map((point) => vec(point.x + 3, point.y + 4))
   );
 
   const textureCoordinates = useDerivedValue(() => {
@@ -306,19 +347,22 @@ export function SideEventPaper({
   const unfoldReplacement = useCallback(() => {
     crumple.value = 1;
     crumple.value = withDelay(
-      130,
+      200,
       withTiming(
         0,
         {
-          duration: 370,
+          duration: 400,
           easing: Easing.out(Easing.cubic),
         },
         (finished) => {
           if (!finished) return;
+
+          // The three copy lines stay completely hidden for the entire paper
+          // motion. Only reveal the new copy after the sheet is fully flat.
           inkReveal.value = withTiming(
             1,
             {
-              duration: 150,
+              duration: 135,
               easing: Easing.out(Easing.cubic),
             },
             (inkFinished) => {
@@ -428,7 +472,7 @@ export function SideEventPaper({
         ) {
           unfoldReplacement();
         }
-      }, 100);
+      }, 115);
     }
   }, [onReplace, unfoldReplacement]);
 
@@ -437,24 +481,18 @@ export function SideEventPaper({
     setReplacing(true);
     setControlsVisible(false);
 
-    // Hide all three lines first. The paper starts crumpling only after the ink
-    // has disappeared, so no copy can float over the black background.
-    inkReveal.value = withTiming(0, {
-      duration: 85,
-      easing: Easing.out(Easing.cubic),
-    });
-    crumple.value = withDelay(
-      75,
-      withTiming(
-        1,
-        {
-          duration: 340,
-          easing: Easing.inOut(Easing.cubic),
-        },
-        (finished) => {
-          if (finished) runOnJS(requestReplacement)();
-        }
-      )
+    // Hide all three text lines immediately when the paper starts moving. They
+    // remain hidden through crumple, hold and unfold, then the new copy appears.
+    inkReveal.value = 0;
+    crumple.value = withTiming(
+      1,
+      {
+        duration: 400,
+        easing: Easing.inOut(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) runOnJS(requestReplacement)();
+      }
     );
   }, [crumple, inkReveal, replacing, requestReplacement]);
 
