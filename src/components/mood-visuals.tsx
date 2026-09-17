@@ -1,7 +1,7 @@
 import { View } from 'react-native';
-import MoodWanderIcon from '../../assets/mood/wander.svg';
-import MoodFoodIcon from '../../assets/mood/food.svg';
 import MoodColorIcon from '../../assets/mood/color.svg';
+import MoodFoodIcon from '../../assets/mood/food.svg';
+import MoodWanderIcon from '../../assets/mood/wander.svg';
 import type { MoodId } from '../lib/journey-engine';
 import { styles } from '../styles/home-styles';
 
@@ -33,15 +33,58 @@ export function V45Skyline() {
           ]}
         />
       ))}
+
       <View style={styles.v45SkylineBridgeDeck} />
       <View style={styles.v45SkylineBridgeArch} />
     </View>
   );
 }
 
-export function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
-  const commonProps = { width: size, height: size };
-  if (moodId === 'wander') return <MoodWanderIcon {...commonProps} />;
-  if (moodId === 'food') return <MoodFoodIcon {...commonProps} />;
-  return <MoodColorIcon {...commonProps} />;
+export function V45MoodIcon({
+  moodId,
+  size = 76,
+}: {
+  moodId: MoodId;
+  size?: number;
+}) {
+  // Ticket passes size=30.
+  // Render it larger and position it in the ticket's lower-right cell.
+  const ticketPlacement = size === 30;
+  const renderSize = ticketPlacement ? 46 : size;
+
+  const commonProps = {
+    width: renderSize,
+    height: renderSize,
+  };
+
+  let icon;
+
+  if (moodId === 'wander') {
+    icon = <MoodWanderIcon {...commonProps} />;
+  } else if (moodId === 'food') {
+    icon = <MoodFoodIcon {...commonProps} />;
+  } else {
+    icon = <MoodColorIcon {...commonProps} />;
+  }
+
+  if (ticketPlacement) {
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          right: 4,
+          top: 52,
+          width: renderSize,
+          height: renderSize,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {icon}
+      </View>
+    );
+  }
+
+  return icon;
 }

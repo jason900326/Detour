@@ -1,22 +1,38 @@
 import { useCallback, useRef } from 'react';
-import { Animated, Text, View } from 'react-native';
+import {
+  Animated,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
+import { ArrivalCompletionStage } from '../components/arrival-completion-stage';
 import { DetourHomeView } from '../components/detour-home-view';
 import {
   PrinterPhysicalHaptics,
   useJourneyStageMotion,
   usePhysicalController,
 } from '../components/physical-motion';
+import { SideEventPaper } from '../components/side-event-paper';
 import { TicketTearProvider } from '../components/ticket-tear-context';
 import { useDetourHomeController } from '../hooks/use-detour-home-controller';
 
 export default function HomeScreen() {
   const controller = useDetourHomeController();
+  const { width, height } = useWindowDimensions();
+
   const shellScale = useRef(new Animated.Value(1)).current;
   const stageX = useJourneyStageMotion(controller.stage);
   const motionController = usePhysicalController(controller, shellScale);
+
   const tearEnabled =
     controller.stage === 'ready' && controller.ticketReadyUnlocked;
+
+  const discoveryPaperVisible =
+    controller.stage === 'journey' &&
+    controller.selectedMood !== 'color' &&
+    Boolean(controller.activeSideEvent) &&
+    !controller.showNextBeatMap;
 
   const handleTicketTorn = useCallback(() => {
     void motionController.startDetour();
@@ -36,15 +52,36 @@ export default function HomeScreen() {
     : motionController;
 
   return (
-    <TicketTearProvider enabled={tearEnabled} onTorn={handleTicketTorn}>
+    <TicketTearProvider
+      enabled={tearEnabled}
+      onTorn={handleTicketTorn}
+    >
       <Animated.View
         style={{
           flex: 1,
-          transform: [{ translateX: stageX }, { scale: shellScale }],
+          transform: [
+            { translateX: stageX },
+            { scale: shellScale },
+          ],
         }}
       >
         <DetourHomeView controller={viewController} />
+
         <PrinterPhysicalHaptics controller={controller} />
+
+        <ArrivalCompletionStage
+          controller={motionController}
+          width={width}
+          height={height}
+        />
+
+        {discoveryPaperVisible && controller.activeSideEvent && (
+          <SideEventPaper
+            event={controller.activeSideEvent}
+            onReplace={controller.replaceActiveSideEvent}
+            devMode={controller.devMode}
+          />
+        )}
 
         {tearEnabled && (
           <View
@@ -66,6 +103,7 @@ export default function HomeScreen() {
                 backgroundColor: '#C1BCB2',
               }}
             />
+
             <Text
               style={{
                 fontSize: 13,

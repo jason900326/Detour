@@ -552,6 +552,7 @@ type RouteAssessment = {
   preferred: boolean;
   fallback: boolean;
   emergency: boolean;
+  viable: boolean;
   overlapRatio: number;
   directnessRatio: number;
   localShortcutRatio: number;
@@ -632,6 +633,16 @@ function assessRoute(args: {
       overlap <= ROUTE_OVERLAP_EMERGENCY_MAX &&
       directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX &&
       localShortcutRatio <= LOCAL_SHORTCUT_EMERGENCY_MAX,
+
+    // Recent-route overlap is a novelty preference, not a hard failure.
+    // If the neighborhood only has a few practical streets, keep a route
+    // that still satisfies time and geometry constraints.
+    viable:
+      args.route.distanceMeters >= 70 &&
+      estimatedSeconds <= args.timeBudgetSeconds * 1.3 &&
+      directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX &&
+      localShortcutRatio <= LOCAL_SHORTCUT_EMERGENCY_MAX,
+
     overlapRatio: overlap,
     directnessRatio,
     localShortcutRatio,
@@ -701,6 +712,8 @@ export async function resolveRoutedScene(args: {
   let bestFallbackScore = Number.POSITIVE_INFINITY;
   let bestEmergency: RoutedScene | null = null;
   let bestEmergencyScore = Number.POSITIVE_INFINITY;
+  let bestViable: RoutedScene | null = null;
+  let bestViableScore = Number.POSITIVE_INFINITY;
 
   for (const scene of shortlist) {
     const route = getCachedWalkingRoute(args.start, scene.point, context);
@@ -729,6 +742,10 @@ export async function resolveRoutedScene(args: {
     if (assessment.emergency && assessment.score < bestEmergencyScore) {
       bestEmergency = routed;
       bestEmergencyScore = assessment.score;
+    }
+    if (assessment.viable && assessment.score < bestViableScore) {
+      bestViable = routed;
+      bestViableScore = assessment.score;
     }
   }
 
@@ -788,6 +805,10 @@ export async function resolveRoutedScene(args: {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
+      }
     } else {
       busySceneIds.add(scene.id);
     }
@@ -834,6 +855,10 @@ export async function resolveRoutedScene(args: {
       if (assessment.emergency && assessment.score < bestEmergencyScore) {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
+      }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
       }
       continue;
     }
@@ -890,6 +915,10 @@ export async function resolveRoutedScene(args: {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown';
       console.log(
@@ -910,6 +939,13 @@ export async function resolveRoutedScene(args: {
       `[DETOUR ROUTE] emergency fallback in ${Date.now() - routingStartedAt}ms`
     );
     return bestEmergency;
+  }
+
+  if (bestViable) {
+    console.log(
+      `[DETOUR ROUTE] repeated-street fallback in ${Date.now() - routingStartedAt}ms`
+    );
+    return bestViable;
   }
 
   console.log(

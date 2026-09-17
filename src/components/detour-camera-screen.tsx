@@ -104,6 +104,7 @@ export default function DetourCameraScreen() {
   const savedCount = Number.parseInt(getParam(params.savedCount, '0'), 10) || 0;
   const rollCapacity = Number.parseInt(getParam(params.rollCapacity, '6'), 10) || 6;
   const atCapacity = savedCount >= rollCapacity;
+  const isArrivalCapture = source === 'arrival';
 
   useEffect(() => {
     if (!permission) return;
@@ -380,7 +381,15 @@ export default function DetourCameraScreen() {
               <Text style={styles.reviewRetakeText}>重拍</Text>
             </Pressable>
             <Pressable disabled={savingPhoto} onPress={keepPhoto} style={({ pressed }) => [styles.reviewKeep, savingPhoto && styles.reviewDisabled, pressed && styles.reviewPressed]}>
-              <Text style={styles.reviewKeepText}>{savingPhoto ? '正在存…' : '留下這張'}</Text>
+              <Text style={styles.reviewKeepText}>
+                {savingPhoto
+                  ? isArrivalCapture
+                    ? '完成中…'
+                    : '正在存…'
+                  : isArrivalCapture
+                    ? '完成旅程'
+                    : '留下這張'}
+              </Text>
               <Text style={styles.reviewKeepArrow}>→</Text>
             </Pressable>
           </View>
