@@ -52,7 +52,8 @@ function buildParagraph(
     ellipsis?: string;
   }
 ) {
-  const fontFamilies = Platform.OS === 'ios' ? ['PingFang TC', 'Helvetica'] : ['sans-serif'];
+  const fontFamilies =
+    Platform.OS === 'ios' ? ['PingFang TC', 'Helvetica'] : ['sans-serif'];
   const paragraphStyle = options.ellipsis
     ? {
         maxLines: options.maxLines ?? 1,
@@ -122,6 +123,7 @@ export function SideEventPaper({
   const reveal = useSharedValue(0);
   const open = useSharedValue(0);
   const crumple = useSharedValue(0);
+  const inkReveal = useSharedValue(1);
 
   const titleParagraph = useMemo(
     () =>
@@ -165,13 +167,15 @@ export function SideEventPaper({
     []
   );
 
-  // Keep the material texture independent from the event copy. The previous
-  // implementation baked text into useTexture(), which softened glyphs and
-  // could leave the old prompt cached after a replacement. Paper stays a
-  // texture; copy is rendered as live Skia paragraphs at device resolution.
   const paperTexture = useTexture(
     <>
-      <Rect x={0} y={0} width={width} height={EXPANDED_HEIGHT} color={PAPER_BASE} />
+      <Rect
+        x={0}
+        y={0}
+        width={width}
+        height={EXPANDED_HEIGHT}
+        color={PAPER_BASE}
+      />
       {paperFiber ? (
         <SkiaImage
           image={paperFiber}
@@ -205,14 +209,12 @@ export function SideEventPaper({
   );
   const replaceArrowY = useDerivedValue(() => paperTop.value + 146);
 
-  // Once the mesh starts genuinely folding, fade the flat glyph layer out
-  // quickly. It reappears only near the end of the unfold, so the stable state
-  // remains pin-sharp while the crumple still reads as one physical sheet.
-  const inkOpacity = useDerivedValue(() => {
-    const revealOpacity = Math.max(0, Math.min(1, reveal.value));
-    const foldOpacity = Math.max(0, Math.min(1, (0.2 - crumple.value) / 0.2));
-    return revealOpacity * foldOpacity;
-  });
+  // Text is intentionally decoupled from the mesh. It stays razor sharp while
+  // the paper is flat, disappears before the crumple starts, and only returns
+  // once the replacement sheet has fully unfolded.
+  const inkOpacity = useDerivedValue(
+    () => Math.max(0, Math.min(1, reveal.value * inkReveal.value))
+  );
   const detailOpacity = useDerivedValue(() => inkOpacity.value * open.value);
 
   const paperVertices = useDerivedValue(() => {
@@ -234,16 +236,28 @@ export function SideEventPaper({
         let baseX = nx * width;
         let baseY = top + ny * height;
 
-        if (column === 0) baseX += 3 + Math.sin((row + 1) * 2.13) * 2.8;
-        if (column === GRID_COLUMNS) baseX -= 3 + Math.cos((row + 2) * 1.77) * 2.5;
-        if (row === 0) baseY += 2.5 + Math.sin((column + 1) * 1.93) * 2.2;
-        if (row === GRID_ROWS) baseY -= 2.5 + Math.cos((column + 2) * 2.21) * 2.1;
+        if (column === 0) {
+          baseX += 3 + Math.sin((row + 1) * 2.13) * 2.8;
+        }
+        if (column === GRID_COLUMNS) {
+          baseX -= 3 + Math.cos((row + 2) * 1.77) * 2.5;
+        }
+        if (row === 0) {
+          baseY += 2.5 + Math.sin((column + 1) * 1.93) * 2.2;
+        }
+        if (row === GRID_ROWS) {
+          baseY -= 2.5 + Math.cos((column + 2) * 2.21) * 2.1;
+        }
 
         const phase = index * 1.618 + row * 0.73 - column * 0.41;
-        const targetX = centerX + Math.sin(phase * 2.17) * (15 + ((index * 7) % 13));
-        const targetY = centerY + Math.cos(phase * 1.63) * (12 + ((index * 5) % 11));
-        const wrinkleX = Math.sin(phase * 4.7 + progress * 5.4) * 10 * foldStrength;
-        const wrinkleY = Math.cos(phase * 3.9 - progress * 4.1) * 8 * foldStrength;
+        const targetX =
+          centerX + Math.sin(phase * 2.17) * (15 + ((index * 7) % 13));
+        const targetY =
+          centerY + Math.cos(phase * 1.63) * (12 + ((index * 5) % 11));
+        const wrinkleX =
+          Math.sin(phase * 4.7 + progress * 5.4) * 10 * foldStrength;
+        const wrinkleY =
+          Math.cos(phase * 3.9 - progress * 4.1) * 8 * foldStrength;
 
         points.push(
           vec(
@@ -292,19 +306,29 @@ export function SideEventPaper({
   const unfoldReplacement = useCallback(() => {
     crumple.value = 1;
     crumple.value = withDelay(
-      105,
+      130,
       withTiming(
         0,
         {
-          duration: 285,
+          duration: 370,
           easing: Easing.out(Easing.cubic),
         },
         (finished) => {
-          if (finished) runOnJS(finishReplaceAnimation)();
+          if (!finished) return;
+          inkReveal.value = withTiming(
+            1,
+            {
+              duration: 150,
+              easing: Easing.out(Easing.cubic),
+            },
+            (inkFinished) => {
+              if (inkFinished) runOnJS(finishReplaceAnimation)();
+            }
+          );
         }
       )
     );
-  }, [crumple, finishReplaceAnimation]);
+  }, [crumple, finishReplaceAnimation, inkReveal]);
 
   useEffect(() => {
     if (event.id === mountedEventIdRef.current) return;
@@ -320,6 +344,7 @@ export function SideEventPaper({
     setControlsVisible(false);
     open.value = 0;
     crumple.value = 0;
+    inkReveal.value = 1;
     reveal.value = 0;
     reveal.value = withTiming(
       1,
@@ -331,12 +356,21 @@ export function SideEventPaper({
         if (finished) runOnJS(revealControls)();
       }
     );
-  }, [crumple, event, open, reveal, revealControls, unfoldReplacement]);
+  }, [
+    crumple,
+    event,
+    inkReveal,
+    open,
+    reveal,
+    revealControls,
+    unfoldReplacement,
+  ]);
 
   useEffect(() => {
     reveal.value = 0;
     open.value = 0;
     crumple.value = 0;
+    inkReveal.value = 1;
     reveal.value = withTiming(
       1,
       {
@@ -347,7 +381,7 @@ export function SideEventPaper({
         if (finished) runOnJS(revealControls)();
       }
     );
-  }, [crumple, open, reveal, revealControls]);
+  }, [crumple, inkReveal, open, reveal, revealControls]);
 
   const expandPaper = useCallback(() => {
     if (expanded || replacing) return;
@@ -394,7 +428,7 @@ export function SideEventPaper({
         ) {
           unfoldReplacement();
         }
-      }, 85);
+      }, 100);
     }
   }, [onReplace, unfoldReplacement]);
 
@@ -402,17 +436,27 @@ export function SideEventPaper({
     if (replacing) return;
     setReplacing(true);
     setControlsVisible(false);
-    crumple.value = withTiming(
-      1,
-      {
-        duration: 235,
-        easing: Easing.in(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(requestReplacement)();
-      }
+
+    // Hide all three lines first. The paper starts crumpling only after the ink
+    // has disappeared, so no copy can float over the black background.
+    inkReveal.value = withTiming(0, {
+      duration: 85,
+      easing: Easing.out(Easing.cubic),
+    });
+    crumple.value = withDelay(
+      75,
+      withTiming(
+        1,
+        {
+          duration: 340,
+          easing: Easing.inOut(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(requestReplacement)();
+        }
+      )
     );
-  }, [crumple, replacing, requestReplacement]);
+  }, [crumple, inkReveal, replacing, requestReplacement]);
 
   return (
     <View
