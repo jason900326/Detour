@@ -49,7 +49,11 @@ jobs:
 
       - name: Install dependencies
         if: steps.expo_token.outputs.skip != 'true'
-        run: npm install --no-audit --no-fund
+        run: npm ci
+
+      - name: Run quality checks
+        if: steps.expo_token.outputs.skip != 'true'
+        run: npm run quality
 
       - name: Publish preview update
         if: steps.expo_token.outputs.skip != 'true'
