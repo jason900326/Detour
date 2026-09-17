@@ -347,11 +347,11 @@ export function SideEventPaper({
   const unfoldReplacement = useCallback(() => {
     crumple.value = 1;
     crumple.value = withDelay(
-      145,
+      200,
       withTiming(
         0,
         {
-          duration: 410,
+          duration: 400,
           easing: Easing.out(Easing.cubic),
         },
         (finished) => {
@@ -487,7 +487,7 @@ export function SideEventPaper({
     crumple.value = withTiming(
       1,
       {
-        duration: 420,
+        duration: 400,
         easing: Easing.inOut(Easing.cubic),
       },
       (finished) => {
