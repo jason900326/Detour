@@ -54,7 +54,6 @@ export const journeySummaryStyles = StyleSheet.create({
   v56SummaryRule: {
     marginHorizontal: 14,
     borderTopWidth: 1,
-    borderStyle: 'dashed',
     borderColor: '#BEB5A8',
   },
   v56SummaryHero: {
@@ -406,7 +405,6 @@ export const journeySummaryStyles = StyleSheet.create({
   v56HistoryStub: {
     width: 60,
     borderLeftWidth: 1,
-    borderStyle: 'dashed',
     borderLeftColor: '#BEB5A8',
     alignItems: 'center',
     justifyContent: 'center',
@@ -431,21 +429,20 @@ export const journeySummaryStyles = StyleSheet.create({
     backgroundColor: SCREEN,
   },
   v56Barcode: {
-    width: 42,
-    height: 96,
-    flexDirection: 'row',
+    width: 34,
+    height: 108,
+    flexDirection: 'column',
     alignItems: 'stretch',
     justifyContent: 'center',
     gap: 1,
   },
   v56BarcodeBar: {
-    height: '100%',
+    width: '100%',
     backgroundColor: INK,
   },
   v56HistoryEmpty: {
     minHeight: 180,
     borderWidth: 1,
-    borderStyle: 'dashed',
     borderColor: '#C9C0B3',
     borderRadius: 9,
     alignItems: 'center',
