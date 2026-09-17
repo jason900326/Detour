@@ -128,6 +128,9 @@ export function useDetourHomeController() {
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [selectedColor, setSelectedColor] = useState<ColorChoice | null>(null);
   const [slowDestinationInput, setSlowDestinationInput] = useState('');
+  const [slowDestinationLabel, setSlowDestinationLabel] = useState('');
+  const [slowDestinationPoint, setSlowDestinationPoint] =
+    useState<GeoPoint | null>(null);
   const [slowDestinationError, setSlowDestinationError] = useState<string | null>(null);
 
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -912,7 +915,12 @@ export function useDetourHomeController() {
     await Haptics.selectionAsync();
     setSelectedMood(moodId);
     setSlowDestinationError(null);
-    if (moodId !== 'slow') void prewarmDetour(moodId);
+    if (moodId !== 'slow') {
+      setSlowDestinationInput('');
+      setSlowDestinationLabel('');
+      setSlowDestinationPoint(null);
+      void prewarmDetour(moodId);
+    }
 
     if (moodId === 'color' && !selectedColor) {
       const color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -986,6 +994,8 @@ export function useDetourHomeController() {
     setSelectedMood(null);
     setSelectedColor(null);
     setSlowDestinationInput('');
+    setSlowDestinationLabel('');
+    setSlowDestinationPoint(null);
     setSlowDestinationError(null);
     setLatitude(null);
     setLongitude(null);
@@ -1753,18 +1763,26 @@ export function useDetourHomeController() {
         context = getLightContext(startPoint, new Date());
 
         advanceTicketProgress(0.3, '正在找你輸入的目的地…');
-        const destinationLabel = slowDestinationInput.trim();
-        const geocoded = await Location.geocodeAsync(destinationLabel);
-        const match = geocoded[0];
+        const destinationLabel =
+          slowDestinationLabel.trim() || slowDestinationInput.trim();
+        let destinationPoint = slowDestinationPoint;
 
-        if (!match) {
-          throw new Error('找不到這個目的地。請輸入更完整的地址或地標名稱。');
+        // The branch picker already resolved one exact POI. Keep its coordinates
+        // all the way into routing instead of geocoding the display name again
+        // and potentially landing on another branch.
+        if (!destinationPoint) {
+          const geocoded = await Location.geocodeAsync(destinationLabel);
+          const match = geocoded[0];
+
+          if (!match) {
+            throw new Error('找不到這個目的地。請回上一頁重新選一次。');
+          }
+
+          destinationPoint = {
+            latitude: match.latitude,
+            longitude: match.longitude,
+          };
         }
-
-        const destinationPoint: GeoPoint = {
-          latitude: match.latitude,
-          longitude: match.longitude,
-        };
 
         if (
           destinationPoint.latitude < 21.5 ||
@@ -2504,6 +2522,10 @@ export function useDetourHomeController() {
     setSelectedColor,
     slowDestinationInput,
     setSlowDestinationInput,
+    slowDestinationLabel,
+    setSlowDestinationLabel,
+    slowDestinationPoint,
+    setSlowDestinationPoint,
     slowDestinationError,
     setSlowDestinationError,
     latitude,
