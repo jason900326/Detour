@@ -7,6 +7,8 @@ import {
   chooseWalkingRouteForContext,
   measureLocalShortcutRatio,
   measureRouteSelfOverlapRatio,
+  slowRouteMaximumSeconds,
+  slowRouteTargetSeconds,
 } from './routing-engine.ts';
 
 const point = (latitude, longitude) => ({ latitude, longitude });
@@ -99,6 +101,11 @@ test('night profile never buys legibility with an excessive detour', () => {
     chooseWalkingRouteForContext([shortest, tooLong], 'night'),
     shortest
   );
+});
+
+test('slow route time budget ignores optional side events', () => {
+  assert.equal(slowRouteTargetSeconds(15), 828);
+  assert.equal(slowRouteMaximumSeconds(15), 945);
 });
 
 test('slow route arc creates two same-side waypoints instead of a turn-back point', () => {
