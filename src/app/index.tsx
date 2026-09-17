@@ -8,6 +8,7 @@ import {
   useJourneyStageMotion,
   usePhysicalController,
 } from '../components/physical-motion';
+import { SideEventPaper } from '../components/side-event-paper';
 import {
   SlowDestinationPicker,
   type SlowDestinationChoice,
@@ -31,6 +32,11 @@ export default function HomeScreen() {
     controller.stage === 'ready' && controller.ticketReadyUnlocked;
   const slowPickerVisible =
     controller.stage === 'mood' && controller.selectedMood === 'slow';
+  const discoveryPaperVisible =
+    controller.stage === 'journey' &&
+    controller.selectedMood !== 'color' &&
+    Boolean(controller.activeSideEvent) &&
+    !controller.showNextBeatMap;
 
   const handleTicketTorn = useCallback(() => {
     void motionController.startDetour();
@@ -145,6 +151,14 @@ export default function HomeScreen() {
           onDismiss={dismissSlowDestination}
           onConfirm={confirmSlowDestination}
         />
+
+        {discoveryPaperVisible && controller.activeSideEvent && (
+          <SideEventPaper
+            event={controller.activeSideEvent}
+            onReplace={controller.replaceActiveSideEvent}
+            devMode={controller.devMode}
+          />
+        )}
 
         {tearEnabled && (
           <View
