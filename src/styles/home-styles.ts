@@ -7,6 +7,7 @@ import { ticketRecapStyles } from './home/ticket-recap-styles';
 import { ticketInfoOverrides } from './home/ticket-info-overrides';
 import { printerOverrides } from './home/printer-overrides';
 import { recapOverrides } from './home/recap-overrides';
+import { journeySummaryStyles } from './home/journey-summary-styles';
 import { arrivalCompletionOverrides } from './home/arrival-completion-overrides';
 
 export const styles = {
@@ -19,5 +20,6 @@ export const styles = {
   ...ticketInfoOverrides,
   ...printerOverrides,
   ...recapOverrides,
+  ...journeySummaryStyles,
   ...arrivalCompletionOverrides,
 };
