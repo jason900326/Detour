@@ -337,11 +337,16 @@ export function getContextMeta(context: LightContext) {
 }
 
 export function getSideEventCount(minutes: number) {
-  if (minutes <= 15) return 3;
-  if (minutes <= 25) return 5;
-  if (minutes <= 35) return 7;
-  if (minutes <= 45) return 9;
-  return 10;
+  // Side events are optional seasoning, not mandatory stops. The previous
+  // 3/5/7/9/10 schedule made short tickets reserve several minutes for events
+  // before routing even started, which could reject perfectly reasonable
+  // nearby routes. Keep enough moments to make the walk feel alive without
+  // letting them consume the journey's feasibility budget.
+  if (minutes <= 15) return 1;
+  if (minutes <= 25) return 2;
+  if (minutes <= 35) return 3;
+  if (minutes <= 45) return 4;
+  return 5;
 }
 
 function targetDistance(minutes: number) {
