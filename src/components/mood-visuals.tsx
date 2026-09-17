@@ -1,7 +1,7 @@
 import { View } from 'react-native';
-import MoodWanderIcon from '../../assets/mood/wander.svg';
-import MoodFoodIcon from '../../assets/mood/food.svg';
 import MoodColorIcon from '../../assets/mood/color.svg';
+import MoodFoodIcon from '../../assets/mood/food.svg';
+import MoodWanderIcon from '../../assets/mood/wander.svg';
 import type { MoodId } from '../lib/journey-engine';
 import { styles } from '../styles/home-styles';
 
@@ -33,13 +33,13 @@ export function V45Skyline() {
           ]}
         />
       ))}
+
       <View style={styles.v45SkylineBridgeDeck} />
       <View style={styles.v45SkylineBridgeArch} />
     </View>
   );
 }
 
-export function V45MoodIcon({ moodId, size = 76 }: { moodId: MoodId; size?: number }) {
 export function V45MoodIcon({
   moodId,
   size = 76,
@@ -47,8 +47,8 @@ export function V45MoodIcon({
   moodId: MoodId;
   size?: number;
 }) {
-  // Ticket uses size=30. Keep the newer ticket placement from PR #51,
-  // while supporting only the current three Mood types.
+  // Ticket passes size=30.
+  // Render it larger and position it in the ticket's lower-right cell.
   const ticketPlacement = size === 30;
   const renderSize = ticketPlacement ? 46 : size;
 

@@ -15,21 +15,21 @@ import MapView, { Circle, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
+import { isAIEngineConfigured } from '../lib/ai-engine';
 import type { SceneIssueReason, WalkingPace } from '../lib/app-model';
 import { MOODS } from '../lib/app-model';
-import { isAIEngineConfigured } from '../lib/ai-engine';
-import { DETOUR_PLAYTEST_VERSION } from '../lib/playtest-analytics';
 import { ticketSerial } from '../lib/detour-formatters';
+import { DETOUR_PLAYTEST_VERSION } from '../lib/playtest-analytics';
 import { styles } from '../styles/home-styles';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
+import { CollectionStages } from './home/collection-stages';
 import { V45MoodIcon, V45Skyline } from './mood-visuals';
 import {
-  DetourAccentStroke,
-  V45Ticket,
   DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_WIDTH,
+  DetourAccentStroke,
+  V45Ticket,
 } from './ticket-visuals';
-import { CollectionStages } from './home/collection-stages';
 
 export function DetourHomeView({
   controller,
@@ -180,7 +180,7 @@ export function DetourHomeView({
     completionIris.stopAnimation();
     completionIris.setValue(1);
 
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       Animated.timing(completionIris, {
         toValue: 0,
         duration: 320,

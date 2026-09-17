@@ -1,5 +1,5 @@
-import { SymbolView } from 'expo-symbols';
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -54,7 +54,7 @@ export default function ExploreScreen() {
           longitudeDelta: 0.045,
         }}
         showsCompass={false}
-        showsPointsOfInterest={false}
+        showsPointsOfInterests={false}
         showsUserLocation
       >
         {cells.map((cell) => (

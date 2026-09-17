@@ -164,7 +164,6 @@ export function ArrivalCompletionStage({
               </Pressable>
             </View>
 
-            {selectedMood !== 'slow' && (
               <Pressable
                 onPress={() => transitionTo('sceneIssue')}
                 style={styles.cleanArrivalProblem}
@@ -172,7 +171,7 @@ export function ArrivalCompletionStage({
                 <Text style={styles.cleanArrivalProblemText}>這裡不行</Text>
                 <Text style={styles.cleanArrivalProblemArrow}>→</Text>
               </Pressable>
-            )}
+            
 
             <Text style={[styles.cleanArrivalSource, styles.v41ReadableMeta]}>
               地圖資料：OpenStreetMap
