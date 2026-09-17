@@ -36,6 +36,9 @@ type NominatimResult = {
   name?: string;
   namedetails?: Record<string, string>;
   address?: Record<string, string>;
+  category?: string;
+  type?: string;
+  extratags?: Record<string, string>;
 };
 
 function distanceBetween(a: GeoPoint, b: GeoPoint) {
@@ -89,6 +92,39 @@ function taiwanCoordinate(point: GeoPoint) {
   );
 }
 
+const MEDICAL_DESTINATION_TERMS = [
+  '醫院',
+  '醫療中心',
+  '診所',
+  'hospital',
+  'medical center',
+  'clinic',
+];
+
+function normalizedSearchText(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function explicitlyRequestsMedicalDestination(query: string) {
+  const normalized = normalizedSearchText(query);
+  return MEDICAL_DESTINATION_TERMS.some((term) => normalized.includes(term));
+}
+
+function isUnexpectedMedicalInterior(result: NominatimResult, query: string) {
+  if (explicitlyRequestsMedicalDestination(query)) return false;
+
+  const context = [
+    result.display_name,
+    ...Object.values(result.address ?? {}),
+    ...Object.values(result.extratags ?? {}),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+
+  return MEDICAL_DESTINATION_TERMS.some((term) => context.includes(term));
+}
+
 async function currentPoint() {
   let permission = await Location.getForegroundPermissionsAsync();
   if (permission.status !== 'granted') {
@@ -117,9 +153,8 @@ async function currentPoint() {
 }
 
 async function searchWithNominatim(query: string, start: GeoPoint) {
-  // Bias rather than hard-bound the search around a coarse location. A user
-  // can type just a brand name (for example SUKIYA) and still get nearby
-  // branches without knowing the exact store name.
+  // Keep the search local, then rank the complete nearby candidate set by
+  // proximity. Nominatim's own relevance order is not a nearest-place order.
   const centerLat = Number(start.latitude.toFixed(2));
   const centerLon = Number(start.longitude.toFixed(2));
   const viewbox = [
@@ -132,9 +167,10 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
     ['format', 'jsonv2'],
     ['q', query],
     ['countrycodes', 'tw'],
-    ['limit', '8'],
+    ['limit', '40'],
     ['addressdetails', '1'],
     ['namedetails', '1'],
+    ['extratags', '1'],
     ['dedupe', '1'],
     ['accept-language', 'zh-TW'],
     ['viewbox', viewbox],
@@ -166,6 +202,7 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
       const point = { latitude, longitude };
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
       if (!taiwanCoordinate(point)) return null;
+      if (isUnexpectedMedicalInterior(result, query)) return null;
 
       const label = resultName(result);
       const displayName = result.display_name?.trim() || label;
@@ -182,15 +219,20 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
     })
     .filter((item): item is SlowDestinationChoice => item !== null);
 
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizedQuery = normalizedSearchText(query);
   return normalized.sort((a, b) => {
+    const distanceDifference =
+      distanceBetween(start, a) - distanceBetween(start, b);
+    if (Math.abs(distanceDifference) > 20) return distanceDifference;
+
     const aName = a.label.toLocaleLowerCase();
     const bName = b.label.toLocaleLowerCase();
-    const aMatch = aName === normalizedQuery ? 0 : aName.includes(normalizedQuery) ? 1 : 2;
-    const bMatch = bName === normalizedQuery ? 0 : bName.includes(normalizedQuery) ? 1 : 2;
+    const aMatch =
+      aName === normalizedQuery ? 0 : aName.includes(normalizedQuery) ? 1 : 2;
+    const bMatch =
+      bName === normalizedQuery ? 0 : bName.includes(normalizedQuery) ? 1 : 2;
 
-    if (aMatch !== bMatch) return aMatch - bMatch;
-    return a.estimatedWalkMinutes - b.estimatedWalkMinutes;
+    return aMatch - bMatch;
   });
 }
 
@@ -290,15 +332,18 @@ export function SlowDestinationPicker({
       const start = await currentPoint();
       setSearchOrigin(start);
       let next: SlowDestinationChoice[] = [];
+      let nearbySearchAvailable = false;
 
       try {
         next = await searchWithNominatim(trimmed, start);
+        nearbySearchAvailable = true;
       } catch {
-        // Device geocoding remains a fallback when the POI search service is
-        // unavailable. It is less branch-aware, but it keeps slow-walk usable.
+        // Device geocoding remains a fallback only when the nearby POI service
+        // is unavailable. A successful empty result may mean unsafe interior
+        // candidates were intentionally removed and must not be reintroduced.
       }
 
-      if (next.length === 0) {
+      if (next.length === 0 && !nearbySearchAvailable) {
         next = await fallbackGeocode(trimmed, start);
       }
 
@@ -396,10 +441,6 @@ export function SlowDestinationPicker({
             </Pressable>
           </View>
 
-          <Text style={styles.body}>
-            不用知道完整分店名。輸入「SUKIYA」、公園名或地標，先從附近結果選一個。
-          </Text>
-
           <View style={styles.searchRow}>
             <TextInput
               autoFocus
@@ -409,7 +450,7 @@ export function SlowDestinationPicker({
                 setError(null);
               }}
               onSubmitEditing={() => void runSearch()}
-              placeholder="例如：SUKIYA、新埔捷運站"
+              placeholder="輸入地點或類型"
               placeholderTextColor="#8F8B82"
               returnKeyType="search"
               style={styles.input}
@@ -582,7 +623,7 @@ const styles = StyleSheet.create({
     color: MUTED,
   },
   searchRow: {
-    marginTop: 18,
+    marginTop: 14,
     flexDirection: 'row',
     gap: 8,
   },
