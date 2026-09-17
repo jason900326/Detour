@@ -74,6 +74,12 @@ export function SideEventPaper({
     () => 5 + crumple.value * 24
   );
   const paperOpacity = useDerivedValue(() => reveal.value);
+  const shadowX = useDerivedValue(() => paperX.value + 5);
+  const shadowY = useDerivedValue(() => paperY.value + 7);
+  const innerX = useDerivedValue(() => paperX.value + 2);
+  const innerY = useDerivedValue(() => paperY.value + 2);
+  const innerWidth = useDerivedValue(() => Math.max(1, paperWidth.value - 4));
+  const innerHeight = useDerivedValue(() => Math.max(1, paperHeight.value - 4));
   const wadOpacity = useDerivedValue(
     () => Math.max(0, (crumple.value - 0.18) / 0.82)
   );
@@ -83,6 +89,21 @@ export function SideEventPaper({
   const wadRadius = useDerivedValue(
     () => Math.max(5, Math.min(paperWidth.value, paperHeight.value) * 0.42)
   );
+  const wadLeftX = useDerivedValue(
+    () => width / 2 - wadRadius.value * 0.22
+  );
+  const wadLeftY = useDerivedValue(
+    () => wadCenterY.value - wadRadius.value * 0.08
+  );
+  const wadLeftRadius = useDerivedValue(() => wadRadius.value * 0.78);
+  const wadRightX = useDerivedValue(
+    () => width / 2 + wadRadius.value * 0.18
+  );
+  const wadRightY = useDerivedValue(
+    () => wadCenterY.value + wadRadius.value * 0.12
+  );
+  const wadRightRadius = useDerivedValue(() => wadRadius.value * 0.72);
+  const wadCoreRadius = useDerivedValue(() => wadRadius.value * 0.58);
 
   const revealContent = useCallback(() => {
     setContentVisible(true);
@@ -184,8 +205,7 @@ export function SideEventPaper({
     try {
       await onReplace();
     } finally {
-      // In the unlikely case the pool returns the same event id, still unfold
-      // instead of leaving the paper stuck as a ball.
+      // If the pool ever returns the same id, do not leave the note crumpled.
       setTimeout(() => {
         if (replacementWaitingRef.current) {
           unfoldReplacement();
@@ -216,6 +236,7 @@ export function SideEventPaper({
       style={[
         styles.host,
         {
+          left: (screenWidth - width) / 2,
           width,
           height: CANVAS_HEIGHT,
           bottom: Math.max(
@@ -228,8 +249,8 @@ export function SideEventPaper({
       <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Group opacity={paperOpacity}>
           <RoundedRect
-            x={useDerivedValue(() => paperX.value + 5)}
-            y={useDerivedValue(() => paperY.value + 7)}
+            x={shadowX}
+            y={shadowY}
             width={paperWidth}
             height={paperHeight}
             r={paperRadius}
@@ -244,10 +265,10 @@ export function SideEventPaper({
             color={PAPER}
           />
           <RoundedRect
-            x={useDerivedValue(() => paperX.value + 2)}
-            y={useDerivedValue(() => paperY.value + 2)}
-            width={useDerivedValue(() => Math.max(1, paperWidth.value - 4))}
-            height={useDerivedValue(() => Math.max(1, paperHeight.value - 4))}
+            x={innerX}
+            y={innerY}
+            width={innerWidth}
+            height={innerHeight}
             r={paperRadius}
             color={PAPER_LIGHT}
             opacity={0.34}
@@ -256,21 +277,21 @@ export function SideEventPaper({
 
         <Group opacity={wadOpacity}>
           <Circle
-            cx={useDerivedValue(() => width / 2 - wadRadius.value * 0.22)}
-            cy={useDerivedValue(() => wadCenterY.value - wadRadius.value * 0.08)}
-            r={useDerivedValue(() => wadRadius.value * 0.78)}
+            cx={wadLeftX}
+            cy={wadLeftY}
+            r={wadLeftRadius}
             color={PAPER_FOLD_DARK}
           />
           <Circle
-            cx={useDerivedValue(() => width / 2 + wadRadius.value * 0.18)}
-            cy={useDerivedValue(() => wadCenterY.value + wadRadius.value * 0.12)}
-            r={useDerivedValue(() => wadRadius.value * 0.72)}
+            cx={wadRightX}
+            cy={wadRightY}
+            r={wadRightRadius}
             color={PAPER_FOLD_LIGHT}
           />
           <Circle
-            cx={useDerivedValue(() => width / 2)}
+            cx={width / 2}
             cy={wadCenterY}
-            r={useDerivedValue(() => wadRadius.value * 0.58)}
+            r={wadCoreRadius}
             color={PAPER}
           />
         </Group>
@@ -317,7 +338,6 @@ export function SideEventPaper({
 const styles = StyleSheet.create({
   host: {
     position: 'absolute',
-    alignSelf: 'center',
     zIndex: 48,
   },
   compactContent: {
@@ -385,7 +405,7 @@ const styles = StyleSheet.create({
     paddingRight: 20,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '650',
+    fontWeight: '600',
     color: '#625E56',
   },
   replaceButton: {
