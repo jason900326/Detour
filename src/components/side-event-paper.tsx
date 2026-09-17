@@ -527,44 +527,48 @@ export function SideEventPaper({
           />
         </Group>
 
-        <Group opacity={inkOpacity}>
-          <Paragraph
-            paragraph={titleParagraph}
-            x={titleX}
-            y={titleY}
-            width={Math.max(1, width - 62)}
-          />
-        </Group>
+        {!replacing ? (
+          <>
+            <Group opacity={inkOpacity}>
+              <Paragraph
+                paragraph={titleParagraph}
+                x={titleX}
+                y={titleY}
+                width={Math.max(1, width - 62)}
+              />
+            </Group>
 
-        <Group opacity={detailOpacity}>
-          {displayedEvent.instruction ? (
-            <Paragraph
-              paragraph={instructionParagraph}
-              x={instructionX}
-              y={instructionY}
-              width={Math.max(1, width - 40)}
-            />
-          ) : null}
-          <Rect
-            x={separatorX}
-            y={separatorY}
-            width={Math.max(1, width - 40)}
-            height={1}
-            color={PAPER_LINE}
-          />
-          <Paragraph
-            paragraph={replaceParagraph}
-            x={replaceX}
-            y={replaceY}
-            width={Math.max(1, width - 76)}
-          />
-          <Paragraph
-            paragraph={replaceArrowParagraph}
-            x={replaceArrowX}
-            y={replaceArrowY}
-            width={30}
-          />
-        </Group>
+            <Group opacity={detailOpacity}>
+              {displayedEvent.instruction ? (
+                <Paragraph
+                  paragraph={instructionParagraph}
+                  x={instructionX}
+                  y={instructionY}
+                  width={Math.max(1, width - 40)}
+                />
+              ) : null}
+              <Rect
+                x={separatorX}
+                y={separatorY}
+                width={Math.max(1, width - 40)}
+                height={1}
+                color={PAPER_LINE}
+              />
+              <Paragraph
+                paragraph={replaceParagraph}
+                x={replaceX}
+                y={replaceY}
+                width={Math.max(1, width - 76)}
+              />
+              <Paragraph
+                paragraph={replaceArrowParagraph}
+                x={replaceArrowX}
+                y={replaceArrowY}
+                width={30}
+              />
+            </Group>
+          </>
+        ) : null}
       </Canvas>
 
       {!replacing && controlsVisible && (
