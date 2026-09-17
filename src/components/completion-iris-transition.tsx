@@ -7,12 +7,17 @@ import {
   runOnJS,
   useDerivedValue,
   useSharedValue,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 
 import { INK } from '../theme/detour-theme';
 
 export type CompletionIrisPhase = 'idle' | 'closing' | 'opening';
+
+const IRIS_CLOSE_DURATION_MS = 300;
+const IRIS_CLOSED_HOLD_MS = 130;
+const IRIS_OPEN_DURATION_MS = 400;
 
 export function CompletionIrisTransition({
   width,
@@ -42,7 +47,7 @@ export function CompletionIrisTransition({
       holeRadius.value = withTiming(
         0,
         {
-          duration: 280,
+          duration: IRIS_CLOSE_DURATION_MS,
           easing: Easing.inOut(Easing.cubic),
         },
         (finished) => {
@@ -53,15 +58,18 @@ export function CompletionIrisTransition({
     }
 
     holeRadius.value = 0;
-    holeRadius.value = withTiming(
-      maxRadius,
-      {
-        duration: 360,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(onOpened)();
-      }
+    holeRadius.value = withDelay(
+      IRIS_CLOSED_HOLD_MS,
+      withTiming(
+        maxRadius,
+        {
+          duration: IRIS_OPEN_DURATION_MS,
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(onOpened)();
+        }
+      )
     );
   }, [holeRadius, maxRadius, onClosed, onOpened, phase]);
 
