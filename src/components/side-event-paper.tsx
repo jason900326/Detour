@@ -12,7 +12,6 @@ import {
   Group,
   Image as SkiaImage,
   ImageShader,
-  Line,
   Paragraph,
   Rect,
   Skia,
@@ -166,6 +165,10 @@ export function SideEventPaper({
     []
   );
 
+  // Keep the material texture independent from the event copy. The previous
+  // implementation baked text into useTexture(), which softened glyphs and
+  // could leave the old prompt cached after a replacement. Paper stays a
+  // texture; copy is rendered as live Skia paragraphs at device resolution.
   const paperTexture = useTexture(
     <>
       <Rect x={0} y={0} width={width} height={EXPANDED_HEIGHT} color={PAPER_BASE} />
@@ -180,33 +183,6 @@ export function SideEventPaper({
           opacity={0.82}
         />
       ) : null}
-      <Paragraph paragraph={titleParagraph} x={20} y={19} width={Math.max(1, width - 62)} />
-      {displayedEvent.instruction ? (
-        <Paragraph
-          paragraph={instructionParagraph}
-          x={20}
-          y={64}
-          width={Math.max(1, width - 40)}
-        />
-      ) : null}
-      <Line
-        p1={vec(20, 136)}
-        p2={vec(Math.max(21, width - 20), 136)}
-        color={PAPER_LINE}
-        strokeWidth={1}
-      />
-      <Paragraph
-        paragraph={replaceParagraph}
-        x={20}
-        y={148}
-        width={Math.max(1, width - 76)}
-      />
-      <Paragraph
-        paragraph={replaceArrowParagraph}
-        x={Math.max(20, width - 43)}
-        y={146}
-        width={30}
-      />
     </>,
     { width, height: EXPANDED_HEIGHT }
   );
@@ -214,6 +190,30 @@ export function SideEventPaper({
   const naturalHeight = useDerivedValue(
     () => COLLAPSED_HEIGHT + (EXPANDED_HEIGHT - COLLAPSED_HEIGHT) * open.value
   );
+  const paperTop = useDerivedValue(() => CANVAS_HEIGHT - naturalHeight.value);
+  const inkOffsetX = useDerivedValue(() => (1 - reveal.value) * 42);
+  const titleX = useDerivedValue(() => 20 + inkOffsetX.value);
+  const titleY = useDerivedValue(() => paperTop.value + 19);
+  const instructionX = useDerivedValue(() => 20 + inkOffsetX.value);
+  const instructionY = useDerivedValue(() => paperTop.value + 64);
+  const separatorX = useDerivedValue(() => 20 + inkOffsetX.value);
+  const separatorY = useDerivedValue(() => paperTop.value + 136);
+  const replaceX = useDerivedValue(() => 20 + inkOffsetX.value);
+  const replaceY = useDerivedValue(() => paperTop.value + 148);
+  const replaceArrowX = useDerivedValue(
+    () => Math.max(20, width - 43) + inkOffsetX.value
+  );
+  const replaceArrowY = useDerivedValue(() => paperTop.value + 146);
+
+  // Once the mesh starts genuinely folding, fade the flat glyph layer out
+  // quickly. It reappears only near the end of the unfold, so the stable state
+  // remains pin-sharp while the crumple still reads as one physical sheet.
+  const inkOpacity = useDerivedValue(() => {
+    const revealOpacity = Math.max(0, Math.min(1, reveal.value));
+    const foldOpacity = Math.max(0, Math.min(1, (0.2 - crumple.value) / 0.2));
+    return revealOpacity * foldOpacity;
+  });
+  const detailOpacity = useDerivedValue(() => inkOpacity.value * open.value);
 
   const paperVertices = useDerivedValue(() => {
     const points = [];
@@ -442,6 +442,45 @@ export function SideEventPaper({
             vertices={paperVertices}
             textures={textureCoordinates}
             indices={MESH_INDICES}
+          />
+        </Group>
+
+        <Group opacity={inkOpacity}>
+          <Paragraph
+            paragraph={titleParagraph}
+            x={titleX}
+            y={titleY}
+            width={Math.max(1, width - 62)}
+          />
+        </Group>
+
+        <Group opacity={detailOpacity}>
+          {displayedEvent.instruction ? (
+            <Paragraph
+              paragraph={instructionParagraph}
+              x={instructionX}
+              y={instructionY}
+              width={Math.max(1, width - 40)}
+            />
+          ) : null}
+          <Rect
+            x={separatorX}
+            y={separatorY}
+            width={Math.max(1, width - 40)}
+            height={1}
+            color={PAPER_LINE}
+          />
+          <Paragraph
+            paragraph={replaceParagraph}
+            x={replaceX}
+            y={replaceY}
+            width={Math.max(1, width - 76)}
+          />
+          <Paragraph
+            paragraph={replaceArrowParagraph}
+            x={replaceArrowX}
+            y={replaceArrowY}
+            width={30}
           />
         </Group>
       </Canvas>
