@@ -350,10 +350,10 @@ function JourneySummaryCard({
 function Barcode() {
   return (
     <View style={styles.v56Barcode}>
-      {BARCODE_WIDTHS.map((width, index) => (
+      {BARCODE_WIDTHS.map((size, index) => (
         <View
-          key={`${width}-${index}`}
-          style={[styles.v56BarcodeBar, { width }]}
+          key={`${size}-${index}`}
+          style={[styles.v56BarcodeBar, { height: size }]}
         />
       ))}
     </View>
