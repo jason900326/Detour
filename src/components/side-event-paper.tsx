@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {
   Canvas,
+  Circle,
   Group,
   ImageShader,
   Paragraph,
@@ -36,10 +37,11 @@ const EXPANDED_HEIGHT = 184;
 const CANVAS_HEIGHT = 202;
 const GRID_COLUMNS = 7;
 const GRID_ROWS = 5;
-const PAPER_BASE = '#F8F5EC';
-const PAPER_WARM = 'rgba(218, 207, 184, 0.10)';
-const PAPER_COOL = 'rgba(255, 255, 255, 0.24)';
-const PAPER_LINE = '#D3CCBF';
+const PAPER_BASE = '#FAF7F0';
+const PAPER_WARM = 'rgba(206, 194, 169, 0.07)';
+const PAPER_COOL = 'rgba(255, 255, 255, 0.16)';
+const PAPER_EDGE = 'rgba(177, 163, 134, 0.08)';
+const PAPER_LINE = '#D7D0C4';
 
 function hash01(value: number) {
   const raw = Math.sin(value * 12.9898 + 78.233) * 43758.5453;
@@ -47,20 +49,37 @@ function hash01(value: number) {
 }
 
 function buildPaperFibers(width: number) {
-  return Array.from({ length: 58 }, (_, index) => {
-    const x = hash01(index * 3 + 1) * width;
-    const y = hash01(index * 5 + 2) * EXPANDED_HEIGHT;
-    const fiberWidth = 5 + hash01(index * 7 + 3) * 23;
-    const fiberHeight = index % 6 === 0 ? 1.05 : 0.55;
-    const warm = index % 3 === 0;
+  return Array.from({ length: 42 }, (_, index) => {
+    const x = hash01(index * 3.1 + 1) * width;
+    const y = hash01(index * 5.2 + 2) * EXPANDED_HEIGHT;
+    const fiberWidth = 4 + hash01(index * 7.4 + 3) * 15;
+    const fiberHeight = index % 7 === 0 ? 0.9 : 0.45;
+    const warm = index % 4 === 0;
     return {
       x,
       y,
       width: fiberWidth,
       height: fiberHeight,
       color: warm
-        ? 'rgba(125, 111, 86, 0.055)'
-        : 'rgba(255, 255, 255, 0.30)',
+        ? 'rgba(118, 104, 82, 0.05)'
+        : 'rgba(255, 255, 255, 0.18)',
+    };
+  });
+}
+
+function buildPaperPulp(width: number) {
+  return Array.from({ length: 120 }, (_, index) => {
+    const x = hash01(index * 2.7 + 11) * width;
+    const y = hash01(index * 4.9 + 17) * EXPANDED_HEIGHT;
+    const r = 0.35 + hash01(index * 6.3 + 7) * 1.25;
+    const warm = index % 5 === 0;
+    return {
+      x,
+      y,
+      r,
+      color: warm
+        ? 'rgba(120, 108, 87, 0.032)'
+        : 'rgba(255, 255, 255, 0.12)',
     };
   });
 }
@@ -120,7 +139,7 @@ const MESH_INDICES = buildMeshIndices();
 const MESH_VERTEX_COUNT = (GRID_COLUMNS + 1) * (GRID_ROWS + 1);
 const SHADOW_COLORS = Array.from(
   { length: MESH_VERTEX_COUNT },
-  () => 'rgba(0,0,0,0.11)'
+  () => 'rgba(0,0,0,0.075)'
 );
 
 export function SideEventPaper({
@@ -136,6 +155,7 @@ export function SideEventPaper({
   const insets = useSafeAreaInsets();
   const width = Math.max(248, Math.min(396, screenWidth - 54));
   const paperFibers = useMemo(() => buildPaperFibers(width), [width]);
+  const paperPulp = useMemo(() => buildPaperPulp(width), [width]);
   const [displayedEvent, setDisplayedEvent] = useState(event);
   const [expanded, setExpanded] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -190,6 +210,9 @@ export function SideEventPaper({
     []
   );
 
+  // Designed paper rather than a photo texture: warm-white stock, very fine
+  // pulp speckles, sparse fibres and faint edge tinting. The texture stays
+  // restrained so it reads as real paper without looking dirty or vintage.
   const paperTexture = useTexture(
     <>
       <Rect
@@ -201,18 +224,43 @@ export function SideEventPaper({
       />
       <Rect
         x={0}
-        y={22}
+        y={12}
         width={width}
-        height={44}
+        height={34}
         color={PAPER_COOL}
       />
       <Rect
         x={0}
-        y={96}
+        y={86}
         width={width}
-        height={58}
+        height={52}
         color={PAPER_WARM}
       />
+      <Rect x={0} y={0} width={width} height={8} color={PAPER_EDGE} />
+      <Rect
+        x={0}
+        y={EXPANDED_HEIGHT - 8}
+        width={width}
+        height={8}
+        color="rgba(164, 151, 126, 0.05)"
+      />
+      <Rect x={0} y={0} width={7} height={EXPANDED_HEIGHT} color={PAPER_EDGE} />
+      <Rect
+        x={width - 7}
+        y={0}
+        width={7}
+        height={EXPANDED_HEIGHT}
+        color="rgba(255, 255, 255, 0.08)"
+      />
+      {paperPulp.map((dot, index) => (
+        <Circle
+          key={`paper-pulp-${index}`}
+          cx={dot.x}
+          cy={dot.y}
+          r={dot.r}
+          color={dot.color}
+        />
+      ))}
       {paperFibers.map((fiber, index) => (
         <Rect
           key={`paper-fiber-${index}`}
@@ -308,7 +356,7 @@ export function SideEventPaper({
   });
 
   const shadowVertices = useDerivedValue(() =>
-    paperVertices.value.map((point) => vec(point.x + 3, point.y + 4))
+    paperVertices.value.map((point) => vec(point.x + 2.5, point.y + 3.5))
   );
 
   const textureCoordinates = useDerivedValue(() => {
