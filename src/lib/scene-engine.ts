@@ -831,37 +831,6 @@ function baseScore(kind: SceneKind, moodId: MoodId) {
     else score -= 60;
   }
 
-  if (moodId === 'quiet') {
-    if (
-      ['viewpoint', 'square', 'artwork', 'heritage-tree'].includes(kind)
-    ) {
-      score += 22;
-    }
-
-    if (['market', 'food'].includes(kind)) score -= 28;
-  }
-
-  if (moodId === 'weird') {
-    if (
-      [
-        'mural',
-        'street-art',
-        'artwork',
-        'statue',
-        'steps',
-        'footbridge',
-        'fountain',
-        'public-bookcase',
-      ].includes(kind)
-    ) {
-      score += 26;
-    }
-  }
-
-  if (moodId === 'surprise') {
-    score += ((kind.length * 17) % 23) - 8;
-  }
-
   return score;
 }
 

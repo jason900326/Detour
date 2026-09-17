@@ -4,11 +4,7 @@ import type { SceneCandidate } from './scene-engine';
 export function moodHint(moodId: MoodId) {
   if (moodId === 'wander') return '不設目的，讓路線自己長出來。';
   if (moodId === 'food') return '讓 DETOUR 幫你決定去哪裡吃。';
-  if (moodId === 'color') return '整趟只追同一個顏色。';
-  if (moodId === 'slow') return '你決定去哪，DETOUR 決定怎麼繞。';
-  if (moodId === 'quiet') return '少一點聲音，留一點空白。';
-  if (moodId === 'weird') return '去找平常會錯過的小東西。';
-  return '今天的方向完全交給 DETOUR。';
+  return '整趟只追同一個顏色。';
 }
 
 export function isDrinkLikeFoodCandidate(scene: SceneCandidate) {

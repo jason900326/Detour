@@ -3,14 +3,7 @@ export type GeoPoint = {
   longitude: number;
 };
 
-export type MoodId =
-  | 'wander'
-  | 'food'
-  | 'quiet'
-  | 'weird'
-  | 'color'
-  | 'surprise'
-  | 'slow';
+export type MoodId = 'wander' | 'food' | 'color';
 
 export type LightContext = 'day' | 'twilight' | 'night';
 
@@ -450,18 +443,6 @@ function arrivalMission(args: {
       instruction: args.color
         ? `這趟一路找的是${args.color.label}。看到就拍，沒看到也不用回頭。`
         : '這趟的顏色散步到這裡結束。',
-      completion: '',
-      photo: false,
-      portable: true,
-    };
-  }
-
-  if (args.moodId === 'slow') {
-    return {
-      id: 'arrival-slow',
-      code: 'ARRIVAL',
-      title: '到了。',
-      instruction: '這趟沒有走最快的路，但有好好走到你要去的地方。',
       completion: '',
       photo: false,
       portable: true,
