@@ -1,6 +1,5 @@
 create schema if not exists extensions;
 create extension if not exists postgis with schema extensions;
-create extension if not exists pg_trgm with schema extensions;
 
 create table if not exists public.pois (
   id text primary key,
@@ -25,14 +24,11 @@ create table if not exists public.pois (
   source_updated_at timestamptz,
   imported_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (source, source_id)
+  constraint pois_source_id_present check (length(source_id) > 0)
 );
 
 create index if not exists pois_location_gix
   on public.pois using gist (location);
-
-create index if not exists pois_search_text_trgm_idx
-  on public.pois using gin (search_text extensions.gin_trgm_ops);
 
 create index if not exists pois_active_source_batch_idx
   on public.pois (active, source, import_batch);

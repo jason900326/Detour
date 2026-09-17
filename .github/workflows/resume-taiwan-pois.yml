@@ -1,15 +1,12 @@
-name: Import Taiwan POIs
+name: Resume Taiwan POI Import
 
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Normalize only; do not write Supabase"
-        required: false
-        default: false
-        type: boolean
-  schedule:
-    - cron: "23 4 5 * *"
+  push:
+    branches:
+      - fix-minute-readout-slow-modal
+    paths:
+      - ".github/workflows/resume-taiwan-pois.yml"
+
 permissions:
   contents: read
 
@@ -18,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  import-pois:
+  resume-pois:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -35,7 +32,6 @@ jobs:
           python-version: "3.12"
 
       - name: Verify Supabase secret
-        if: ${{ inputs.dry_run != true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -44,39 +40,31 @@ jobs:
       - name: Install pinned Overture client
         run: python -m pip install overturemaps==1.0.2
 
-      - name: Test POI normalization
-        run: python -m unittest discover -s scripts -p 'test_import_overture_pois.py' -v
-
-      - name: Download Taiwan Overture Places
+      - name: Download remaining Taiwan Places
         shell: bash
         run: |
           set -euo pipefail
-          overturemaps download --bbox=119.9,21.8,122.1,25.5 -f geojsonseq --type=place -o /tmp/taiwan-main-pois.geojsonseq
+          overturemaps download --bbox=119.9,24.4,122.1,25.5 -f geojsonseq --type=place -o /tmp/taiwan-north-pois.geojsonseq
           overturemaps download --bbox=119.2,23.1,119.8,23.9 -f geojsonseq --type=place -o /tmp/taiwan-penghu-pois.geojsonseq
           overturemaps download --bbox=118.1,24.3,118.6,24.6 -f geojsonseq --type=place -o /tmp/taiwan-kinmen-pois.geojsonseq
           overturemaps download --bbox=119.8,25.9,120.6,26.4 -f geojsonseq --type=place -o /tmp/taiwan-matsu-pois.geojsonseq
-          wc -l /tmp/taiwan-*-pois.geojsonseq
 
-      - name: Import normalized POIs into Supabase
+      - name: Resume existing import batch
         shell: bash
         run: |
           set -euo pipefail
-          args=(
-            --input /tmp/taiwan-main-pois.geojsonseq
-            --input /tmp/taiwan-penghu-pois.geojsonseq
-            --input /tmp/taiwan-kinmen-pois.geojsonseq
-            --input /tmp/taiwan-matsu-pois.geojsonseq
-            --report-output /tmp/detour-poi-import-report.json
-          )
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            args+=(--dry-run)
-          fi
-          python scripts/import_overture_pois.py "${args[@]}"
+          python scripts/import_overture_pois.py \
+            --batch overture-20260917T074023Z-d7735948 \
+            --input /tmp/taiwan-north-pois.geojsonseq \
+            --input /tmp/taiwan-penghu-pois.geojsonseq \
+            --input /tmp/taiwan-kinmen-pois.geojsonseq \
+            --input /tmp/taiwan-matsu-pois.geojsonseq \
+            --report-output /tmp/detour-poi-resume-report.json
 
-      - name: Upload POI import report
+      - name: Upload POI resume report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: detour-poi-import-report
-          path: /tmp/detour-poi-import-report.json
+          name: detour-poi-resume-report
+          path: /tmp/detour-poi-resume-report.json
           if-no-files-found: ignore

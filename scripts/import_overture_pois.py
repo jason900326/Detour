@@ -264,13 +264,21 @@ def request_supabase(
     if prefer:
         headers["Prefer"] = prefer
 
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=75) as response:
-            return response.read()
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Supabase {error.code}: {detail[:1000]}") from error
+    for attempt in range(5):
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=75) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            if error.code not in {408, 425, 429, 500, 502, 503, 504} or attempt == 4:
+                raise RuntimeError(f"Supabase {error.code}: {detail[:1000]}") from error
+        except urllib.error.URLError as error:
+            if attempt == 4:
+                raise RuntimeError(f"Supabase network error: {error.reason}") from error
+        time.sleep(2 ** attempt)
+
+    raise RuntimeError("Supabase request failed after retries")
 
 
 def upload_batch(supabase_url: str, secret_key: str, rows: list[dict[str, Any]]) -> None:
@@ -316,6 +324,7 @@ def main() -> int:
     parser.add_argument("--input", required=True, type=Path, action="append")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--batch")
     parser.add_argument("--report-output", type=Path)
     args = parser.parse_args()
 
@@ -333,7 +342,10 @@ def main() -> int:
         print("SUPABASE_URL and SUPABASE_SECRET_KEY are required.", file=sys.stderr)
         return 2
 
-    batch = f"overture-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+    batch = args.batch or (
+        f"overture-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-"
+        f"{uuid.uuid4().hex[:8]}"
+    )
     started_at = time.time()
     counters: Counter[str] = Counter()
     categories: Counter[str] = Counter()
