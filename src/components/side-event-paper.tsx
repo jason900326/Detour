@@ -190,9 +190,6 @@ export function SideEventPaper({
     []
   );
 
-  // A designed paper texture instead of a photo texture: warm-white stock,
-  // soft pulp variation and sparse fibres. The irregular silhouette still
-  // comes from the mesh, so the result reads as paper rather than a UI card.
   const paperTexture = useTexture(
     <>
       <Rect
@@ -272,8 +269,6 @@ export function SideEventPaper({
         let baseX = nx * width;
         let baseY = top + ny * height;
 
-        // Slightly torn, asymmetric edges and a tiny natural lean. These stay
-        // restrained so the sheet still feels designed rather than distressed.
         baseY += (nx - 0.5) * 2.2;
         if (column === 0) {
           baseX += 2.6 + Math.sin((row + 1) * 2.13) * 2.2;
@@ -357,8 +352,6 @@ export function SideEventPaper({
         (finished) => {
           if (!finished) return;
 
-          // The three copy lines stay completely hidden for the entire paper
-          // motion. Only reveal the new copy after the sheet is fully flat.
           inkReveal.value = withTiming(
             1,
             {
@@ -480,9 +473,6 @@ export function SideEventPaper({
     if (replacing) return;
     setReplacing(true);
     setControlsVisible(false);
-
-    // Hide all three text lines immediately when the paper starts moving. They
-    // remain hidden through crumple, hold and unfold, then the new copy appears.
     inkReveal.value = 0;
     crumple.value = withTiming(
       1,
@@ -527,44 +517,48 @@ export function SideEventPaper({
           />
         </Group>
 
-        <Group opacity={inkOpacity}>
-          <Paragraph
-            paragraph={titleParagraph}
-            x={titleX}
-            y={titleY}
-            width={Math.max(1, width - 62)}
-          />
-        </Group>
+        {!replacing ? (
+          <>
+            <Group opacity={inkOpacity}>
+              <Paragraph
+                paragraph={titleParagraph}
+                x={titleX}
+                y={titleY}
+                width={Math.max(1, width - 62)}
+              />
+            </Group>
 
-        <Group opacity={detailOpacity}>
-          {displayedEvent.instruction ? (
-            <Paragraph
-              paragraph={instructionParagraph}
-              x={instructionX}
-              y={instructionY}
-              width={Math.max(1, width - 40)}
-            />
-          ) : null}
-          <Rect
-            x={separatorX}
-            y={separatorY}
-            width={Math.max(1, width - 40)}
-            height={1}
-            color={PAPER_LINE}
-          />
-          <Paragraph
-            paragraph={replaceParagraph}
-            x={replaceX}
-            y={replaceY}
-            width={Math.max(1, width - 76)}
-          />
-          <Paragraph
-            paragraph={replaceArrowParagraph}
-            x={replaceArrowX}
-            y={replaceArrowY}
-            width={30}
-          />
-        </Group>
+            <Group opacity={detailOpacity}>
+              {displayedEvent.instruction ? (
+                <Paragraph
+                  paragraph={instructionParagraph}
+                  x={instructionX}
+                  y={instructionY}
+                  width={Math.max(1, width - 40)}
+                />
+              ) : null}
+              <Rect
+                x={separatorX}
+                y={separatorY}
+                width={Math.max(1, width - 40)}
+                height={1}
+                color={PAPER_LINE}
+              />
+              <Paragraph
+                paragraph={replaceParagraph}
+                x={replaceX}
+                y={replaceY}
+                width={Math.max(1, width - 76)}
+              />
+              <Paragraph
+                paragraph={replaceArrowParagraph}
+                x={replaceArrowX}
+                y={replaceArrowY}
+                width={30}
+              />
+            </Group>
+          </>
+        ) : null}
       </Canvas>
 
       {!replacing && controlsVisible && (
