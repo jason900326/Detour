@@ -427,27 +427,11 @@ async function searchWithDeviceGeocoder(query: string, start: GeoPoint) {
       };
       if (!taiwanCoordinate(point)) return null;
 
-      const label = result.name?.trim() || query;
-      const streetAddress = [result.street, result.streetNumber]
-        .filter(Boolean)
-        .join('');
-      const subtitle = [
-        streetAddress,
-        result.district,
-        result.city,
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      const context = [label, subtitle, result.region, result.country]
-        .filter(Boolean)
-        .join(' ');
-      if (isUnexpectedMedicalContext(context, query)) return null;
-
       return {
         id: `device-geocode-${index}-${result.latitude},${result.longitude}`,
-        label,
-        subtitle,
-        geocodeText: [label, subtitle].filter(Boolean).join(', '),
+        label: query,
+        subtitle: '系統搜尋結果',
+        geocodeText: query,
         latitude: result.latitude,
         longitude: result.longitude,
         estimatedWalkMinutes: estimatedWalkMinutes(start, point),
@@ -528,7 +512,6 @@ export function SlowDestinationPicker({
       const searches = await Promise.allSettled([
         searchWithOverpass(trimmed, start),
         searchWithNominatim(trimmed, start),
-        searchWithDeviceGeocoder(trimmed, start),
       ]);
       const successfulGroups = searches
         .filter(
@@ -538,7 +521,11 @@ export function SlowDestinationPicker({
             result.status === 'fulfilled'
         )
         .map((result) => result.value);
-      const next = mergeNearbyChoices(start, trimmed, successfulGroups);
+      let next = mergeNearbyChoices(start, trimmed, successfulGroups);
+
+      if (next.length === 0 && searches.every((result) => result.status === 'rejected')) {
+        next = await searchWithDeviceGeocoder(trimmed, start);
+      }
 
       if (next.length === 0) {
         setResults([]);
