@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -13,7 +13,8 @@ import {
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { GeoPoint } from '../lib/journey-engine';
+import { getLightContext, type GeoPoint } from '../lib/journey-engine';
+import { fetchWalkingRoute } from '../lib/routing-engine';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 
 export type SlowDestinationChoice = {
@@ -24,6 +25,7 @@ export type SlowDestinationChoice = {
   latitude: number;
   longitude: number;
   estimatedWalkMinutes: number;
+  routeVerified?: boolean;
 };
 
 type NominatimResult = {
@@ -136,6 +138,7 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
     ['dedupe', '1'],
     ['accept-language', 'zh-TW'],
     ['viewbox', viewbox],
+    ['bounded', '1'],
   ]
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join('&');
@@ -239,6 +242,10 @@ export function SlowDestinationPicker({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchOrigin, setSearchOrigin] = useState<GeoPoint | null>(null);
+  const [routeCheckingId, setRouteCheckingId] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const selectionRequestRef = useRef(0);
 
   useEffect(() => {
     if (!visible) {
@@ -247,6 +254,10 @@ export function SlowDestinationPicker({
       setSelectedId(null);
       setSearching(false);
       setError(null);
+      setSearchOrigin(null);
+      setRouteCheckingId(null);
+      setRouteError(null);
+      selectionRequestRef.current += 1;
     }
   }, [visible]);
 
@@ -254,21 +265,30 @@ export function SlowDestinationPicker({
     () => results.find((item) => item.id === selectedId) ?? null,
     [results, selectedId]
   );
-  const suggestedMinutes = selected
+  const selectedRouteReady = Boolean(
+    selected?.routeVerified && routeCheckingId !== selected?.id && !routeError
+  );
+  const suggestedMinutes = selectedRouteReady && selected
     ? recommendedMinutes(selectedMinutes, selected.estimatedWalkMinutes)
     : selectedMinutes;
-  const selectedIsTooFar = Boolean(selected && suggestedMinutes > 60);
+  const selectedIsTooFar = Boolean(
+    selectedRouteReady && selected && suggestedMinutes > 60
+  );
 
   const runSearch = async () => {
     const trimmed = query.trim();
     if (!trimmed || searching) return;
 
     setSearching(true);
+    selectionRequestRef.current += 1;
     setSelectedId(null);
+    setRouteCheckingId(null);
+    setRouteError(null);
     setError(null);
 
     try {
       const start = await currentPoint();
+      setSearchOrigin(start);
       let next: SlowDestinationChoice[] = [];
 
       try {
@@ -288,7 +308,9 @@ export function SlowDestinationPicker({
         return;
       }
 
-      setResults(next.slice(0, 6));
+      setResults(
+        next.slice(0, 6).map((item) => ({ ...item, routeVerified: false }))
+      );
     } catch (searchError) {
       setResults([]);
       setError(
@@ -298,6 +320,56 @@ export function SlowDestinationPicker({
       );
     } finally {
       setSearching(false);
+    }
+  };
+
+  const selectDestination = async (item: SlowDestinationChoice) => {
+    setSelectedId(item.id);
+    setRouteError(null);
+
+    if (item.routeVerified) {
+      setRouteCheckingId(null);
+      return;
+    }
+
+    if (!searchOrigin) {
+      setRouteError('找不到目前位置，請重新搜尋一次。');
+      return;
+    }
+
+    const requestId = selectionRequestRef.current + 1;
+    selectionRequestRef.current = requestId;
+    setRouteCheckingId(item.id);
+
+    try {
+      const route = await fetchWalkingRoute(
+        searchOrigin,
+        { latitude: item.latitude, longitude: item.longitude },
+        6500,
+        {
+          purpose: 'interactive',
+          context: getLightContext(searchOrigin, new Date()),
+        }
+      );
+      if (selectionRequestRef.current !== requestId) return;
+
+      const routeMinutes = Math.max(1, Math.ceil(route.durationSeconds / 60));
+      setResults((current) =>
+        current.map((result) =>
+          result.id === item.id
+            ? {
+                ...result,
+                estimatedWalkMinutes: routeMinutes,
+                routeVerified: true,
+              }
+            : result
+        )
+      );
+      setRouteCheckingId(null);
+    } catch {
+      if (selectionRequestRef.current !== requestId) return;
+      setRouteCheckingId(null);
+      setRouteError('暫時算不出這個地點的步行路線。點選它可以再試一次。');
     }
   };
 
@@ -370,7 +442,7 @@ export function SlowDestinationPicker({
                 return (
                   <Pressable
                     key={item.id}
-                    onPress={() => setSelectedId(item.id)}
+                    onPress={() => void selectDestination(item)}
                     style={[styles.resultCard, active && styles.resultCardActive]}
                   >
                     <View style={styles.resultCopy}>
@@ -385,7 +457,15 @@ export function SlowDestinationPicker({
                       <Text style={[styles.timeValue, !fit && styles.timeValueLong]}>
                         約 {item.estimatedWalkMinutes} 分
                       </Text>
-                      <Text style={styles.timeNote}>{fit ? '時間內' : '需要加時間'}</Text>
+                      <Text style={styles.timeNote}>
+                        {routeCheckingId === item.id
+                          ? '算路線中'
+                          : item.routeVerified
+                            ? fit
+                              ? '時間內'
+                              : '需要加時間'
+                            : '距離預估'}
+                      </Text>
                     </View>
                   </Pressable>
                 );
@@ -397,30 +477,41 @@ export function SlowDestinationPicker({
             <View style={styles.selectionSummary}>
               <Text style={styles.selectionLabel}>這趟目前有 {selectedMinutes} 分鐘</Text>
               <Text style={styles.selectionText}>
-                {selectedIsTooFar
-                  ? `「${selected.label}」估計步行超過 60 分鐘，超出目前 DETOUR 上限。`
-                  : suggestedMinutes > selectedMinutes
-                    ? `「${selected.label}」大約要走 ${selected.estimatedWalkMinutes} 分，這趟會調整成 ${suggestedMinutes} 分鐘。`
-                    : `「${selected.label}」在目前時間內，剩下的時間再拿來慢慢繞。`}
+                {routeCheckingId === selected.id
+                  ? `正在確認到「${selected.label}」真正可走的步行路線…`
+                  : routeError
+                    ? routeError
+                    : selectedIsTooFar
+                      ? `「${selected.label}」最快步行超過 60 分鐘，超出目前 DETOUR 上限。`
+                      : suggestedMinutes > selectedMinutes
+                        ? `「${selected.label}」最快約 ${selected.estimatedWalkMinutes} 分，這趟會調整成 ${suggestedMinutes} 分鐘。`
+                        : `「${selected.label}」最快約 ${selected.estimatedWalkMinutes} 分，剩下的時間再拿來慢慢繞。`}
               </Text>
             </View>
           )}
 
           <Pressable
-            disabled={!selected || selectedIsTooFar}
+            disabled={!selected || !selectedRouteReady || selectedIsTooFar}
             onPress={() => {
-              if (!selected || selectedIsTooFar) return;
+              if (!selected || !selectedRouteReady || selectedIsTooFar) return;
               onConfirm(selected, suggestedMinutes);
             }}
             style={[
               styles.primary,
-              (!selected || selectedIsTooFar) && styles.primaryDisabled,
+              (!selected || !selectedRouteReady || selectedIsTooFar) &&
+                styles.primaryDisabled,
             ]}
           >
             <Text style={styles.primaryText}>
               {!selected
                 ? '先選一個目的地'
-                : selectedIsTooFar
+                : routeCheckingId === selected.id
+                  ? '正在確認步行路線…'
+                  : routeError
+                    ? '再點一次重新確認'
+                    : !selectedRouteReady
+                      ? '先確認步行路線'
+                      : selectedIsTooFar
                   ? '這個目的地太遠'
                   : suggestedMinutes > selectedMinutes
                     ? `改成 ${suggestedMinutes} 分鐘並出發`
