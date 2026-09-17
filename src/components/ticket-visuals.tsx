@@ -48,8 +48,8 @@ const TEAR_EDGE_START_PX = 104 * TICKET_INTERACTION_SCALE;
 const TEAR_HIT_HEIGHT = 92 * TICKET_INTERACTION_SCALE;
 const TEAR_WANDER_PX = 18 * TICKET_INTERACTION_SCALE;
 const TEAR_SAMPLE_PX = 5 * TICKET_INTERACTION_SCALE;
-const TEAR_AUTOFINISH_PROGRESS = 0.5;
-const TEAR_EXTENSION_MS = 190;
+const TEAR_AUTOFINISH_PROGRESS = 0.4;
+const TEAR_EXTENSION_MS = 210;
 const TEAR_DROP_MS = 430;
 
 type TearPoint = { x: number; y: number };
@@ -69,9 +69,10 @@ function ordered(points: TearPoint[]) {
 
 function fibreJitter(x: number, index: number) {
   return (
-    Math.sin(x * 0.22) * 0.7 +
-    Math.sin(x * 0.51) * 0.34 +
-    ((index % 5) - 2) * 0.12
+    Math.sin(x * 0.22) * 0.95 +
+    Math.sin(x * 0.51) * 0.48 +
+    Math.sin(x * 1.07) * 0.18 +
+    ((index % 5) - 2) * 0.15
   );
 }
 
@@ -118,6 +119,32 @@ function buildLowerRegion(points: TearPoint[], bottom: number) {
 
 function shiftedPoints(points: TearPoint[], dy: number) {
   return points.map((point) => ({ x: point.x, y: point.y + dy }));
+}
+
+function buildFibreFringe(points: TearPoint[], side: TearDirection) {
+  const p = ordered(points);
+  if (p.length < 3) return null;
+
+  const path = Skia.Path.Make();
+  for (let index = 1; index < p.length - 1; index += 2) {
+    const previous = p[index - 1];
+    const point = p[index];
+    const next = p[index + 1];
+    const tangentX = next.x - previous.x;
+    const tangentY = next.y - previous.y;
+    const tangentLength = Math.hypot(tangentX, tangentY) || 1;
+    const normalX = -tangentY / tangentLength;
+    const normalY = tangentX / tangentLength;
+    const fibreLength = 0.7 + (index % 4) * 0.28;
+
+    path.moveTo(point.x, point.y);
+    path.lineTo(
+      point.x + normalX * fibreLength * side,
+      point.y + normalY * fibreLength * side
+    );
+  }
+
+  return path;
 }
 
 export type DetourTicketProps = {
@@ -384,6 +411,23 @@ export function V45Ticket({
         ? basePoints[basePoints.length - 1]
         : basePoints[0];
 
+    const buildAutoExtension = (endX: number) => {
+      const distance = Math.abs(endX - tail.x);
+      const segmentCount = Math.max(2, Math.ceil(distance / 14));
+      return Array.from({ length: segmentCount }, (_, index) => {
+        const t = (index + 1) / segmentCount;
+        const x = tail.x + (endX - tail.x) * t;
+        return {
+          x,
+          y: clamp(
+            tail.y + fibreJitter(x, basePoints.length + index) * 0.9,
+            seamY - TEAR_WANDER_PX,
+            seamY + TEAR_WANDER_PX
+          ),
+        };
+      });
+    };
+
     finishingRef.current = true;
     activeDragRef.current.active = false;
     setDirection(tearDirection);
@@ -403,11 +447,15 @@ export function V45Ticket({
       if (elapsed < TEAR_EXTENSION_MS) {
         const raw = clamp(elapsed / TEAR_EXTENSION_MS, 0, 1);
         const eased = 1 - Math.pow(1 - raw, 3);
-        const endpoint = {
-          x: tail.x + (edgeX - tail.x) * eased,
-          y: tail.y,
-        };
-        const extended = ordered([...basePoints, endpoint]);
+        const endpointX = tail.x + (edgeX - tail.x) * eased;
+        const extended = ordered([
+          ...basePoints,
+          ...buildAutoExtension(endpointX),
+        ]);
+        const endpoint =
+          tearDirection === 1
+            ? extended[extended.length - 1]
+            : extended[0];
         tearPointsRef.current = extended;
         tearProgressRef.current =
           tearDirection === 1
@@ -419,7 +467,10 @@ export function V45Ticket({
         return;
       }
 
-      const fullPoints = ordered([...basePoints, { x: edgeX, y: tail.y }]);
+      const fullPoints = ordered([
+        ...basePoints,
+        ...buildAutoExtension(edgeX),
+      ]);
       if (tearProgressRef.current < 1) {
         tearPointsRef.current = fullPoints;
         tearProgressRef.current = 1;
@@ -544,15 +595,15 @@ export function V45Ticket({
     tearProgressRef.current = nextProgress;
     setTearProgress(nextProgress);
 
-    const thresholds = [0.12, 0.24, 0.36, 0.48];
+    const thresholds = [0.1, 0.2, 0.3];
     const tick = tickRef.current;
     if (tick < thresholds.length && nextProgress >= thresholds[tick]) {
       tickRef.current = tick + 1;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
     }
 
-    // The user's job ends at the centre line. Once the tear crosses 50%, Skia
-    // completes the remaining perforations and then lets the stub fall away.
+    // The user commits the tear at 40%. Skia finishes the remaining perforation
+    // with the same ragged edge, then lets the detached stub fall away.
     if (nextProgress >= TEAR_AUTOFINISH_PROGRESS) {
       finishTear(tearDirection);
     }
@@ -594,7 +645,19 @@ export function V45Ticket({
   );
   const edgePath = useMemo(() => buildSmoothPath(livePoints), [tearPoints]);
   const edgeShadowPath = useMemo(
-    () => buildSmoothPath(shiftedPoints(livePoints, 1.25)),
+    () => buildSmoothPath(shiftedPoints(livePoints, 1.35)),
+    [tearPoints]
+  );
+  const edgeSoftShadowPath = useMemo(
+    () => buildSmoothPath(shiftedPoints(livePoints, 2.65)),
+    [tearPoints]
+  );
+  const upperFibrePath = useMemo(
+    () => buildFibreFringe(livePoints, -1),
+    [tearPoints]
+  );
+  const lowerFibrePath = useMemo(
+    () => buildFibreFringe(livePoints, 1),
     [tearPoints]
   );
 
@@ -608,14 +671,19 @@ export function V45Ticket({
 
   const finishEase = 1 - Math.pow(1 - completion, 3);
   const gravity = completion * completion;
-  const liveGap = 0.9 + tearProgress * 3.2;
+  const tearCommit = clamp(
+    tearProgress / TEAR_AUTOFINISH_PROGRESS,
+    0,
+    1
+  );
+  const liveGap = 0.7 + tearCommit * 5.2;
   const pieceX = finishing
     ? direction * 22 * finishEase
-    : direction * tearProgress * 1.6;
+    : direction * tearCommit * 2.2;
   const pieceY = finishing ? 3 + gravity * 108 : liveGap;
   const pieceRotation = finishing
     ? direction * 0.075 * finishEase
-    : edgeLean * 0.012 * tearProgress;
+    : edgeLean * 0.018 * tearCommit;
   const pieceOrigin = {
     x: DETOUR_TICKET_WIDTH / 2,
     y: seamY + (DETOUR_TICKET_HEIGHT - seamY) / 2,
@@ -716,12 +784,22 @@ export function V45Ticket({
                   />
                 </Group>
 
+                {edgeSoftShadowPath && (
+                  <SkiaPathView
+                    path={edgeSoftShadowPath}
+                    color="rgba(66,49,34,0.12)"
+                    style="stroke"
+                    strokeWidth={3.4}
+                    strokeCap="round"
+                    strokeJoin="round"
+                  />
+                )}
                 {edgeShadowPath && (
                   <SkiaPathView
                     path={edgeShadowPath}
-                    color="rgba(66,49,34,0.28)"
+                    color="rgba(66,49,34,0.34)"
                     style="stroke"
-                    strokeWidth={1.55}
+                    strokeWidth={1.8}
                     strokeCap="round"
                     strokeJoin="round"
                   />
@@ -731,9 +809,27 @@ export function V45Ticket({
                     path={edgePath}
                     color="rgba(255,253,246,0.98)"
                     style="stroke"
-                    strokeWidth={1.35}
+                    strokeWidth={1.45}
                     strokeCap="round"
                     strokeJoin="round"
+                  />
+                )}
+                {upperFibrePath && (
+                  <SkiaPathView
+                    path={upperFibrePath}
+                    color="rgba(255,255,250,0.82)"
+                    style="stroke"
+                    strokeWidth={0.55}
+                    strokeCap="round"
+                  />
+                )}
+                {lowerFibrePath && (
+                  <SkiaPathView
+                    path={lowerFibrePath}
+                    color="rgba(217,205,186,0.68)"
+                    style="stroke"
+                    strokeWidth={0.5}
+                    strokeCap="round"
                   />
                 )}
               </>
@@ -994,7 +1090,7 @@ export function V45Ticket({
         <GestureDetector gesture={tearGesture}>
           <View
             accessible
-            accessibilityLabel="沿齒孔撕過中線，開始旅程"
+            accessibilityLabel="沿齒孔撕過四成，開始旅程"
             style={[
               ticketOverlayStyles.gestureStrip,
               {
