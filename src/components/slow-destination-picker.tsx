@@ -14,7 +14,6 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getLightContext, type GeoPoint } from '../lib/journey-engine';
-import { searchCachedPois } from '../lib/poi-engine';
 import { fetchWalkingRoute } from '../lib/routing-engine';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 
@@ -282,48 +281,6 @@ async function currentPoint() {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
   } satisfies GeoPoint;
-}
-
-async function searchWithPoiCache(query: string, start: GeoPoint) {
-  const rows = await searchCachedPois(query, start, 30);
-
-  return rows
-    .filter(
-      (row) =>
-        !isUnexpectedMedicalContext(
-          [
-            row.name,
-            row.brandName,
-            row.category,
-            row.address,
-            row.locality,
-            row.region,
-          ]
-            .filter(Boolean)
-            .join(' '),
-          query
-        )
-    )
-    .map((row): SlowDestinationChoice => {
-      const subtitle = [row.address, row.locality, row.region]
-        .filter((part, index, all): part is string =>
-          Boolean(part && all.indexOf(part) === index)
-        )
-        .join(' · ');
-
-      return {
-        id: `poi-${row.id}`,
-        label: row.name,
-        subtitle,
-        geocodeText: [row.name, subtitle].filter(Boolean).join(', '),
-        latitude: row.latitude,
-        longitude: row.longitude,
-        estimatedWalkMinutes: Math.max(
-          2,
-          Math.ceil((row.distanceMeters * 1.28) / 72)
-        ),
-      };
-    });
 }
 
 async function searchWithOverpass(query: string, start: GeoPoint) {
@@ -615,7 +572,6 @@ export function SlowDestinationPicker({
       const start = await currentPoint();
       setSearchOrigin(start);
       const searches = await Promise.allSettled([
-        searchWithPoiCache(trimmed, start),
         searchWithOverpass(trimmed, start),
         searchWithNominatim(trimmed, start),
       ]);

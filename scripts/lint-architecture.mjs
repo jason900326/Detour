@@ -44,7 +44,6 @@ forbid(
 
 for (const path of [
   'src/lib/ai-engine.ts',
-  'src/lib/poi-engine.ts',
   'src/lib/scene-engine.ts',
   'src/lib/playtest-analytics.ts',
 ]) {
