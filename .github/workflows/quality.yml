@@ -48,7 +48,9 @@ jobs:
         run: npm run typecheck
 
       - name: Check Scene importer syntax
-        run: python3 -m py_compile scripts/import_osm_scenes.py
+        run: |
+          python3 -m py_compile scripts/import_osm_scenes.py scripts/import_overture_pois.py
+          python3 -m unittest discover -s scripts -p 'test_import_overture_pois.py' -v
 
       - name: Bundle iOS app
         run: npx expo export --platform ios --output-dir /tmp/detour-quality-export

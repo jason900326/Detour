@@ -19,6 +19,9 @@ export const DETOUR_API_CONFIG = Object.freeze({
   sceneEndpoint:
     publicEnv('EXPO_PUBLIC_DETOUR_SCENE_URL') ||
     `${DEFAULT_SUPABASE_URL}/functions/v1/detour-scene`,
+  poiEndpoint:
+    publicEnv('EXPO_PUBLIC_DETOUR_POI_URL') ||
+    `${DEFAULT_SUPABASE_URL}/functions/v1/detour-poi`,
   playtestEndpoint:
     publicEnv('EXPO_PUBLIC_DETOUR_PLAYTEST_URL') ||
     `${DEFAULT_SUPABASE_URL}/functions/v1/detour-playtest`,
