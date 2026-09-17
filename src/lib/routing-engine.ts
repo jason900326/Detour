@@ -390,15 +390,18 @@ export type SlowWalkingRoute = {
   extended: boolean;
 };
 
-function slowRouteTargetSeconds(
-  minutes: number,
-  sideEventCount: number
-) {
-  const arrivalSeconds = minutes <= 15 ? 90 : 120;
-  return Math.max(
-    60,
-    (minutes * 60 * 0.96 - sideEventCount * 75 - arrivalSeconds) / 1.18
-  );
+export function slowRouteTargetSeconds(minutes: number) {
+  // Slow-walk feasibility is about whether the chosen destination can be
+  // reached. Side events are optional seasoning, so they never consume this
+  // budget. Aim a little below the selected duration and let the route fall
+  // back to the direct walk when a natural arc does not fit.
+  return Math.max(60, minutes * 60 * 0.92);
+}
+
+export function slowRouteMaximumSeconds(minutes: number) {
+  // A small tolerance absorbs router rounding without turning the selected
+  // time into a hard exam the user had to estimate before seeing the route.
+  return Math.max(60, minutes * 60 * 1.05);
 }
 
 export function buildSlowRouteArcWaypoints(
@@ -569,19 +572,11 @@ export async function resolveSlowWalkingRoute(args: {
     5000,
     { purpose: 'interactive', context }
   );
-  const targetSeconds = slowRouteTargetSeconds(
-    args.minutes,
-    args.sideEventCount
-  );
+  const targetSeconds = slowRouteTargetSeconds(args.minutes);
+  const maximumSeconds = slowRouteMaximumSeconds(args.minutes);
 
-  if (directRoute.durationSeconds > targetSeconds * 1.12) {
-    const directMinutes = Math.ceil(
-      estimatedJourneySeconds(
-        directRoute,
-        args.sideEventCount,
-        args.minutes
-      ) / 60
-    );
+  if (directRoute.durationSeconds > maximumSeconds) {
+    const directMinutes = Math.ceil(directRoute.durationSeconds / 60);
     throw new Error(
       `最快也大約需要 ${directMinutes} 分鐘，請把時間調長一點。`
     );
@@ -634,7 +629,7 @@ export async function resolveSlowWalkingRoute(args: {
         ) <= ROUTE_OVERLAP_FALLBACK_MAX
     ),
     targetSeconds,
-    maximumSeconds: targetSeconds * 1.1,
+    maximumSeconds,
     context,
   });
 
@@ -813,6 +808,7 @@ type RouteAssessment = {
   preferred: boolean;
   fallback: boolean;
   emergency: boolean;
+  viable: boolean;
   overlapRatio: number;
   directnessRatio: number;
   localShortcutRatio: number;
@@ -893,6 +889,15 @@ function assessRoute(args: {
       overlap <= ROUTE_OVERLAP_EMERGENCY_MAX &&
       directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX &&
       localShortcutRatio <= LOCAL_SHORTCUT_EMERGENCY_MAX,
+    // Recent-route overlap is a novelty preference, not a safety rule. If the
+    // user's neighborhood only has a few practical streets, keep a route that
+    // still satisfies time and geometry constraints instead of refusing to
+    // print a ticket.
+    viable:
+      args.route.distanceMeters >= 70 &&
+      estimatedSeconds <= args.timeBudgetSeconds * 1.3 &&
+      directnessRatio <= ROUTE_DIRECTNESS_EMERGENCY_MAX &&
+      localShortcutRatio <= LOCAL_SHORTCUT_EMERGENCY_MAX,
     overlapRatio: overlap,
     directnessRatio,
     localShortcutRatio,
@@ -962,6 +967,8 @@ export async function resolveRoutedScene(args: {
   let bestFallbackScore = Number.POSITIVE_INFINITY;
   let bestEmergency: RoutedScene | null = null;
   let bestEmergencyScore = Number.POSITIVE_INFINITY;
+  let bestViable: RoutedScene | null = null;
+  let bestViableScore = Number.POSITIVE_INFINITY;
 
   for (const scene of shortlist) {
     const route = getCachedWalkingRoute(args.start, scene.point, context);
@@ -990,6 +997,10 @@ export async function resolveRoutedScene(args: {
     if (assessment.emergency && assessment.score < bestEmergencyScore) {
       bestEmergency = routed;
       bestEmergencyScore = assessment.score;
+    }
+    if (assessment.viable && assessment.score < bestViableScore) {
+      bestViable = routed;
+      bestViableScore = assessment.score;
     }
   }
 
@@ -1049,6 +1060,10 @@ export async function resolveRoutedScene(args: {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
+      }
     } else {
       busySceneIds.add(scene.id);
     }
@@ -1095,6 +1110,10 @@ export async function resolveRoutedScene(args: {
       if (assessment.emergency && assessment.score < bestEmergencyScore) {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
+      }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
       }
       continue;
     }
@@ -1151,6 +1170,10 @@ export async function resolveRoutedScene(args: {
         bestEmergency = routed;
         bestEmergencyScore = assessment.score;
       }
+      if (assessment.viable && assessment.score < bestViableScore) {
+        bestViable = routed;
+        bestViableScore = assessment.score;
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown';
       console.log(
@@ -1171,6 +1194,13 @@ export async function resolveRoutedScene(args: {
       `[DETOUR ROUTE] emergency fallback in ${Date.now() - routingStartedAt}ms`
     );
     return bestEmergency;
+  }
+
+  if (bestViable) {
+    console.log(
+      `[DETOUR ROUTE] repeated-street fallback in ${Date.now() - routingStartedAt}ms`
+    );
+    return bestViable;
   }
 
   console.log(
