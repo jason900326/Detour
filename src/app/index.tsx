@@ -23,6 +23,8 @@ export default function HomeScreen() {
   const motionController = usePhysicalController(controller, shellScale);
   const pendingSlowStartRef = useRef<{
     destination: string;
+    latitude: number;
+    longitude: number;
     minutes: number;
   } | null>(null);
   const tearEnabled =
@@ -48,7 +50,9 @@ export default function HomeScreen() {
 
     if (
       controller.slowDestinationInput !== pending.destination ||
-      controller.selectedMinutes !== pending.minutes
+      controller.selectedMinutes !== pending.minutes ||
+      controller.slowDestinationPoint?.latitude !== pending.latitude ||
+      controller.slowDestinationPoint?.longitude !== pending.longitude
     ) {
       return;
     }
@@ -60,6 +64,7 @@ export default function HomeScreen() {
     controller.selectedMinutes,
     controller.selectedMood,
     controller.slowDestinationInput,
+    controller.slowDestinationPoint,
     controller.stage,
   ]);
 
@@ -67,11 +72,18 @@ export default function HomeScreen() {
     (choice: SlowDestinationChoice, minutes: number) => {
       const normalizedMinutes = Math.max(10, Math.min(60, minutes));
       pendingSlowStartRef.current = {
-        destination: choice.geocodeText,
+        destination: choice.label,
+        latitude: choice.latitude,
+        longitude: choice.longitude,
         minutes: normalizedMinutes,
       };
       controller.setSlowDestinationError(null);
-      controller.setSlowDestinationInput(choice.geocodeText);
+      controller.setSlowDestinationLabel(choice.label);
+      controller.setSlowDestinationPoint({
+        latitude: choice.latitude,
+        longitude: choice.longitude,
+      });
+      controller.setSlowDestinationInput(choice.label);
       controller.setSelectedTime(String(normalizedMinutes));
       controller.setSliderDisplayMinutes(normalizedMinutes);
     },
@@ -81,6 +93,8 @@ export default function HomeScreen() {
   const dismissSlowDestination = useCallback(() => {
     pendingSlowStartRef.current = null;
     controller.setSlowDestinationInput('');
+    controller.setSlowDestinationLabel('');
+    controller.setSlowDestinationPoint(null);
     controller.setSlowDestinationError(null);
     controller.setSelectedMood(null);
   }, [controller]);
