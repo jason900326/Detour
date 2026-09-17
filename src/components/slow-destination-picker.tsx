@@ -134,6 +134,28 @@ function explicitlyRequestsMedicalDestination(query: string) {
   return MEDICAL_DESTINATION_TERMS.some((term) => normalized.includes(term));
 }
 
+function explicitlyRequestsTransitStop(query: string) {
+  const normalized = normalizedSearchText(query);
+  return ['公車站', '站牌', 'bus stop'].some((term) =>
+    normalized.includes(term)
+  );
+}
+
+function isUnexpectedTransitResult(
+  category: string | undefined,
+  type: string | undefined,
+  tags: Record<string, string>,
+  query: string
+) {
+  if (explicitlyRequestsTransitStop(query)) return false;
+
+  return (
+    (category === 'highway' && type === 'bus_stop') ||
+    tags.highway === 'bus_stop' ||
+    (tags.public_transport === 'platform' && tags.bus === 'yes')
+  );
+}
+
 function isUnexpectedMedicalContext(context: string, query: string) {
   if (explicitlyRequestsMedicalDestination(query)) return false;
 
@@ -325,6 +347,16 @@ async function searchWithOverpass(query: string, start: GeoPoint) {
       const longitude = element.lon ?? element.center?.lon;
       const tags = element.tags ?? {};
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      if (
+        isUnexpectedTransitResult(
+          tags.amenity ? 'amenity' : tags.shop ? 'shop' : undefined,
+          tags.amenity || tags.shop,
+          tags,
+          query
+        )
+      ) {
+        return null;
+      }
 
       const point = {
         latitude: latitude as number,
@@ -401,6 +433,16 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
       const point = { latitude, longitude };
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
       if (!taiwanCoordinate(point)) return null;
+      if (
+        isUnexpectedTransitResult(
+          result.category,
+          result.type,
+          result.extratags ?? {},
+          query
+        )
+      ) {
+        return null;
+      }
       if (isUnexpectedMedicalInterior(result, query)) return null;
 
       const label = resultName(result);
