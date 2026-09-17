@@ -41,6 +41,22 @@ type NominatimResult = {
   extratags?: Record<string, string>;
 };
 
+type OverpassElement = {
+  type: 'node' | 'way' | 'relation';
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: {
+    lat?: number;
+    lon?: number;
+  };
+  tags?: Record<string, string>;
+};
+
+type OverpassResponse = {
+  elements?: OverpassElement[];
+};
+
 function distanceBetween(a: GeoPoint, b: GeoPoint) {
   const radians = Math.PI / 180;
   const radius = 6371000;
@@ -65,11 +81,19 @@ function estimatedWalkMinutes(start: GeoPoint, destination: GeoPoint) {
 }
 
 function resultName(result: NominatimResult) {
+  const candidates = [
+    result.namedetails?.['official_name:zh'],
+    result.namedetails?.official_name,
+    result.namedetails?.['name:zh-Hant'],
+    result.namedetails?.['name:zh'],
+    result.namedetails?.name,
+    result.name,
+    result.display_name?.split(',')[0]?.trim(),
+  ].filter((value): value is string => Boolean(value?.trim()));
+
   return (
-    result.namedetails?.['name:zh'] ||
-    result.namedetails?.name ||
-    result.name ||
-    result.display_name?.split(',')[0]?.trim() ||
+    candidates.find((value) => /(分行|分店|門市|支店|branch)/i.test(value)) ||
+    candidates[0] ||
     '目的地'
   );
 }
@@ -110,19 +134,104 @@ function explicitlyRequestsMedicalDestination(query: string) {
   return MEDICAL_DESTINATION_TERMS.some((term) => normalized.includes(term));
 }
 
-function isUnexpectedMedicalInterior(result: NominatimResult, query: string) {
+function isUnexpectedMedicalContext(context: string, query: string) {
   if (explicitlyRequestsMedicalDestination(query)) return false;
 
-  const context = [
-    result.display_name,
-    ...Object.values(result.address ?? {}),
-    ...Object.values(result.extratags ?? {}),
+  const normalized = context.toLocaleLowerCase();
+  return MEDICAL_DESTINATION_TERMS.some((term) => normalized.includes(term));
+}
+
+function isUnexpectedMedicalInterior(result: NominatimResult, query: string) {
+  return isUnexpectedMedicalContext(
+    [
+      result.display_name,
+      ...Object.values(result.address ?? {}),
+      ...Object.values(result.extratags ?? {}),
+    ]
+      .filter(Boolean)
+      .join(' '),
+    query
+  );
+}
+
+function branchNameSpecificity(label: string, query: string) {
+  const normalizedLabel = normalizedSearchText(label);
+  const normalizedQuery = normalizedSearchText(query);
+  let score = Math.min(label.length, 80);
+
+  if (normalizedLabel !== normalizedQuery) score += 30;
+  if (/(分行|分店|門市|支店|branch)/i.test(label)) score += 100;
+  return score;
+}
+
+function mergeNearbyChoices(
+  start: GeoPoint,
+  query: string,
+  groups: SlowDestinationChoice[][]
+) {
+  const merged: SlowDestinationChoice[] = [];
+
+  for (const item of groups.flat()) {
+    const duplicateIndex = merged.findIndex(
+      (candidate) => distanceBetween(candidate, item) <= 45
+    );
+
+    if (duplicateIndex < 0) {
+      merged.push(item);
+      continue;
+    }
+
+    const previous = merged[duplicateIndex];
+    if (
+      branchNameSpecificity(item.label, query) >
+      branchNameSpecificity(previous.label, query)
+    ) {
+      merged[duplicateIndex] = item;
+    }
+  }
+
+  return merged.sort(
+    (a, b) => distanceBetween(start, a) - distanceBetween(start, b)
+  );
+}
+
+function escapeOverpassRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function overpassLabel(tags: Record<string, string>, query: string) {
+  const base =
+    tags['official_name:zh'] ||
+    tags.official_name ||
+    tags['name:zh-Hant'] ||
+    tags['name:zh'] ||
+    tags.name ||
+    tags.brand ||
+    tags.operator ||
+    query;
+  const branch =
+    tags['branch:zh-Hant'] ||
+    tags['branch:zh'] ||
+    tags.branch ||
+    tags['ref:branch'];
+
+  if (branch && !normalizedSearchText(base).includes(normalizedSearchText(branch))) {
+    return `${base} ${branch}`;
+  }
+  return base;
+}
+
+function overpassSubtitle(tags: Record<string, string>) {
+  const streetAddress = [tags['addr:street'], tags['addr:housenumber']]
+    .filter(Boolean)
+    .join('');
+  return [
+    streetAddress,
+    tags['addr:district'] || tags['addr:suburb'],
+    tags['addr:city'],
   ]
     .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase();
-
-  return MEDICAL_DESTINATION_TERMS.some((term) => context.includes(term));
+    .join(' · ');
 }
 
 async function currentPoint() {
@@ -150,6 +259,76 @@ async function currentPoint() {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
   } satisfies GeoPoint;
+}
+
+async function searchWithOverpass(query: string, start: GeoPoint) {
+  const escaped = escapeOverpassRegex(query);
+  const matcher = JSON.stringify(escaped);
+  const around = `around:30000,${start.latitude},${start.longitude}`;
+  const normalized = normalizedSearchText(query);
+  const categorySelectors =
+    normalized === '便利商店'
+      ? `nwr(${around})["shop"="convenience"];`
+      : normalized === '銀行'
+        ? `nwr(${around})["amenity"="bank"];`
+        : '';
+  const overpassQuery = `
+    [out:json][timeout:12];
+    (
+      ${categorySelectors}
+      nwr(${around})["name"~${matcher},"i"];
+      nwr(${around})["name:zh"~${matcher},"i"];
+      nwr(${around})["brand"~${matcher},"i"];
+      nwr(${around})["operator"~${matcher},"i"];
+    );
+    out center tags;
+  `;
+
+  const response = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      'User-Agent': 'Detour/0.46.4',
+    },
+    body: `data=${encodeURIComponent(overpassQuery)}`,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Nearby destination search ${response.status}`);
+  }
+
+  const raw = (await response.json()) as OverpassResponse;
+  return (raw.elements ?? [])
+    .map((element): SlowDestinationChoice | null => {
+      const latitude = element.lat ?? element.center?.lat;
+      const longitude = element.lon ?? element.center?.lon;
+      const tags = element.tags ?? {};
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+      const point = {
+        latitude: latitude as number,
+        longitude: longitude as number,
+      };
+      if (!taiwanCoordinate(point)) return null;
+
+      const context = Object.values(tags).filter(Boolean).join(' ');
+      if (isUnexpectedMedicalContext(context, query)) return null;
+
+      const label = overpassLabel(tags, query);
+      const subtitle = overpassSubtitle(tags);
+
+      return {
+        id: `osm-${element.type}-${element.id}`,
+        label,
+        subtitle,
+        geocodeText: [label, subtitle].filter(Boolean).join(', '),
+        latitude: point.latitude,
+        longitude: point.longitude,
+        estimatedWalkMinutes: estimatedWalkMinutes(start, point),
+      };
+    })
+    .filter((item): item is SlowDestinationChoice => item !== null);
 }
 
 async function searchWithNominatim(query: string, start: GeoPoint) {
@@ -236,11 +415,11 @@ async function searchWithNominatim(query: string, start: GeoPoint) {
   });
 }
 
-async function fallbackGeocode(query: string, start: GeoPoint) {
+async function searchWithDeviceGeocoder(query: string, start: GeoPoint) {
   const geocoded = await Location.geocodeAsync(query);
 
   return geocoded
-    .slice(0, 6)
+    .slice(0, 12)
     .map((result, index): SlowDestinationChoice | null => {
       const point = {
         latitude: result.latitude,
@@ -248,18 +427,33 @@ async function fallbackGeocode(query: string, start: GeoPoint) {
       };
       if (!taiwanCoordinate(point)) return null;
 
+      const label = result.name?.trim() || query;
+      const streetAddress = [result.street, result.streetNumber]
+        .filter(Boolean)
+        .join('');
+      const subtitle = [
+        streetAddress,
+        result.district,
+        result.city,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const context = [label, subtitle, result.region, result.country]
+        .filter(Boolean)
+        .join(' ');
+      if (isUnexpectedMedicalContext(context, query)) return null;
+
       return {
         id: `device-geocode-${index}-${result.latitude},${result.longitude}`,
-        label: query,
-        subtitle: '系統搜尋結果',
-        geocodeText: query,
+        label,
+        subtitle,
+        geocodeText: [label, subtitle].filter(Boolean).join(', '),
         latitude: result.latitude,
         longitude: result.longitude,
         estimatedWalkMinutes: estimatedWalkMinutes(start, point),
       };
     })
-    .filter((item): item is SlowDestinationChoice => item !== null)
-    .sort((a, b) => a.estimatedWalkMinutes - b.estimatedWalkMinutes);
+    .filter((item): item is SlowDestinationChoice => item !== null);
 }
 
 function recommendedMinutes(selectedMinutes: number, estimatedMinutes: number) {
@@ -331,21 +525,20 @@ export function SlowDestinationPicker({
     try {
       const start = await currentPoint();
       setSearchOrigin(start);
-      let next: SlowDestinationChoice[] = [];
-      let nearbySearchAvailable = false;
-
-      try {
-        next = await searchWithNominatim(trimmed, start);
-        nearbySearchAvailable = true;
-      } catch {
-        // Device geocoding remains a fallback only when the nearby POI service
-        // is unavailable. A successful empty result may mean unsafe interior
-        // candidates were intentionally removed and must not be reintroduced.
-      }
-
-      if (next.length === 0 && !nearbySearchAvailable) {
-        next = await fallbackGeocode(trimmed, start);
-      }
+      const searches = await Promise.allSettled([
+        searchWithOverpass(trimmed, start),
+        searchWithNominatim(trimmed, start),
+        searchWithDeviceGeocoder(trimmed, start),
+      ]);
+      const successfulGroups = searches
+        .filter(
+          (
+            result
+          ): result is PromiseFulfilledResult<SlowDestinationChoice[]> =>
+            result.status === 'fulfilled'
+        )
+        .map((result) => result.value);
+      const next = mergeNearbyChoices(start, trimmed, successfulGroups);
 
       if (next.length === 0) {
         setResults([]);
@@ -354,7 +547,7 @@ export function SlowDestinationPicker({
       }
 
       setResults(
-        next.slice(0, 6).map((item) => ({ ...item, routeVerified: false }))
+        next.slice(0, 10).map((item) => ({ ...item, routeVerified: false }))
       );
     } catch (searchError) {
       setResults([]);
