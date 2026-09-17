@@ -201,13 +201,17 @@ export function SideEventPaper({
   }, [expanded, open, replacing]);
 
   const requestReplacement = useCallback(async () => {
+    const previousId = mountedEventIdRef.current;
     replacementWaitingRef.current = true;
     try {
       await onReplace();
     } finally {
       // If the pool ever returns the same id, do not leave the note crumpled.
       setTimeout(() => {
-        if (replacementWaitingRef.current) {
+        if (
+          replacementWaitingRef.current &&
+          mountedEventIdRef.current === previousId
+        ) {
           unfoldReplacement();
         }
       }, 70);
