@@ -9,6 +9,7 @@ import { printerOverrides } from './home/printer-overrides';
 import { recapOverrides } from './home/recap-overrides';
 import { journeySummaryStyles } from './home/journey-summary-styles';
 import { arrivalCompletionOverrides } from './home/arrival-completion-overrides';
+import { discoveryPaperOverrides } from './home/discovery-paper-overrides';
 
 export const styles = {
   ...baseStyles,
@@ -22,4 +23,5 @@ export const styles = {
   ...recapOverrides,
   ...journeySummaryStyles,
   ...arrivalCompletionOverrides,
+  ...discoveryPaperOverrides,
 };
