@@ -134,7 +134,6 @@ export const MOODS: Array<{ id: MoodId; label: string; code: string }> = [
   { id: 'wander', label: '隨便走', code: 'WANDER' },
   { id: 'food', label: '吃東西', code: 'FOOD' },
   { id: 'color', label: '色色的', code: 'COLOR' },
-  { id: 'slow', label: '慢慢走', code: 'SLOW' },
 ];
 
 export const FREE_CAMERA_MISSION: Mission = {

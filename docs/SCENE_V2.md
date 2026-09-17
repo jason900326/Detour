@@ -18,7 +18,6 @@ Scene V2 把不會隨使用者當下狀態改變的判斷，搬到全台 OSM 匯
 | 隨便走 | scene_family = detour |
 | 色色的 | scene_family = detour，和隨便走完全相同 |
 | 吃東西 | scene_family = food |
-| 慢慢走 | 不查 Scene；使用者指定目的地 |
 
 market 和 food 只屬於 Food Pool，不會再混入隨便走／色色的候選。
 

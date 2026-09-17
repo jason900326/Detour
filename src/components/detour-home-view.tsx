@@ -3,14 +3,11 @@ import {
   Animated,
   Easing,
   Image,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -50,10 +47,6 @@ export function DetourHomeView({
     sliderDisplayMinutes,
     selectedMood,
     selectedColor,
-    slowDestinationInput,
-    setSlowDestinationInput,
-    slowDestinationError,
-    setSlowDestinationError,
     latitude,
     longitude,
     plan,
@@ -187,7 +180,7 @@ export function DetourHomeView({
     completionIris.stopAnimation();
     completionIris.setValue(1);
 
-    await new Promise<void>((resolve) => {
+    await new Promise((resolve) => {
       Animated.timing(completionIris, {
         toValue: 0,
         duration: 320,
@@ -215,14 +208,6 @@ export function DetourHomeView({
   }, [stage]);
 
   useEffect(() => {
-    if (stage === 'time' && selectedMood === 'slow') {
-      controller.setSelectedMood(null);
-      setSlowDestinationInput('');
-      setSlowDestinationError(null);
-    }
-  }, [stage, selectedMood]);
-
-  useEffect(() => {
     if (!arrivalPhotoFinishPending || stage !== 'arrival') return;
     if (photos.length <= arrivalPhotoStartCountRef.current) return;
 
@@ -240,25 +225,22 @@ export function DetourHomeView({
     if (!completionIrisActive || stage !== 'finish') return;
 
     completionIris.stopAnimation();
+
     Animated.timing(completionIris, {
       toValue: 1,
       duration: 380,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start(({ finished }) => {
-      if (finished) setCompletionIrisActive(false);
+      if (finished) {
+        setCompletionIrisActive(false);
+      }
     });
   }, [completionIrisActive, stage]);
 
   const handleTicketVisualReady = () => {
     markTicketVisualReady();
     requestAnimationFrame(() => setTicketDisplayReady(true));
-  };
-
-  const dismissSlowMood = () => {
-    controller.setSelectedMood(null);
-    setSlowDestinationInput('');
-    setSlowDestinationError(null);
   };
 
   const chromeDark =
@@ -654,9 +636,19 @@ export function DetourHomeView({
                   <Pressable
                     key={item.id}
                     onPress={() => chooseMood(item.id)}
-                    style={[styles.v45MoodCard, active && styles.v45MoodCardActive]}
+                    style={({ pressed }) => [
+                      styles.v45MoodCard,
+                      item.id === 'wander'
+                        ? styles.v45MoodCardHero
+                        : styles.v45MoodCardSecondary,
+                      active && styles.v45MoodCardActive,
+                      pressed && styles.v45MoodCardPressed,
+                    ]}
                   >
-                    <V45MoodIcon moodId={item.id} />
+                    <V45MoodIcon
+                      moodId={item.id}
+                      size={item.id === 'wander' ? 92 : 72}
+                    />
                     <Text style={styles.v45MoodLabel}>{item.label}</Text>
                   </Pressable>
                 );
@@ -675,78 +667,6 @@ export function DetourHomeView({
               <Text style={styles.v45MoodCtaArrow}>→</Text>
             </Pressable>
             <V45Skyline />
-
-            <Modal
-              visible={selectedMood === 'slow'}
-              transparent
-              animationType="fade"
-              statusBarTranslucent
-              onRequestClose={dismissSlowMood}
-            >
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,15,0.48)' }}
-              >
-                <View
-                  style={{
-                    paddingTop: 28,
-                    paddingHorizontal: 24,
-                    paddingBottom: Math.max(28, safeAreaInsets.bottom + 18),
-                    borderTopLeftRadius: 24,
-                    borderTopRightRadius: 24,
-                    backgroundColor: '#F5F1E8',
-                  }}
-                >
-                  <Pressable
-                    onPress={dismissSlowMood}
-                    hitSlop={12}
-                    style={{
-                      position: 'absolute',
-                      top: 14,
-                      right: 18,
-                      width: 38,
-                      height: 38,
-                      borderRadius: 19,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: '#EAE5DB',
-                      zIndex: 2,
-                    }}
-                  >
-                    <Text style={{ marginTop: -2, fontSize: 28, lineHeight: 30, color: INK }}>×</Text>
-                  </Pressable>
-                  <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 1.5, color: SIGNAL }}>慢慢走</Text>
-                  <Text style={{ marginTop: 8, fontSize: 34, lineHeight: 40, fontWeight: '900', color: INK }}>你要去哪？</Text>
-                  <Text style={{ marginTop: 8, paddingRight: 42, fontSize: 16, lineHeight: 23, color: MUTED }}>你決定終點，DETOUR 幫你找一條自然、不折返的繞路。</Text>
-                  <TextInput
-                    autoFocus
-                    value={slowDestinationInput}
-                    onChangeText={(value) => {
-                      setSlowDestinationInput(value);
-                      setSlowDestinationError(null);
-                    }}
-                    onSubmitEditing={() => {
-                      if (slowDestinationInput.trim()) void continueFromMood();
-                    }}
-                    placeholder="輸入地址或地標"
-                    placeholderTextColor="#8F8B82"
-                    returnKeyType="go"
-                    style={{ marginTop: 22, minHeight: 58, paddingHorizontal: 16, borderWidth: 2, borderColor: slowDestinationError ? SIGNAL : INK, borderRadius: 8, backgroundColor: '#FFFDF7', fontSize: 18, fontWeight: '700', color: INK }}
-                  />
-                  {slowDestinationError && (
-                    <Text style={{ marginTop: 9, fontSize: 14, color: SIGNAL }}>{slowDestinationError}</Text>
-                  )}
-                  <Pressable
-                    disabled={!slowDestinationInput.trim()}
-                    onPress={continueFromMood}
-                    style={{ marginTop: 18, minHeight: 60, paddingHorizontal: 18, borderRadius: 4, backgroundColor: slowDestinationInput.trim() ? SIGNAL : '#E6B19E', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                  >
-                    <Text style={{ fontSize: 20, fontWeight: '900', color: INK }}>找一條慢慢走的路</Text>
-                    <Text style={{ fontSize: 28, color: INK }}>→</Text>
-                  </Pressable>
-                </View>
-              </KeyboardAvoidingView>
-            </Modal>
           </View>
         )}
 
@@ -1058,6 +978,7 @@ export function DetourHomeView({
                   <Text style={styles.cleanArrivalPrimaryText}>拍最後一張</Text>
                   <Text style={{ fontSize: 23 }}>📷</Text>
                 </Pressable>
+
                 <Pressable
                   onPress={() => void finishDetourWithIris()}
                   style={[
@@ -1072,17 +993,31 @@ export function DetourHomeView({
                     },
                   ]}
                 >
-                  <Text style={{ fontSize: 16, fontWeight: '900', color: INK }}>完成</Text>
-                  <Text style={{ fontSize: 24, lineHeight: 26, color: INK }}>→</Text>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '900',
+                      color: INK,
+                    }}
+                  >
+                    完成
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 24,
+                      lineHeight: 26,
+                      color: INK,
+                    }}
+                  >
+                    →
+                  </Text>
                 </Pressable>
               </View>
 
-              {selectedMood !== 'slow' && (
-                <Pressable onPress={() => transitionTo('sceneIssue')} style={styles.cleanArrivalProblem}>
-                  <Text style={styles.cleanArrivalProblemText}>這裡不行</Text>
-                  <Text style={styles.cleanArrivalProblemArrow}>→</Text>
-                </Pressable>
-              )}
+              <Pressable onPress={() => transitionTo('sceneIssue')} style={styles.cleanArrivalProblem}>
+                <Text style={styles.cleanArrivalProblemText}>這裡不行</Text>
+                <Text style={styles.cleanArrivalProblemArrow}>→</Text>
+              </Pressable>
               <Text style={[styles.cleanArrivalSource, styles.v41ReadableMeta]}>地圖資料：OpenStreetMap</Text>
             </View>
           </View>
