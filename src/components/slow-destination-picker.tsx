@@ -276,29 +276,49 @@ async function searchWithOverpass(query: string, start: GeoPoint) {
     [out:json][timeout:12];
     (
       ${categorySelectors}
-      nwr(${around})["name"~${matcher},"i"];
-      nwr(${around})["name:zh"~${matcher},"i"];
-      nwr(${around})["brand"~${matcher},"i"];
-      nwr(${around})["operator"~${matcher},"i"];
+      nwr(${around})["name"~${matcher},i];
+      nwr(${around})["name:zh"~${matcher},i];
+      nwr(${around})["brand"~${matcher},i];
+      nwr(${around})["operator"~${matcher},i];
     );
     out center tags;
   `;
 
-  const response = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      'User-Agent': 'Detour/0.46.4',
-    },
-    body: `data=${encodeURIComponent(overpassQuery)}`,
-  });
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+  let raw: OverpassResponse | null = null;
+  let lastFailure = 'unavailable';
 
-  if (!response.ok) {
-    throw new Error(`Nearby destination search ${response.status}`);
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'User-Agent': 'Detour/0.46.4',
+        },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+      });
+
+      if (!response.ok) {
+        lastFailure = `${response.status}`;
+        continue;
+      }
+
+      raw = (await response.json()) as OverpassResponse;
+      break;
+    } catch (requestError) {
+      lastFailure =
+        requestError instanceof Error ? requestError.message : 'network error';
+    }
   }
 
-  const raw = (await response.json()) as OverpassResponse;
+  if (!raw) {
+    throw new Error(`Nearby destination search ${lastFailure}`);
+  }
   return (raw.elements ?? [])
     .map((element): SlowDestinationChoice | null => {
       const latitude = element.lat ?? element.center?.lat;
@@ -513,6 +533,21 @@ export function SlowDestinationPicker({
         searchWithOverpass(trimmed, start),
         searchWithNominatim(trimmed, start),
       ]);
+      const failedSearches = searches.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected'
+      );
+      if (failedSearches.length > 0) {
+        console.warn(
+          '[DETOUR DESTINATION] search source failed',
+          failedSearches.map((result) =>
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason)
+          )
+        );
+      }
+
       const successfulGroups = searches
         .filter(
           (
