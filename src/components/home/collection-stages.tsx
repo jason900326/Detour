@@ -156,10 +156,7 @@ export function CollectionStages({
 
             <View style={styles.v56FinishActions}>
               <Pressable
-                onPress={() => {
-                  if (lastCompletedEntry) openPassportEntry(lastCompletedEntry);
-                  else transitionTo('passport');
-                }}
+                onPress={() => transitionTo('passport')}
                 style={({ pressed }) => [
                   styles.v56FinishReviewButton,
                   pressed && { opacity: 0.72 },
