@@ -969,7 +969,7 @@ export function DetourHomeView({
             {questPulse && (
               <View pointerEvents="none" style={styles.v35QuestPulse}>
                 <Text style={styles.v35QuestPulseText}>
-                  {questPulse === 'side' ? '新的小插曲' : '到終點了'}
+                  {questPulse === 'side' ? '路上找找看' : '到終點了'}
                 </Text>
               </View>
             )}
