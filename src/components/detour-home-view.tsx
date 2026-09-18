@@ -24,12 +24,30 @@ import { styles } from '../styles/home-styles';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 import { CollectionStages } from './home/collection-stages';
 import { V45MoodIcon, V45Skyline } from './mood-visuals';
+import { SideEventPaper } from './side-event-paper';
 import {
   DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_WIDTH,
   DetourAccentStroke,
   V45Ticket,
 } from './ticket-visuals';
+
+function navigationDistanceLabel(turn: string, meters: number) {
+  const distance = Math.max(0, Math.round(meters));
+
+  if (turn === 'left') return `${distance}m 後左轉`;
+  if (turn === 'right') return `${distance}m 後右轉`;
+  if (turn === 'slight-left') return `${distance}m 後往左前方`;
+  if (turn === 'slight-right') return `${distance}m 後往右前方`;
+  if (turn === 'arrive') return `${distance}m 後抵達`;
+  return `沿目前方向 · ${distance}m`;
+}
+
+function isAttentionTurn(turn: string) {
+  return ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
+    turn
+  );
+}
 
 export function DetourHomeView({
   controller,
@@ -104,6 +122,7 @@ export function DetourHomeView({
     prepareDetourTicket,
     startDetour,
     simulateNextBeat,
+    acknowledgeActiveSideEvent,
     replaceActiveSideEvent,
     replaceFailedDestination,
     openCamera,
@@ -245,6 +264,11 @@ export function DetourHomeView({
 
   const chromeDark =
     stage === 'journey' || stage === 'developing' || completionIrisActive;
+  const navigationNeedsAttention = Boolean(
+    currentNavigationBeat &&
+      isAttentionTurn(currentNavigationBeat.turn) &&
+      beatRemainingMeters <= 70
+  );
 
   return (
     <View style={[styles.app, chromeDark ? styles.appDark : styles.appLight]}>
@@ -865,45 +889,68 @@ export function DetourHomeView({
               </View>
             ) : (
               <View style={styles.v35JourneyHero}>
-                <Pressable onPress={() => setShowNextBeatMap(true)} style={styles.v35Compass}>
+                <Pressable
+                  onPress={() => setShowNextBeatMap(true)}
+                  style={[
+                    styles.v35Compass,
+                    navigationNeedsAttention
+                      ? styles.v50CompassAttention
+                      : styles.v50CompassCalm,
+                  ]}
+                >
                   <View style={styles.v35CompassTicks} />
                   <View style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}>
-                    <Text style={styles.v35CompassArrow}>↑</Text>
+                    <Text
+                      style={[
+                        styles.v35CompassArrow,
+                        navigationNeedsAttention
+                          ? styles.v50CompassArrowAttention
+                          : styles.v50CompassArrowCalm,
+                      ]}
+                    >
+                      ↑
+                    </Text>
                   </View>
                 </Pressable>
-                <Text style={styles.v35JourneyDistance}>
-                  {Math.round(beatRemainingMeters)}
-                  <Text style={styles.v35JourneyDistanceUnit}> m</Text>
+                <Text
+                  style={[
+                    styles.v35JourneyDistance,
+                    navigationNeedsAttention
+                      ? styles.v50JourneyDistanceAttention
+                      : styles.v50JourneyDistanceCalm,
+                  ]}
+                >
+                  {navigationDistanceLabel(
+                    currentNavigationBeat.turn,
+                    beatRemainingMeters
+                  )}
                 </Text>
-                <Text style={styles.v35JourneyInstruction}>
-                  {currentNavigationBeat.instruction || '先走這一段。'}
+                <Text
+                  style={[
+                    styles.v35JourneyInstruction,
+                    navigationNeedsAttention
+                      ? styles.v50JourneyInstructionAttention
+                      : styles.v50JourneyInstructionCalm,
+                  ]}
+                >
+                  {navigationNeedsAttention
+                    ? currentNavigationBeat.instruction || '準備轉彎。'
+                    : '先看看周圍，靠近轉彎時會震動。'}
                 </Text>
 
                 {selectedMood !== 'color' && activeSideEvent && (
-                  <View style={[styles.v41ActiveFind, { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-                    <View style={styles.v41ActiveFindCopy}>
-                      <Text style={styles.v41ActiveFindLabel}>
-                        {activeSideEvent.kind === 'context' ? '小插曲' : '路上找找看'}
-                      </Text>
-                      <Text style={styles.v41ActiveFindTitle}>{activeSideEvent.title}</Text>
-                      {activeSideEvent.instruction ? (
-                        <Text style={{ marginTop: 5, color: BONE, opacity: 0.72, fontSize: 13 }}>
-                          {activeSideEvent.instruction}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                      {activeSideEvent.photoSuggested && (
-                        <Pressable onPress={() => openCamera('side')}>
-                          <Text style={styles.v41ActiveFindAction}>拍下來 →</Text>
-                        </Pressable>
-                      )}
-                      <Pressable onPress={replaceActiveSideEvent}>
-                        <Text style={{ color: BONE, opacity: 0.72, fontSize: 13, fontWeight: '700' }}>
-                          沒感覺，換一個
-                        </Text>
-                      </Pressable>
-                    </View>
+                  <View
+                    style={{
+                      width: '100%',
+                      marginTop: 24,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <SideEventPaper
+                      event={activeSideEvent}
+                      onFound={acknowledgeActiveSideEvent}
+                      onReplace={replaceActiveSideEvent}
+                    />
                   </View>
                 )}
 
@@ -922,7 +969,7 @@ export function DetourHomeView({
             {questPulse && (
               <View pointerEvents="none" style={styles.v35QuestPulse}>
                 <Text style={styles.v35QuestPulseText}>
-                  {questPulse === 'side' ? '新的小插曲' : '到終點了'}
+                  {questPulse === 'side' ? '路上找找看' : '到終點了'}
                 </Text>
               </View>
             )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Platform,
+  Animated,
   Pressable,
   StyleSheet,
   Text,
@@ -9,12 +9,14 @@ import {
 } from 'react-native';
 import {
   Canvas,
+  Circle,
   Group,
+  Image,
   ImageShader,
-  Paragraph,
+  Line,
   Rect,
-  Skia,
   Vertices,
+  useImage,
   useTexture,
   vec,
 } from '@shopify/react-native-skia';
@@ -26,20 +28,20 @@ import {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { SideEvent } from '../lib/journey-engine';
-import { INK, MUTED } from '../theme/detour-theme';
+import { INK, MUTED, SIGNAL } from '../theme/detour-theme';
 
-const COLLAPSED_HEIGHT = 62;
-const EXPANDED_HEIGHT = 184;
-const CANVAS_HEIGHT = 202;
-const GRID_COLUMNS = 7;
+const PAPER_HEIGHT = 188;
+const CANVAS_HEIGHT = 204;
+const GRID_COLUMNS = 8;
 const GRID_ROWS = 5;
-const PAPER_BASE = '#F8F5EC';
-const PAPER_WARM = 'rgba(218, 207, 184, 0.10)';
-const PAPER_COOL = 'rgba(255, 255, 255, 0.24)';
-const PAPER_LINE = '#D3CCBF';
+const PAPER_BASE = '#F5F1E8';
+const PAPER_WARM = 'rgba(150, 132, 101, 0.018)';
+const PAPER_COOL = 'rgba(255, 255, 255, 0.055)';
+const PAPER_EDGE = 'rgba(117, 101, 74, 0.045)';
+
+type Interaction = 'found' | 'replace' | null;
 
 function hash01(value: number) {
   const raw = Math.sin(value * 12.9898 + 78.233) * 43758.5453;
@@ -47,56 +49,51 @@ function hash01(value: number) {
 }
 
 function buildPaperFibers(width: number) {
-  return Array.from({ length: 58 }, (_, index) => {
-    const x = hash01(index * 3 + 1) * width;
-    const y = hash01(index * 5 + 2) * EXPANDED_HEIGHT;
-    const fiberWidth = 5 + hash01(index * 7 + 3) * 23;
-    const fiberHeight = index % 6 === 0 ? 1.05 : 0.55;
-    const warm = index % 3 === 0;
+  return Array.from({ length: 112 }, (_, index) => {
+    const x = hash01(index * 3.17 + 1) * width;
+    const y = hash01(index * 5.23 + 2) * PAPER_HEIGHT;
+    const length = 3 + hash01(index * 7.41 + 3) * 17;
+    const drift = (hash01(index * 4.73 + 9) - 0.5) * 3.2;
+    const warm = index % 5 === 0;
+
     return {
-      x,
-      y,
-      width: fiberWidth,
-      height: fiberHeight,
+      x1: x,
+      y1: y,
+      x2: Math.min(width, x + length),
+      y2: Math.max(0, Math.min(PAPER_HEIGHT, y + drift)),
+      strokeWidth: index % 9 === 0 ? 0.72 : 0.46,
       color: warm
-        ? 'rgba(125, 111, 86, 0.055)'
-        : 'rgba(255, 255, 255, 0.30)',
+        ? 'rgba(105, 91, 67, 0.042)'
+        : 'rgba(255, 255, 252, 0.14)',
     };
   });
 }
 
-function buildParagraph(
-  text: string,
-  options: {
-    size: number;
-    color: string;
-    weight: number;
-    maxLines?: number;
-    ellipsis?: string;
-  }
-) {
-  const fontFamilies =
-    Platform.OS === 'ios' ? ['PingFang TC', 'Helvetica'] : ['sans-serif'];
-  const paragraphStyle = options.ellipsis
-    ? {
-        maxLines: options.maxLines ?? 1,
-        ellipsis: options.ellipsis,
-      }
-    : options.maxLines !== undefined
-      ? { maxLines: options.maxLines }
-      : {};
+function buildPaperPulp(width: number) {
+  return Array.from({ length: 146 }, (_, index) => {
+    const x = hash01(index * 2.71 + 11) * width;
+    const y = hash01(index * 4.91 + 17) * PAPER_HEIGHT;
+    const radius = 0.28 + hash01(index * 6.31 + 7) * 0.85;
+    const warm = index % 6 === 0;
 
-  return Skia.ParagraphBuilder.Make(paragraphStyle)
-    .pushStyle({
-      color: Skia.Color(options.color),
-      fontFamilies,
-      fontSize: options.size,
-      fontStyle: { weight: options.weight },
-      heightMultiplier: 1.25,
-    })
-    .addText(text)
-    .pop()
-    .build();
+    return {
+      x,
+      y,
+      radius,
+      color: warm
+        ? 'rgba(110, 96, 75, 0.022)'
+        : 'rgba(255, 255, 255, 0.075)',
+    };
+  });
+}
+
+function buildPaperClouds(width: number) {
+  return Array.from({ length: 24 }, (_, index) => ({
+    x: hash01(index * 8.13 + 4) * width,
+    y: hash01(index * 4.37 + 8) * PAPER_HEIGHT,
+    radius: 10 + hash01(index * 6.91 + 2) * 30,
+    color: index % 3 === 0 ? PAPER_WARM : PAPER_COOL,
+  }));
 }
 
 function buildMeshIndices() {
@@ -120,149 +117,111 @@ const MESH_INDICES = buildMeshIndices();
 const MESH_VERTEX_COUNT = (GRID_COLUMNS + 1) * (GRID_ROWS + 1);
 const SHADOW_COLORS = Array.from(
   { length: MESH_VERTEX_COUNT },
-  () => 'rgba(0,0,0,0.11)'
+  () => 'rgba(0,0,0,0.075)'
 );
 
 export function SideEventPaper({
   event,
+  onFound,
   onReplace,
-  devMode = false,
 }: {
   event: SideEvent;
+  onFound: () => void | Promise<void>;
   onReplace: () => void | Promise<void>;
-  devMode?: boolean;
 }) {
   const { width: screenWidth } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const width = Math.max(248, Math.min(396, screenWidth - 54));
+  const width = Math.max(276, Math.min(396, screenWidth - 48));
   const paperFibers = useMemo(() => buildPaperFibers(width), [width]);
+  const paperPulp = useMemo(() => buildPaperPulp(width), [width]);
+  const paperClouds = useMemo(() => buildPaperClouds(width), [width]);
+  const paperFiberImage = useImage(
+    require('../../assets/detour/paper-fiber.jpg')
+  );
+
   const [displayedEvent, setDisplayedEvent] = useState(event);
-  const [expanded, setExpanded] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(false);
-  const [replacing, setReplacing] = useState(false);
-  const replacementWaitingRef = useRef(false);
+  const [interaction, setInteraction] = useState<Interaction>(null);
   const mountedEventIdRef = useRef(event.id);
+  const pendingInteractionRef = useRef<Exclude<Interaction, null> | null>(null);
+  const copyOpacity = useRef(new Animated.Value(0)).current;
+  const copyX = useRef(new Animated.Value(22)).current;
 
   const reveal = useSharedValue(0);
-  const open = useSharedValue(0);
   const crumple = useSharedValue(0);
-  const inkReveal = useSharedValue(1);
 
-  const titleParagraph = useMemo(
-    () =>
-      buildParagraph(displayedEvent.title, {
-        size: 18,
-        color: INK,
-        weight: 700,
-        maxLines: 1,
-        ellipsis: '…',
-      }),
-    [displayedEvent.title]
-  );
-  const instructionParagraph = useMemo(
-    () =>
-      buildParagraph(displayedEvent.instruction || '', {
-        size: 14,
-        color: '#625E56',
-        weight: 500,
-        maxLines: 2,
-      }),
-    [displayedEvent.instruction]
-  );
-  const replaceParagraph = useMemo(
-    () =>
-      buildParagraph('找不到，換一個', {
-        size: 14,
-        color: '#716C63',
-        weight: 650,
-        maxLines: 1,
-      }),
-    []
-  );
-  const replaceArrowParagraph = useMemo(
-    () =>
-      buildParagraph('→', {
-        size: 19,
-        color: INK,
-        weight: 500,
-        maxLines: 1,
-      }),
-    []
-  );
-
-  // A designed paper texture instead of a photo texture: warm-white stock,
-  // soft pulp variation and sparse fibres. The irregular silhouette still
-  // comes from the mesh, so the result reads as paper rather than a UI card.
   const paperTexture = useTexture(
     <>
       <Rect
         x={0}
         y={0}
         width={width}
-        height={EXPANDED_HEIGHT}
+        height={PAPER_HEIGHT}
         color={PAPER_BASE}
       />
-      <Rect
-        x={0}
-        y={22}
-        width={width}
-        height={44}
-        color={PAPER_COOL}
-      />
-      <Rect
-        x={0}
-        y={96}
-        width={width}
-        height={58}
-        color={PAPER_WARM}
-      />
-      {paperFibers.map((fiber, index) => (
-        <Rect
-          key={`paper-fiber-${index}`}
-          x={fiber.x}
-          y={fiber.y}
-          width={fiber.width}
-          height={fiber.height}
-          color={fiber.color}
+
+      {paperFiberImage ? (
+        <Image
+          image={paperFiberImage}
+          x={0}
+          y={0}
+          width={width}
+          height={PAPER_HEIGHT}
+          fit="cover"
+          opacity={0.14}
+        />
+      ) : null}
+
+      {paperClouds.map((cloud, index) => (
+        <Circle
+          key={`paper-cloud-${index}`}
+          cx={cloud.x}
+          cy={cloud.y}
+          r={cloud.radius}
+          color={cloud.color}
         />
       ))}
+
+      {paperPulp.map((dot, index) => (
+        <Circle
+          key={`paper-pulp-${index}`}
+          cx={dot.x}
+          cy={dot.y}
+          r={dot.radius}
+          color={dot.color}
+        />
+      ))}
+
+      {paperFibers.map((fiber, index) => (
+        <Line
+          key={`paper-fiber-${index}`}
+          p1={vec(fiber.x1, fiber.y1)}
+          p2={vec(fiber.x2, fiber.y2)}
+          color={fiber.color}
+          strokeWidth={fiber.strokeWidth}
+        />
+      ))}
+
+      <Rect x={0} y={0} width={width} height={1.4} color={PAPER_EDGE} />
+      <Rect
+        x={0}
+        y={PAPER_HEIGHT - 1.6}
+        width={width}
+        height={1.6}
+        color="rgba(104, 89, 67, 0.035)"
+      />
     </>,
-    { width, height: EXPANDED_HEIGHT }
+    { width, height: PAPER_HEIGHT }
   );
 
-  const naturalHeight = useDerivedValue(
-    () => COLLAPSED_HEIGHT + (EXPANDED_HEIGHT - COLLAPSED_HEIGHT) * open.value
-  );
-  const paperTop = useDerivedValue(() => CANVAS_HEIGHT - naturalHeight.value);
-  const inkOffsetX = useDerivedValue(() => (1 - reveal.value) * 42);
-  const titleX = useDerivedValue(() => 20 + inkOffsetX.value);
-  const titleY = useDerivedValue(() => paperTop.value + 19);
-  const instructionX = useDerivedValue(() => 20 + inkOffsetX.value);
-  const instructionY = useDerivedValue(() => paperTop.value + 64);
-  const separatorX = useDerivedValue(() => 20 + inkOffsetX.value);
-  const separatorY = useDerivedValue(() => paperTop.value + 136);
-  const replaceX = useDerivedValue(() => 20 + inkOffsetX.value);
-  const replaceY = useDerivedValue(() => paperTop.value + 148);
-  const replaceArrowX = useDerivedValue(
-    () => Math.max(20, width - 43) + inkOffsetX.value
-  );
-  const replaceArrowY = useDerivedValue(() => paperTop.value + 146);
-
-  const inkOpacity = useDerivedValue(
-    () => Math.max(0, Math.min(1, reveal.value * inkReveal.value))
-  );
-  const detailOpacity = useDerivedValue(() => inkOpacity.value * open.value);
+  const paperTop = CANVAS_HEIGHT - PAPER_HEIGHT;
 
   const paperVertices = useDerivedValue(() => {
     const points = [];
-    const height = naturalHeight.value;
-    const top = CANVAS_HEIGHT - height;
     const progress = crumple.value;
     const eased = progress * progress * (3 - 2 * progress);
     const foldStrength = Math.sin(Math.PI * progress);
     const revealOffset = (1 - reveal.value) * 42;
     const centerX = width * 0.52;
-    const centerY = CANVAS_HEIGHT - EXPANDED_HEIGHT * 0.46;
+    const centerY = paperTop + PAPER_HEIGHT * 0.5;
 
     for (let row = 0; row <= GRID_ROWS; row += 1) {
       for (let column = 0; column <= GRID_COLUMNS; column += 1) {
@@ -270,16 +229,14 @@ export function SideEventPaper({
         const nx = column / GRID_COLUMNS;
         const ny = row / GRID_ROWS;
         let baseX = nx * width;
-        let baseY = top + ny * height;
+        let baseY = paperTop + ny * PAPER_HEIGHT;
 
-        // Slightly torn, asymmetric edges and a tiny natural lean. These stay
-        // restrained so the sheet still feels designed rather than distressed.
         baseY += (nx - 0.5) * 2.2;
         if (column === 0) {
           baseX += 2.6 + Math.sin((row + 1) * 2.13) * 2.2;
         }
         if (column === GRID_COLUMNS) {
-          baseX -= 2.6 + Math.cos((row + 2) * 1.77) * 2.0;
+          baseX -= 2.6 + Math.cos((row + 2) * 1.77) * 2;
         }
         if (row === 0) {
           baseY += 2.2 + Math.sin((column + 1) * 1.93) * 1.8;
@@ -289,16 +246,20 @@ export function SideEventPaper({
         }
 
         const phase = index * 1.618 + row * 0.73 - column * 0.41;
-        const packetX = (nx - 0.5) * 70;
-        const packetY = (ny - 0.5) * 30;
+        const packetX = (nx - 0.5) * 62;
+        const packetY = (ny - 0.5) * 34;
         const targetX =
-          centerX + packetX + Math.sin(phase * 2.17) * (8 + ((index * 7) % 8));
+          centerX +
+          packetX +
+          Math.sin(phase * 2.17) * (7 + ((index * 7) % 7));
         const targetY =
-          centerY + packetY + Math.cos(phase * 1.63) * (6 + ((index * 5) % 6));
+          centerY +
+          packetY +
+          Math.cos(phase * 1.63) * (5 + ((index * 5) % 5));
         const wrinkleX =
-          Math.sin(phase * 4.7 + progress * 5.4) * 11 * foldStrength;
+          Math.sin(phase * 4.7 + progress * 5.4) * 10 * foldStrength;
         const wrinkleY =
-          Math.cos(phase * 3.9 - progress * 4.1) * 9 * foldStrength;
+          Math.cos(phase * 3.9 - progress * 4.1) * 8 * foldStrength;
 
         points.push(
           vec(
@@ -313,205 +274,171 @@ export function SideEventPaper({
   });
 
   const shadowVertices = useDerivedValue(() =>
-    paperVertices.value.map((point) => vec(point.x + 3, point.y + 4))
+    paperVertices.value.map((point) => vec(point.x + 2.2, point.y + 3.2))
   );
 
-  const textureCoordinates = useDerivedValue(() => {
+  const textureCoordinates = useMemo(() => {
     const points = [];
-    const height = naturalHeight.value;
 
     for (let row = 0; row <= GRID_ROWS; row += 1) {
       for (let column = 0; column <= GRID_COLUMNS; column += 1) {
         points.push(
           vec(
             (column / GRID_COLUMNS) * width,
-            (row / GRID_ROWS) * height
+            (row / GRID_ROWS) * PAPER_HEIGHT
           )
         );
       }
     }
 
     return points;
-  });
+  }, [width]);
 
-  const revealControls = useCallback(() => {
-    setControlsVisible(true);
-  }, []);
+  const showCopy = useCallback(() => {
+    copyX.setValue(18);
+    copyOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(copyOpacity, {
+        toValue: 1,
+        duration: 170,
+        useNativeDriver: true,
+      }),
+      Animated.timing(copyX, {
+        toValue: 0,
+        duration: 230,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setInteraction(null));
+  }, [copyOpacity, copyX]);
 
-  const finishReplaceAnimation = useCallback(() => {
-    replacementWaitingRef.current = false;
-    setReplacing(false);
-    setControlsVisible(true);
-  }, []);
+  const restoreWithoutChange = useCallback(
+    (action: Exclude<Interaction, null>) => {
+      if (
+        pendingInteractionRef.current !== action ||
+        mountedEventIdRef.current !== displayedEvent.id
+      ) {
+        return;
+      }
 
-  const unfoldReplacement = useCallback(() => {
-    crumple.value = 1;
-    crumple.value = withDelay(
-      200,
-      withTiming(
-        0,
-        {
-          duration: 400,
+      pendingInteractionRef.current = null;
+      if (action === 'replace') {
+        crumple.value = withTiming(0, {
+          duration: 330,
           easing: Easing.out(Easing.cubic),
-        },
-        (finished) => {
-          if (!finished) return;
-
-          // The three copy lines stay completely hidden for the entire paper
-          // motion. Only reveal the new copy after the sheet is fully flat.
-          inkReveal.value = withTiming(
-            1,
-            {
-              duration: 135,
-              easing: Easing.out(Easing.cubic),
-            },
-            (inkFinished) => {
-              if (inkFinished) runOnJS(finishReplaceAnimation)();
-            }
-          );
-        }
-      )
-    );
-  }, [crumple, finishReplaceAnimation, inkReveal]);
-
-  useEffect(() => {
-    if (event.id === mountedEventIdRef.current) return;
-    mountedEventIdRef.current = event.id;
-    setDisplayedEvent(event);
-
-    if (replacementWaitingRef.current) {
-      unfoldReplacement();
-      return;
-    }
-
-    setExpanded(false);
-    setControlsVisible(false);
-    open.value = 0;
-    crumple.value = 0;
-    inkReveal.value = 1;
-    reveal.value = 0;
-    reveal.value = withTiming(
-      1,
-      {
-        duration: 290,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(revealControls)();
+        });
       }
-    );
-  }, [
-    crumple,
-    event,
-    inkReveal,
-    open,
-    reveal,
-    revealControls,
-    unfoldReplacement,
-  ]);
-
-  useEffect(() => {
-    reveal.value = 0;
-    open.value = 0;
-    crumple.value = 0;
-    inkReveal.value = 1;
-    reveal.value = withTiming(
-      1,
-      {
-        duration: 290,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(revealControls)();
-      }
-    );
-  }, [crumple, inkReveal, open, reveal, revealControls]);
-
-  const expandPaper = useCallback(() => {
-    if (expanded || replacing) return;
-    setControlsVisible(false);
-    setExpanded(true);
-    open.value = withTiming(
-      1,
-      {
-        duration: 235,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(revealControls)();
-      }
-    );
-  }, [expanded, open, replacing, revealControls]);
-
-  const collapsePaper = useCallback(() => {
-    if (!expanded || replacing) return;
-    setControlsVisible(false);
-    setExpanded(false);
-    open.value = withTiming(
-      0,
-      {
-        duration: 205,
-        easing: Easing.inOut(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(revealControls)();
-      }
-    );
-  }, [expanded, open, replacing, revealControls]);
+      showCopy();
+    },
+    [crumple, displayedEvent.id, showCopy]
+  );
 
   const requestReplacement = useCallback(async () => {
     const previousId = mountedEventIdRef.current;
-    replacementWaitingRef.current = true;
     try {
       await onReplace();
     } finally {
       setTimeout(() => {
-        if (
-          replacementWaitingRef.current &&
-          mountedEventIdRef.current === previousId
-        ) {
-          unfoldReplacement();
+        if (mountedEventIdRef.current === previousId) {
+          restoreWithoutChange('replace');
         }
-      }, 115);
+      }, 220);
     }
-  }, [onReplace, unfoldReplacement]);
+  }, [onReplace, restoreWithoutChange]);
+
+  const requestFound = useCallback(async () => {
+    const previousId = mountedEventIdRef.current;
+    try {
+      await onFound();
+    } finally {
+      setTimeout(() => {
+        if (mountedEventIdRef.current === previousId) {
+          restoreWithoutChange('found');
+        }
+      }, 220);
+    }
+  }, [onFound, restoreWithoutChange]);
+
+  useEffect(() => {
+    reveal.value = withTiming(1, {
+      duration: 290,
+      easing: Easing.out(Easing.cubic),
+    });
+    showCopy();
+  }, [reveal, showCopy]);
+
+  useEffect(() => {
+    if (event.id === mountedEventIdRef.current) return;
+
+    const pending = pendingInteractionRef.current;
+    mountedEventIdRef.current = event.id;
+    pendingInteractionRef.current = null;
+    setDisplayedEvent(event);
+
+    if (pending === 'replace') {
+      crumple.value = 1;
+      crumple.value = withDelay(
+        160,
+        withTiming(
+          0,
+          {
+            duration: 400,
+            easing: Easing.out(Easing.cubic),
+          },
+          (finished) => {
+            if (finished) runOnJS(showCopy)();
+          }
+        )
+      );
+      return;
+    }
+
+    reveal.value = 0.82;
+    reveal.value = withTiming(1, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+    });
+    showCopy();
+  }, [crumple, event, reveal, showCopy]);
+
+  const found = useCallback(() => {
+    if (interaction) return;
+
+    pendingInteractionRef.current = 'found';
+    setInteraction('found');
+    Animated.timing(copyOpacity, {
+      toValue: 0,
+      duration: 110,
+      useNativeDriver: true,
+    }).start(() => {
+      void requestFound();
+    });
+  }, [copyOpacity, interaction, requestFound]);
 
   const replace = useCallback(() => {
-    if (replacing) return;
-    setReplacing(true);
-    setControlsVisible(false);
+    if (interaction) return;
 
-    // Hide all three text lines immediately when the paper starts moving. They
-    // remain hidden through crumple, hold and unfold, then the new copy appears.
-    inkReveal.value = 0;
-    crumple.value = withTiming(
-      1,
-      {
-        duration: 400,
-        easing: Easing.inOut(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(requestReplacement)();
-      }
-    );
-  }, [crumple, inkReveal, replacing, requestReplacement]);
+    pendingInteractionRef.current = 'replace';
+    setInteraction('replace');
+    Animated.timing(copyOpacity, {
+      toValue: 0,
+      duration: 90,
+      useNativeDriver: true,
+    }).start(() => {
+      crumple.value = withTiming(
+        1,
+        {
+          duration: 400,
+          easing: Easing.inOut(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(requestReplacement)();
+        }
+      );
+    });
+  }, [copyOpacity, crumple, interaction, requestReplacement]);
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[
-        styles.host,
-        {
-          left: (screenWidth - width) / 2,
-          width,
-          height: CANVAS_HEIGHT,
-          bottom: Math.max(
-            devMode ? 214 : 136,
-            insets.bottom + (devMode ? 184 : 108)
-          ),
-        },
-      ]}
-    >
+    <View style={[styles.host, { width, height: CANVAS_HEIGHT }]}>
       <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Vertices
           vertices={shadowVertices}
@@ -526,124 +453,133 @@ export function SideEventPaper({
             indices={MESH_INDICES}
           />
         </Group>
-
-        <Group opacity={inkOpacity}>
-          <Paragraph
-            paragraph={titleParagraph}
-            x={titleX}
-            y={titleY}
-            width={Math.max(1, width - 62)}
-          />
-        </Group>
-
-        <Group opacity={detailOpacity}>
-          {displayedEvent.instruction ? (
-            <Paragraph
-              paragraph={instructionParagraph}
-              x={instructionX}
-              y={instructionY}
-              width={Math.max(1, width - 40)}
-            />
-          ) : null}
-          <Rect
-            x={separatorX}
-            y={separatorY}
-            width={Math.max(1, width - 40)}
-            height={1}
-            color={PAPER_LINE}
-          />
-          <Paragraph
-            paragraph={replaceParagraph}
-            x={replaceX}
-            y={replaceY}
-            width={Math.max(1, width - 76)}
-          />
-          <Paragraph
-            paragraph={replaceArrowParagraph}
-            x={replaceArrowX}
-            y={replaceArrowY}
-            width={30}
-          />
-        </Group>
       </Canvas>
 
-      {!replacing && controlsVisible && (
-        expanded ? (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="收起找找看提示"
-              onPress={collapsePaper}
-              hitSlop={12}
-              style={styles.closeButton}
-            >
-              <Text style={styles.closeText}>×</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="找不到，換一個"
-              onPress={replace}
-              style={styles.replaceHitArea}
-            />
-          </>
+      <Animated.View
+        pointerEvents={interaction ? 'none' : 'auto'}
+        style={[
+          styles.copy,
+          {
+            opacity: copyOpacity,
+            transform: [{ translateX: copyX }],
+          },
+        ]}
+      >
+        <Text style={styles.kicker}>路上找找看</Text>
+        <Text numberOfLines={2} style={styles.title}>
+          {displayedEvent.title}
+        </Text>
+        {displayedEvent.instruction ? (
+          <Text numberOfLines={2} style={styles.instruction}>
+            {displayedEvent.instruction}
+          </Text>
         ) : (
+          <View style={styles.instructionSpacer} />
+        )}
+
+        <View style={styles.divider} />
+
+        <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${displayedEvent.title}，點兩下查看完整提示`}
-            onPress={expandPaper}
-            style={styles.compactHitArea}
+            accessibilityLabel="找到了"
+            onPress={found}
+            style={({ pressed }) => [
+              styles.foundButton,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.expandMark}>＋</Text>
+            <Text style={styles.foundText}>找到了</Text>
           </Pressable>
-        )
-      )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="找不到，換一個"
+            onPress={replace}
+            style={({ pressed }) => [
+              styles.replaceButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.replaceText}>找不到，換一個</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   host: {
-    position: 'absolute',
+    position: 'relative',
+    alignSelf: 'center',
     zIndex: 48,
   },
-  compactHitArea: {
+  copy: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: COLLAPSED_HEIGHT,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 17,
+    left: 22,
+    right: 22,
+    top: 27,
+    bottom: 15,
   },
-  expandMark: {
-    width: 28,
-    textAlign: 'center',
-    fontSize: 21,
-    lineHeight: 24,
-    fontWeight: '500',
-    color: MUTED,
+  kicker: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: SIGNAL,
   },
-  closeButton: {
-    position: 'absolute',
-    top: CANVAS_HEIGHT - EXPANDED_HEIGHT + 9,
-    right: 10,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: {
-    fontSize: 26,
+  title: {
+    marginTop: 7,
+    fontSize: 22,
     lineHeight: 28,
-    fontWeight: '500',
+    fontWeight: '900',
+    color: INK,
+  },
+  instruction: {
+    marginTop: 5,
+    minHeight: 20,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#625E56',
+  },
+  instructionSpacer: {
+    minHeight: 20,
+  },
+  divider: {
+    marginTop: 'auto',
+    height: 1,
+    backgroundColor: 'rgba(98, 94, 86, 0.22)',
+  },
+  actions: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  foundButton: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingRight: 12,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(98, 94, 86, 0.22)',
+  },
+  foundText: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: INK,
+  },
+  replaceButton: {
+    flex: 1.25,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingLeft: 12,
+  },
+  replaceText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: MUTED,
   },
-  replaceHitArea: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 7,
-    height: 51,
+  pressed: {
+    opacity: 0.52,
   },
 });

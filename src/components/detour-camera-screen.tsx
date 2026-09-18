@@ -101,9 +101,6 @@ export default function DetourCameraScreen() {
   const source = getParam(params.source, 'free') as CameraSource;
   const missionCode = getParam(params.missionCode, '自由拍攝');
   const missionTitle = getParam(params.missionTitle, '留下現在看到的東西。');
-  const savedCount = Number.parseInt(getParam(params.savedCount, '0'), 10) || 0;
-  const rollCapacity = Number.parseInt(getParam(params.rollCapacity, '6'), 10) || 6;
-  const atCapacity = savedCount >= rollCapacity;
   const isArrivalCapture = source === 'arrival';
 
   useEffect(() => {
@@ -257,11 +254,6 @@ export default function DetourCameraScreen() {
   async function takePhoto() {
     if (!cameraReady || !cameraRef.current || takingPhoto) return;
 
-    if (atCapacity) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
-    }
-
     setTakingPhoto(true);
     runShutterMotion();
 
@@ -298,7 +290,7 @@ export default function DetourCameraScreen() {
   }
 
   async function keepPhoto() {
-    if (!pendingCaptureUri || savingPhoto || atCapacity) return;
+    if (!pendingCaptureUri || savingPhoto) return;
     setSavingPhoto(true);
 
     try {
@@ -375,7 +367,6 @@ export default function DetourCameraScreen() {
           <Text style={styles.reviewTitle} numberOfLines={2}>{missionTitle}</Text>
         </View>
         <View style={styles.reviewBottom}>
-          <Text style={styles.reviewCount}>{Math.min(savedCount, rollCapacity)} / {rollCapacity}</Text>
           <View style={styles.reviewActions}>
             <Pressable disabled={savingPhoto} onPress={retakePhoto} style={({ pressed }) => [styles.reviewRetake, pressed && styles.reviewPressed]}>
               <Text style={styles.reviewRetakeText}>重拍</Text>
@@ -414,7 +405,7 @@ export default function DetourCameraScreen() {
         flash={facing === 'back' ? flashMode : 'off'}
         zoom={zoom}
         selectedLens={Platform.OS === 'ios' && facing === 'back' ? selectedLens : undefined}
-        autofocus="off"
+        autofocus="on"
         responsiveOrientationWhenOrientationLocked
         onCameraReady={() => { setZoom(0); setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
         onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
@@ -468,17 +459,15 @@ export default function DetourCameraScreen() {
             </View>
           )}
           <View style={styles.cameraBottom}>
-            <View style={styles.statusColumn}>
-              <Text style={styles.statusText}>{Math.min(savedCount, rollCapacity)} / {rollCapacity}</Text>
-            </View>
+            <View style={styles.statusColumn} />
 
             <Animated.View style={{ transform: [{ scale: shutterScale }] }}>
               <Pressable
-                disabled={!cameraReady || takingPhoto || atCapacity}
+                disabled={!cameraReady || takingPhoto}
                 onPress={takePhoto}
                 style={({ pressed }) => [
                   styles.shutterOuter,
-                  (!cameraReady || takingPhoto || atCapacity) && styles.shutterDisabled,
+                  (!cameraReady || takingPhoto) && styles.shutterDisabled,
                   pressed && styles.shutterPressed,
                 ]}
               >
@@ -487,7 +476,7 @@ export default function DetourCameraScreen() {
             </Animated.View>
 
             <View style={styles.exposureColumn}>
-              {mountError ? <Text style={styles.errorText}>預覽錯誤</Text> : atCapacity ? <Text style={styles.statusText}>已拍滿</Text> : null}
+              {mountError ? <Text style={styles.errorText}>預覽錯誤</Text> : null}
             </View>
           </View>
         </View>

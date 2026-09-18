@@ -58,11 +58,7 @@ export function usePhysicalController(
         return controller.openPassportEntry(...args);
       }) as Controller['openPassportEntry'],
       openCamera: ((...args: Parameters<Controller['openCamera']>) => {
-        if (controller.photos.length >= controller.rollCapacity) {
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        } else {
-          void lightImpact();
-        }
+        void lightImpact();
         return controller.openCamera(...args);
       }) as Controller['openCamera'],
       replaceActiveSideEvent: ((...args: Parameters<Controller['replaceActiveSideEvent']>) => {
