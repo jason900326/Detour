@@ -32,21 +32,13 @@ import {
   V45Ticket,
 } from './ticket-visuals';
 
-function navigationDistanceLabel(turn: string, meters: number) {
-  const distance = Math.max(0, Math.round(meters));
-
-  if (turn === 'left') return `${distance}m 後左轉`;
-  if (turn === 'right') return `${distance}m 後右轉`;
-  if (turn === 'slight-left') return `${distance}m 後往左前方`;
-  if (turn === 'slight-right') return `${distance}m 後往右前方`;
-  if (turn === 'arrive') return `${distance}m 後抵達`;
-  return `沿目前方向 · ${distance}m`;
-}
-
-function isAttentionTurn(turn: string) {
-  return ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
-    turn
-  );
+function navigationInstructionLabel(turn: string) {
+  if (turn === 'left') return '下一個路口左轉';
+  if (turn === 'right') return '下一個路口右轉';
+  if (turn === 'slight-left') return '下一個路口往左前方';
+  if (turn === 'slight-right') return '下一個路口往右前方';
+  if (turn === 'arrive') return '快到了';
+  return '繼續直走';
 }
 
 function formatElapsedJourneyTime(totalSeconds: number) {
@@ -76,13 +68,8 @@ export function DetourHomeView({
     plan,
     selectedScene,
     navigationRoute,
-    navigationBeatIndex,
     currentNavigationBeat,
-    beatRemainingMeters,
-    showNextBeatMap,
-    setShowNextBeatMap,
     nextBeatSegment,
-    arrowRotation,
     questPulse,
     elapsedJourneySeconds,
     isRerouting,
@@ -271,11 +258,6 @@ export function DetourHomeView({
 
   const chromeDark =
     stage === 'journey' || stage === 'developing' || completionIrisActive;
-  const navigationNeedsAttention = Boolean(
-      currentNavigationBeat &&
-      isAttentionTurn(currentNavigationBeat.turn) &&
-      beatRemainingMeters <= 30
-  );
 
   return (
     <View style={[styles.app, chromeDark ? styles.appDark : styles.appLight]}>
@@ -847,34 +829,17 @@ export function DetourHomeView({
                 <Text style={styles.v35JourneyBackText}>←</Text>
               </Pressable>
               <Text style={styles.v35JourneyBrand}>DETOUR</Text>
-              <View style={styles.v35JourneyProgress}>
-                {Array.from({ length: 5 }, (_, index) => {
-                  const progress =
-                    navigationRoute.beats.length <= 1
-                      ? 0
-                      : navigationBeatIndex / (navigationRoute.beats.length - 1);
-                  const current = Math.min(4, Math.round(progress * 4));
-                  return (
-                    <View key={index} style={styles.v35JourneyProgressItem}>
-                      <View
-                        style={[
-                          styles.v35JourneyProgressDot,
-                          index < current && styles.v35JourneyProgressDone,
-                          index === current && styles.v35JourneyProgressCurrent,
-                        ]}
-                      />
-                      {index < 4 && <View style={styles.v35JourneyProgressLine} />}
-                    </View>
-                  );
-                })}
-                <Text style={styles.v35JourneyFlag}>⚑</Text>
-              </View>
+              <Text style={styles.v35JourneyTimer}>
+                {formatElapsedJourneyTime(elapsedJourneySeconds)}
+              </Text>
             </View>
 
-            {showNextBeatMap && latitude !== null && longitude !== null ? (
-              <View style={styles.v35JourneyMapWrap}>
+            <View style={styles.v35JourneyHero}>
+              {latitude !== null && longitude !== null ? (
+                <View style={styles.v35JourneyMapWrap}>
                 <MapView
                   style={styles.v35JourneyMap}
+                  mapType="standard"
                   initialRegion={{
                     latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
                     longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
@@ -890,63 +855,14 @@ export function DetourHomeView({
                   <Polyline coordinates={nextBeatSegment} strokeColor={SIGNAL} strokeWidth={5} lineCap="round" />
                   <Circle center={currentNavigationBeat.point} radius={10} strokeColor={BONE} strokeWidth={1} fillColor={SIGNAL} />
                 </MapView>
-                <Pressable onPress={() => setShowNextBeatMap(false)} style={styles.v35JourneyMapClose}>
-                  <Text style={styles.v35JourneyMapCloseText}>×</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.v35JourneyHero}>
-                <Text style={styles.v35JourneyElapsed}>
-                  已走 {formatElapsedJourneyTime(elapsedJourneySeconds)}
-                </Text>
-                <Pressable
-                  onPress={() => setShowNextBeatMap(true)}
-                  style={[
-                    styles.v35Compass,
-                    navigationNeedsAttention
-                      ? styles.v50CompassAttention
-                      : styles.v50CompassCalm,
-                  ]}
-                >
-                  <View style={styles.v35CompassTicks} />
-                  <View style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}>
-                    <Text
-                      style={[
-                        styles.v35CompassArrow,
-                        navigationNeedsAttention
-                          ? styles.v50CompassArrowAttention
-                          : styles.v50CompassArrowCalm,
-                      ]}
-                    >
-                      ↑
-                    </Text>
-                  </View>
-                </Pressable>
-                <Text
-                  style={[
-                    styles.v35JourneyDistance,
-                    navigationNeedsAttention
-                      ? styles.v50JourneyDistanceAttention
-                      : styles.v50JourneyDistanceCalm,
-                  ]}
-                >
-                  {navigationDistanceLabel(
-                    currentNavigationBeat.turn,
-                    beatRemainingMeters
-                  )}
-                </Text>
-                <Text
-                  style={[
-                    styles.v35JourneyInstruction,
-                    navigationNeedsAttention
-                      ? styles.v50JourneyInstructionAttention
-                      : styles.v50JourneyInstructionCalm,
-                  ]}
-                >
-                  {navigationNeedsAttention
-                    ? currentNavigationBeat.instruction || '準備轉彎。'
-                    : '先看看周圍，靠近轉彎時會震動。'}
-                </Text>
+                </View>
+              ) : (
+                <View style={styles.v35JourneyMapPlaceholder} />
+              )}
+
+              <Text style={styles.v35JourneyInstruction}>
+                {navigationInstructionLabel(currentNavigationBeat.turn)}
+              </Text>
 
                 {selectedMood !== 'color' && activeSideEvent && (
                   <View
@@ -973,8 +889,7 @@ export function DetourHomeView({
                   </View>
                 )}
                 {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
-              </View>
-            )}
+            </View>
 
             {questPulse === 'final' && (
               <View pointerEvents="none" style={styles.v35QuestPulse}>
@@ -985,16 +900,10 @@ export function DetourHomeView({
             )}
 
             <View style={styles.v35JourneyBottom}>
-              <Pressable
-                onPress={() => setShowNextBeatMap((value) => !value)}
-                style={styles.v35JourneyPrimary}
-              >
-                <Text style={styles.v35JourneyPrimaryArrow}>{showNextBeatMap ? '↙' : '↗'}</Text>
-                <View style={styles.v35JourneyPrimaryDivider} />
-                <Text style={styles.v35JourneyPrimaryText}>{showNextBeatMap ? '收起地圖' : '小地圖'}</Text>
-              </Pressable>
               <Pressable onPress={() => openCamera('free')} style={styles.v35JourneyCamera}>
-                <Text style={styles.v35JourneyCameraText}>◎</Text>
+                <Text style={styles.v35JourneyCameraIcon}>📷</Text>
+                <Text style={styles.v35JourneyCameraText}>拍照</Text>
+                <Text style={styles.v35JourneyCameraArrow}>→</Text>
               </Pressable>
               {devMode && (
                 <Pressable onPress={simulateNextBeat} style={styles.v41DevAdvance}>
