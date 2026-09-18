@@ -43,7 +43,9 @@ const INK = '#11110F';
 const BONE = '#F1EFE7';
 const MUTED = '#B7B2A8';
 const SIGNAL = '#FF5A36';
-const EXPOSURE_SLIDER_WIDTH = 108;
+const FOCUS_YELLOW = '#FFD60A';
+const EXPOSURE_RAIL_HEIGHT = 132;
+const EXPOSURE_RAIL_WIDTH = 28;
 const ABSOLUTE_FILL = {
   position: 'absolute' as const,
   top: 0,
@@ -89,6 +91,7 @@ export default function DetourCameraScreen() {
   const shutterScale = useRef(new Animated.Value(1)).current;
   const focusOpacity = useRef(new Animated.Value(0)).current;
   const focusScale = useRef(new Animated.Value(1)).current;
+  const promptOpacity = useRef(new Animated.Value(1)).current;
 
   const { hasPermission, canRequestPermission, requestPermission } =
     useCameraPermission();
@@ -109,6 +112,7 @@ export default function DetourCameraScreen() {
   const [exposure, setExposure] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
+  const [hasFocused, setHasFocused] = useState(false);
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const pinchStartDistanceRef = useRef(0);
   const pinchStartZoomRef = useRef(1);
@@ -128,6 +132,9 @@ export default function DetourCameraScreen() {
   useEffect(() => {
     setCameraReady(false);
     setMountError(null);
+    setHasFocused(false);
+    focusOpacity.stopAnimation();
+    focusOpacity.setValue(0);
     if (!device) return;
     setZoom(clampZoom(1, device.minZoom, device.maxZoom));
     setExposure(
@@ -136,6 +143,20 @@ export default function DetourCameraScreen() {
         : 0
     );
   }, [device]);
+
+  useEffect(() => {
+    if (!cameraReady) return;
+    promptOpacity.stopAnimation();
+    promptOpacity.setValue(1);
+    const timer = setTimeout(() => {
+      Animated.timing(promptOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [cameraReady, missionTitle, promptOpacity]);
 
   useEffect(() => {
     if (!device) return;
@@ -168,18 +189,26 @@ export default function DetourCameraScreen() {
     1,
     Math.max(0, (exposure - exposureMin) / exposureRange)
   );
+  const exposureRailLeft = Math.max(
+    8,
+    Math.min(
+      Math.max(8, cameraLayout.width - EXPOSURE_RAIL_WIDTH - 8),
+      focusPoint.x > cameraLayout.width - 100
+        ? focusPoint.x - 72
+        : focusPoint.x + 44
+    )
+  );
+  const exposureRailTop = Math.max(
+    8,
+    Math.min(
+      Math.max(8, cameraLayout.height - EXPOSURE_RAIL_HEIGHT - 8),
+      focusPoint.y - EXPOSURE_RAIL_HEIGHT / 2
+    )
+  );
 
-  function formatExposure(value: number) {
-    if (Math.abs(value) < 0.01) return '0';
-    return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
-  }
-
-  function updateExposureFromSlider(locationX: number) {
+  function updateExposureFromRail(locationY: number) {
     if (!device?.supportsExposureBias) return;
-    const progress = Math.min(
-      1,
-      Math.max(0, locationX / EXPOSURE_SLIDER_WIDTH)
-    );
+    const progress = Math.min(1, Math.max(0, 1 - locationY / EXPOSURE_RAIL_HEIGHT));
     const next = exposureMin + progress * exposureRange;
     setExposure(Number(next.toFixed(2)));
   }
@@ -224,6 +253,9 @@ export default function DetourCameraScreen() {
   function switchFacing() {
     setFacing((current) => current === 'back' ? 'front' : 'back');
     setCameraReady(false);
+    setHasFocused(false);
+    focusOpacity.stopAnimation();
+    focusOpacity.setValue(0);
     setZoom(1);
     setFlashMode('off');
     void Haptics.selectionAsync();
@@ -281,26 +313,17 @@ export default function DetourCameraScreen() {
     if (y < squareTop || y > squareTop + cameraLayout.width) return;
 
     setFocusPoint({ x, y });
+    setHasFocused(true);
     focusOpacity.stopAnimation();
     focusScale.stopAnimation();
     focusOpacity.setValue(1);
     focusScale.setValue(1.25);
-    Animated.parallel([
-      Animated.spring(focusScale, {
-        toValue: 1,
-        speed: 28,
-        bounciness: 2,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.delay(700),
-        Animated.timing(focusOpacity, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
+    Animated.spring(focusScale, {
+      toValue: 1,
+      speed: 28,
+      bounciness: 2,
+      useNativeDriver: true,
+    }).start();
 
     try {
       await cameraRef.current.focusTo(
@@ -540,6 +563,33 @@ export default function DetourCameraScreen() {
         <View style={[styles.focusCorner, styles.focusCornerBottomLeft]} />
         <View style={[styles.focusCorner, styles.focusCornerBottomRight]} />
       </Animated.View>
+      {hasFocused && device?.supportsExposureBias && (
+        <View
+          accessibilityLabel="調整曝光"
+          style={[
+            styles.focusExposureRail,
+            { left: exposureRailLeft, top: exposureRailTop },
+          ]}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onTouchStart={(event) => {
+            updateExposureFromRail(event.nativeEvent.locationY);
+          }}
+          onTouchMove={(event) => {
+            updateExposureFromRail(event.nativeEvent.locationY);
+          }}
+        >
+          <View style={styles.focusExposureTrack} />
+          <View
+            style={[
+              styles.focusExposureThumb,
+              { top: EXPOSURE_RAIL_HEIGHT * (1 - exposureProgress) - 7 },
+            ]}
+          >
+            <Text style={styles.focusExposureSun}>☀︎</Text>
+          </View>
+        </View>
+      )}
 
       <View pointerEvents="none" style={styles.squareMaskWrap}>
         <View style={styles.squareMaskBand} />
@@ -570,10 +620,13 @@ export default function DetourCameraScreen() {
           </View>
         </View>
 
-        <View style={styles.promptCard}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.promptCard, { opacity: promptOpacity }]}
+        >
           <View style={styles.promptDot} />
           <Text numberOfLines={2} style={styles.promptTitle}>{missionTitle}</Text>
-        </View>
+        </Animated.View>
 
         <View style={styles.cameraControlZone}>
           {facing === 'back' && lensZoomLevels.length > 1 && (
@@ -589,50 +642,7 @@ export default function DetourCameraScreen() {
             </View>
           )}
           <View style={styles.cameraBottom}>
-            <View style={styles.statusColumn}>
-              {device?.supportsExposureBias ? (
-                <>
-                  <Text style={styles.exposureLabel}>
-                    曝光 {formatExposure(exposure)}
-                  </Text>
-                  <View
-                    accessibilityLabel="調整曝光"
-                    style={styles.exposureSlider}
-                    onStartShouldSetResponder={() => true}
-                    onMoveShouldSetResponder={() => true}
-                    onTouchStart={(event) => {
-                      updateExposureFromSlider(
-                        event.nativeEvent.locationX
-                      );
-                    }}
-                    onTouchMove={(event) => {
-                      updateExposureFromSlider(
-                        event.nativeEvent.locationX
-                      );
-                    }}
-                  >
-                    <View style={styles.exposureTrack} />
-                    <View
-                      style={[
-                        styles.exposureProgress,
-                        { width: EXPOSURE_SLIDER_WIDTH * exposureProgress },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.exposureThumb,
-                        {
-                          left:
-                            EXPOSURE_SLIDER_WIDTH * exposureProgress - 5,
-                        },
-                      ]}
-                    />
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.exposureLabel}>自動曝光</Text>
-              )}
-            </View>
+            <View style={styles.statusColumn} />
 
             <Animated.View style={{ transform: [{ scale: shutterScale }] }}>
               <Pressable
@@ -690,11 +700,15 @@ const styles = StyleSheet.create({
   cameraLoading: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center' },
   focusLayer: { ...ABSOLUTE_FILL, zIndex: 2 },
   focusRing: { position: 'absolute', width: 68, height: 68, zIndex: 3 },
-  focusCorner: { position: 'absolute', width: 17, height: 17, borderColor: BONE },
+  focusCorner: { position: 'absolute', width: 17, height: 17, borderColor: FOCUS_YELLOW },
   focusCornerTopLeft: { top: 0, left: 0, borderTopWidth: 2, borderLeftWidth: 2 },
   focusCornerTopRight: { top: 0, right: 0, borderTopWidth: 2, borderRightWidth: 2 },
   focusCornerBottomLeft: { bottom: 0, left: 0, borderBottomWidth: 2, borderLeftWidth: 2 },
   focusCornerBottomRight: { bottom: 0, right: 0, borderBottomWidth: 2, borderRightWidth: 2 },
+  focusExposureRail: { position: 'absolute', width: EXPOSURE_RAIL_WIDTH, height: EXPOSURE_RAIL_HEIGHT, alignItems: 'center', zIndex: 4 },
+  focusExposureTrack: { position: 'absolute', top: 7, bottom: 7, width: 2, borderRadius: 1, backgroundColor: 'rgba(255,214,10,0.72)' },
+  focusExposureThumb: { position: 'absolute', left: 7, width: 14, height: 14, borderRadius: 7, backgroundColor: FOCUS_YELLOW, alignItems: 'center', justifyContent: 'center' },
+  focusExposureSun: { fontSize: 11, lineHeight: 13, color: INK },
   squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
   squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
   squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
@@ -718,12 +732,7 @@ const styles = StyleSheet.create({
   lensButtonText: { fontSize: 11, fontWeight: '700', color: BONE },
   lensButtonTextActive: { color: INK },
   cameraBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusColumn: { width: EXPOSURE_SLIDER_WIDTH, gap: 5 },
-  exposureLabel: { fontSize: 9, letterSpacing: 0.8, color: BONE },
-  exposureSlider: { width: EXPOSURE_SLIDER_WIDTH, height: 24, justifyContent: 'center' },
-  exposureTrack: { position: 'absolute', left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(241,239,231,0.34)' },
-  exposureProgress: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: BONE },
-  exposureThumb: { position: 'absolute', top: 7, width: 10, height: 10, borderRadius: 5, backgroundColor: BONE },
+  statusColumn: { width: 108 },
   errorText: { fontSize: 7, lineHeight: 12, color: SIGNAL },
   shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: BONE, alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: BONE },
