@@ -130,6 +130,7 @@ export function DetourHomeView({
     replaceActiveSideEvent,
     replaceFailedDestination,
     openCamera,
+    simulateNextBeat,
     completeDetour,
   } = controller;
 
@@ -139,6 +140,7 @@ export function DetourHomeView({
   const completionIris = useRef(new Animated.Value(1)).current;
   const [completionIrisActive, setCompletionIrisActive] = useState(false);
   const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] = useState(false);
+  const [liveAlbumVisible, setLiveAlbumVisible] = useState(false);
   const arrivalPhotoStartCountRef = useRef(0);
 
   const printingLayout = useMemo(() => {
@@ -934,7 +936,15 @@ export function DetourHomeView({
                 <Text style={styles.v35JourneyCameraArrow}>→</Text>
               </Pressable>
               {photos.length > 0 && (
-                <View accessible accessibilityLabel="即時相簿" style={styles.v35JourneyAlbum}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="開啟即時相簿"
+                  onPress={() => setLiveAlbumVisible(true)}
+                  style={({ pressed }) => [
+                    styles.v35JourneyAlbum,
+                    pressed && styles.v35JourneyAlbumPressed,
+                  ]}
+                >
                   <Image
                     source={{ uri: photos[photos.length - 1].uri }}
                     style={styles.v35JourneyAlbumImage}
@@ -944,9 +954,72 @@ export function DetourHomeView({
                       <Text style={styles.v35JourneyAlbumCountText}>{photos.length}</Text>
                     </View>
                   )}
-                </View>
+                </Pressable>
               )}
             </View>
+
+            {devMode && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="室內模式，走一段路"
+                onPress={() => void simulateNextBeat()}
+                style={({ pressed }) => [
+                  styles.v35DevAdvance,
+                  pressed && styles.v35JourneyPressed,
+                ]}
+              >
+                <Text style={styles.v35DevAdvanceText}>室內模式，走一段路</Text>
+              </Pressable>
+            )}
+
+            <Modal
+              visible={liveAlbumVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setLiveAlbumVisible(false)}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉即時相簿"
+                onPress={() => setLiveAlbumVisible(false)}
+                style={styles.v35JourneyAlbumOverlay}
+              >
+                <Pressable
+                  onPress={(event) => event.stopPropagation()}
+                  style={styles.v35JourneyAlbumCard}
+                >
+                  <View style={styles.v35JourneyAlbumHeader}>
+                    <View>
+                      <Text style={styles.v35JourneyAlbumTitle}>即時相簿</Text>
+                      <Text style={styles.v35JourneyAlbumMeta}>{photos.length} 張照片</Text>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="關閉"
+                      onPress={() => setLiveAlbumVisible(false)}
+                      style={styles.v35JourneyAlbumClose}
+                    >
+                      <Text style={styles.v35JourneyAlbumCloseText}>×</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.v35JourneyAlbumGrid}>
+                    {photos
+                      .slice(-6)
+                      .reverse()
+                      .map((photo) => (
+                        <Image
+                          key={photo.id}
+                          source={{ uri: photo.uri }}
+                          style={styles.v35JourneyAlbumGridImage}
+                        />
+                      ))}
+                    {Array.from({ length: Math.max(0, 6 - photos.length) }).map((_, index) => (
+                      <View key={`empty-${index}`} style={styles.v35JourneyAlbumGridEmpty} />
+                    ))}
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
           </View>
         )}
 
