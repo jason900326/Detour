@@ -221,7 +221,11 @@ export default function DetourCameraScreen() {
     };
     exposureDragRef.current = drag;
     const movement = (drag.startY - locationY) / EXPOSURE_RAIL_HEIGHT;
-    const next = drag.startExposure + movement * exposureRange * EXPOSURE_DRAG_DAMPING;
+    const next = clampZoom(
+      drag.startExposure + movement * exposureRange * EXPOSURE_DRAG_DAMPING,
+      exposureMin,
+      exposureMax
+    );
     setExposure(Number(next.toFixed(2)));
   }
 
