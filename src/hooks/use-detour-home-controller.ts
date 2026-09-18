@@ -73,6 +73,7 @@ import {
 
 import {
   CAMERA_RESULT_KEY,
+  ACTIVE_JOURNEY_KEY,
   DEFAULT_PREFERENCES,
   FREE_CAMERA_MISSION,
   MOODS,
@@ -92,6 +93,37 @@ import {
   type Stage,
   type WalkingPace,
 } from '../lib/app-model';
+
+type ActiveJourneySnapshot = {
+  version: 1;
+  stage: 'journey' | 'arrival';
+  selectedTime: string | null;
+  selectedMood: MoodId | null;
+  selectedColor: ColorChoice | null;
+  latitude: number | null;
+  longitude: number | null;
+  detourStart: GeoPoint | null;
+  activeTrace: GeoPoint[];
+  plan: JourneyPlan;
+  selectedScene: SceneCandidate;
+  walkingRoute: WalkingRoute;
+  navigationRoute: NavigationRoute;
+  navigationBeatIndex: number;
+  beatRemainingMeters: number;
+  deviceHeading: number;
+  detourStartedAt: string;
+  sceneFailures: SessionSceneFailure[];
+  activeSideEvent: SideEvent | null;
+  sideEventSlot: number;
+  sideEventsShown: number;
+  sideEventReplacements: number;
+  sideEventSeenIds: string[];
+  previousSideEventGaze: SideEventGaze | null;
+  traveledMeters: number;
+  lightContext: LightContext | null;
+  photos: SessionPhoto[];
+  effectiveMovingSeconds: number;
+};
 
 import { applyFoodDestinationWeight } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
@@ -489,6 +521,102 @@ export function useDetourHomeController() {
     stageRef.current = stage;
   }, [stage]);
 
+  function buildActiveJourneySnapshot(): ActiveJourneySnapshot | null {
+    if (
+      (stage !== 'journey' && stage !== 'arrival') ||
+      !detourStartedAt ||
+      !plan ||
+      !selectedScene ||
+      !walkingRoute ||
+      !navigationRoute
+    ) {
+      return null;
+    }
+
+    return {
+      version: 1,
+      stage,
+      selectedTime,
+      selectedMood,
+      selectedColor,
+      latitude,
+      longitude,
+      detourStart,
+      activeTrace,
+      plan,
+      selectedScene,
+      walkingRoute,
+      navigationRoute,
+      navigationBeatIndex,
+      beatRemainingMeters,
+      deviceHeading,
+      detourStartedAt,
+      sceneFailures,
+      activeSideEvent,
+      sideEventSlot,
+      sideEventsShown,
+      sideEventReplacements,
+      sideEventSeenIds: [...sideEventSeenIdsRef.current],
+      previousSideEventGaze: previousSideEventGazeRef.current,
+      traveledMeters,
+      lightContext,
+      photos,
+      effectiveMovingSeconds: effectiveMovingSecondsRef.current,
+    };
+  }
+
+  async function persistActiveJourneySnapshot() {
+    const snapshot = buildActiveJourneySnapshot();
+    if (!snapshot) return;
+
+    try {
+      await AsyncStorage.setItem(ACTIVE_JOURNEY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn('DETOUR active journey snapshot failed:', error);
+    }
+  }
+
+  useEffect(() => {
+    const snapshot = buildActiveJourneySnapshot();
+    if (!snapshot) return;
+
+    const timer = setTimeout(() => {
+      void AsyncStorage.setItem(
+        ACTIVE_JOURNEY_KEY,
+        JSON.stringify(snapshot)
+      ).catch((error) => {
+        console.warn('DETOUR active journey snapshot failed:', error);
+      });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeSideEvent,
+    activeTrace,
+    beatRemainingMeters,
+    detourStart,
+    detourStartedAt,
+    deviceHeading,
+    latitude,
+    lightContext,
+    longitude,
+    navigationBeatIndex,
+    navigationRoute,
+    photos,
+    plan,
+    sceneFailures,
+    selectedColor,
+    selectedMood,
+    selectedScene,
+    selectedTime,
+    sideEventReplacements,
+    sideEventSlot,
+    sideEventsShown,
+    stage,
+    traveledMeters,
+    walkingRoute,
+  ]);
+
   useEffect(() => {
     if (stage !== 'journey' || !detourStartedAt) return;
 
@@ -676,6 +804,86 @@ export function useDetourHomeController() {
     return () => clearTimeout(timer);
   }, [stage]);
 
+  async function restoreActiveJourney(raw: string | null) {
+    if (!raw) return false;
+
+    try {
+      const snapshot = JSON.parse(raw) as ActiveJourneySnapshot;
+      if (
+        snapshot.version !== 1 ||
+        (snapshot.stage !== 'journey' && snapshot.stage !== 'arrival') ||
+        !snapshot.plan ||
+        !snapshot.selectedScene ||
+        !snapshot.walkingRoute ||
+        !snapshot.navigationRoute ||
+        !snapshot.detourStartedAt
+      ) {
+        return false;
+      }
+
+      setSelectedTime(snapshot.selectedTime);
+      setSelectedMood(snapshot.selectedMood);
+      setSelectedColor(snapshot.selectedColor);
+      setLatitude(snapshot.latitude);
+      setLongitude(snapshot.longitude);
+      setDetourStart(snapshot.detourStart);
+      setActiveTrace(snapshot.activeTrace ?? []);
+      setPlan(snapshot.plan);
+      planRef.current = snapshot.plan;
+      setSelectedScene(snapshot.selectedScene);
+      selectedSceneRef.current = snapshot.selectedScene;
+      setWalkingRoute(snapshot.walkingRoute);
+      setNavigationRoute(snapshot.navigationRoute);
+      navigationRouteRef.current = snapshot.navigationRoute;
+      setNavigationBeatIndex(snapshot.navigationBeatIndex ?? 0);
+      navigationBeatIndexRef.current = snapshot.navigationBeatIndex ?? 0;
+      setBeatRemainingMeters(snapshot.beatRemainingMeters ?? 0);
+      beatRemainingMetersRef.current = snapshot.beatRemainingMeters ?? 0;
+      setDeviceHeading(snapshot.deviceHeading ?? 0);
+      setDetourStartedAt(snapshot.detourStartedAt);
+      detourStartedAtRef.current = snapshot.detourStartedAt;
+      setSceneFailures(snapshot.sceneFailures ?? []);
+      sceneFailuresRef.current = snapshot.sceneFailures ?? [];
+      setActiveSideEvent(snapshot.activeSideEvent ?? null);
+      activeSideEventRef.current = snapshot.activeSideEvent ?? null;
+      setSideEventSlot(snapshot.sideEventSlot ?? 0);
+      sideEventSlotRef.current = snapshot.sideEventSlot ?? 0;
+      setSideEventsShown(snapshot.sideEventsShown ?? 0);
+      sideEventsShownRef.current = snapshot.sideEventsShown ?? 0;
+      setSideEventReplacements(snapshot.sideEventReplacements ?? 0);
+      sideEventReplacementsRef.current = snapshot.sideEventReplacements ?? 0;
+      sideEventSeenIdsRef.current = new Set(snapshot.sideEventSeenIds ?? []);
+      previousSideEventGazeRef.current = snapshot.previousSideEventGaze ?? null;
+      setTraveledMeters(snapshot.traveledMeters ?? 0);
+      traveledMetersRef.current = snapshot.traveledMeters ?? 0;
+      setLightContext(snapshot.lightContext ?? null);
+      setPhotos(snapshot.photos ?? []);
+      effectiveMovingSecondsRef.current = snapshot.effectiveMovingSeconds ?? 0;
+      lastTracePointRef.current =
+        snapshot.activeTrace?.[snapshot.activeTrace.length - 1] ??
+        snapshot.detourStart;
+      setShowNextBeatMap(false);
+      setRerouteFailed(false);
+      setIsRerouting(false);
+      setQuestPulse(null);
+
+      setStage(snapshot.stage);
+      stageRef.current = snapshot.stage;
+
+      if (snapshot.stage === 'journey') {
+        lastMovementSampleAtRef.current = Date.now();
+        await startTraceWatcher();
+        await startHeadingWatcher();
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('DETOUR active journey restore failed:', error);
+      await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+      return false;
+    }
+  }
+
   async function initializeApp() {
     await loadPassport();
 
@@ -690,6 +898,7 @@ export function useDetourHomeController() {
 
     try {
       const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
+      const activeJourneyRaw = await AsyncStorage.getItem(ACTIVE_JOURNEY_KEY);
       const parsed = raw
         ? (JSON.parse(raw) as Partial<DetourPreferences>)
         : null;
@@ -700,6 +909,13 @@ export function useDetourHomeController() {
 
       setPreferences(nextPreferences);
       setDevMode(nextPreferences.indoorTest);
+
+      if (
+        nextPreferences.onboardingComplete &&
+        (await restoreActiveJourney(activeJourneyRaw))
+      ) {
+        return;
+      }
 
       const nextStage: Stage =
         nextPreferences.onboardingComplete ? 'time' : 'onboarding';
@@ -963,6 +1179,7 @@ export function useDetourHomeController() {
 
   function resetDetour() {
     const testSessionId = playtestSessionIdRef.current;
+    void AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
 
     if (testSessionId && ABANDONABLE_STAGES.has(stageRef.current)) {
       void updatePlaytestSession(testSessionId, {
@@ -2210,6 +2427,8 @@ export function useDetourHomeController() {
   }
 
   async function openCamera(source: CameraSource) {
+    await persistActiveJourneySnapshot();
+
     const colorWalkCameraMission: Mission =
       selectedMood === 'color' && selectedColor
         ? {
@@ -2363,6 +2582,7 @@ export function useDetourHomeController() {
     const nextPassport = [entry, ...passport];
     setLastCompletedEntry(entry);
     await savePassport(nextPassport);
+    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     transitionTo('developing');
