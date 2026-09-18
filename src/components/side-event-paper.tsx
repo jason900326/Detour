@@ -410,9 +410,18 @@ export function SideEventPaper({
       duration: 110,
       useNativeDriver: true,
     }).start(() => {
-      void requestFound();
+      crumple.value = withTiming(
+        1,
+        {
+          duration: 400,
+          easing: Easing.inOut(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(requestFound)();
+        }
+      );
     });
-  }, [copyOpacity, interaction, requestFound]);
+  }, [copyOpacity, crumple, interaction, requestFound]);
 
   const replace = useCallback(() => {
     if (interaction) return;
@@ -465,7 +474,6 @@ export function SideEventPaper({
           },
         ]}
       >
-        <Text style={styles.kicker}>路上找找看</Text>
         <Text numberOfLines={2} style={styles.title}>
           {displayedEvent.title}
         </Text>
@@ -521,19 +529,12 @@ const styles = StyleSheet.create({
     top: 27,
     bottom: 15,
   },
-  kicker: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    color: SIGNAL,
-  },
   title: {
-    marginTop: 7,
+    marginTop: 0,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '900',
-    color: INK,
+    color: SIGNAL,
   },
   instruction: {
     marginTop: 5,
@@ -558,25 +559,24 @@ const styles = StyleSheet.create({
   },
   foundButton: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingRight: 12,
     borderRightWidth: 1,
     borderRightColor: 'rgba(98, 94, 86, 0.22)',
   },
   foundText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900',
     color: INK,
   },
   replaceButton: {
-    flex: 1.25,
-    alignItems: 'flex-end',
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 12,
   },
   replaceText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '900',
     color: MUTED,
   },
   pressed: {
