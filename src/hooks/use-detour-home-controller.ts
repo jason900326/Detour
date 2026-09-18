@@ -26,7 +26,6 @@ import {
   type Mission,
   type MoodId,
   type SideEvent,
-  type SideEventContext,
   type SideEventGaze,
 } from '../lib/journey-engine';
 
@@ -74,6 +73,7 @@ import {
 
 import {
   CAMERA_RESULT_KEY,
+  ACTIVE_JOURNEY_KEY,
   DEFAULT_PREFERENCES,
   FREE_CAMERA_MISSION,
   MOODS,
@@ -93,6 +93,38 @@ import {
   type Stage,
   type WalkingPace,
 } from '../lib/app-model';
+
+type ActiveJourneySnapshot = {
+  version: 1;
+  stage: 'journey' | 'arrival';
+  selectedTime: string | null;
+  selectedMood: MoodId | null;
+  selectedColor: ColorChoice | null;
+  latitude: number | null;
+  longitude: number | null;
+  detourStart: GeoPoint | null;
+  activeTrace: GeoPoint[];
+  plan: JourneyPlan;
+  selectedScene: SceneCandidate;
+  walkingRoute: WalkingRoute;
+  navigationRoute: NavigationRoute;
+  navigationBeatIndex: number;
+  beatRemainingMeters: number;
+  deviceHeading: number;
+  detourStartedAt: string;
+  sceneFailures: SessionSceneFailure[];
+  activeSideEvent: SideEvent | null;
+  sideEventPhotoConfirmed: boolean;
+  sideEventSlot: number;
+  sideEventsShown: number;
+  sideEventReplacements: number;
+  sideEventSeenIds: string[];
+  previousSideEventGaze: SideEventGaze | null;
+  traveledMeters: number;
+  lightContext: LightContext | null;
+  photos: SessionPhoto[];
+  effectiveMovingSeconds: number;
+};
 
 import { applyFoodDestinationWeight } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
@@ -146,10 +178,12 @@ export function useDetourHomeController() {
   const [rerouteFailed, setRerouteFailed] = useState(false);
   const [rerouteCount, setRerouteCount] = useState(0);
   const [detourStartedAt, setDetourStartedAt] = useState<string | null>(null);
+  const [elapsedJourneySeconds, setElapsedJourneySeconds] = useState(0);
   const [sceneFailures, setSceneFailures] = useState<SessionSceneFailure[]>([]);
   const [replacementLoading, setReplacementLoading] = useState(false);
 
   const [activeSideEvent, setActiveSideEvent] = useState<SideEvent | null>(null);
+  const [sideEventPhotoConfirmed, setSideEventPhotoConfirmed] = useState(false);
   const [sideEventSlot, setSideEventSlot] = useState(0);
   const [sideEventsShown, setSideEventsShown] = useState(0);
   const [sideEventReplacements, setSideEventReplacements] = useState(0);
@@ -158,6 +192,9 @@ export function useDetourHomeController() {
   const [developerToolsUnlocked, setDeveloperToolsUnlocked] = useState(false);
   const [lightContext, setLightContext] = useState<LightContext | null>(null);
   const [photos, setPhotos] = useState<SessionPhoto[]>([]);
+  const [recoverySnapshot, setRecoverySnapshot] =
+    useState<ActiveJourneySnapshot | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   const {
     passport,
@@ -489,6 +526,119 @@ export function useDetourHomeController() {
     stageRef.current = stage;
   }, [stage]);
 
+  function buildActiveJourneySnapshot(): ActiveJourneySnapshot | null {
+    if (
+      (stage !== 'journey' && stage !== 'arrival') ||
+      !detourStartedAt ||
+      !plan ||
+      !selectedScene ||
+      !walkingRoute ||
+      !navigationRoute
+    ) {
+      return null;
+    }
+
+    return {
+      version: 1,
+      stage,
+      selectedTime,
+      selectedMood,
+      selectedColor,
+      latitude,
+      longitude,
+      detourStart,
+      activeTrace,
+      plan,
+      selectedScene,
+      walkingRoute,
+      navigationRoute,
+      navigationBeatIndex,
+      beatRemainingMeters,
+      deviceHeading,
+      detourStartedAt,
+      sceneFailures,
+      activeSideEvent,
+      sideEventPhotoConfirmed,
+      sideEventSlot,
+      sideEventsShown,
+      sideEventReplacements,
+      sideEventSeenIds: [...sideEventSeenIdsRef.current],
+      previousSideEventGaze: previousSideEventGazeRef.current,
+      traveledMeters,
+      lightContext,
+      photos,
+      effectiveMovingSeconds: effectiveMovingSecondsRef.current,
+    };
+  }
+
+  async function persistActiveJourneySnapshot() {
+    const snapshot = buildActiveJourneySnapshot();
+    if (!snapshot) return;
+
+    try {
+      await AsyncStorage.setItem(ACTIVE_JOURNEY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn('DETOUR active journey snapshot failed:', error);
+    }
+  }
+
+  useEffect(() => {
+    const snapshot = buildActiveJourneySnapshot();
+    if (!snapshot) return;
+
+    const timer = setTimeout(() => {
+      void AsyncStorage.setItem(
+        ACTIVE_JOURNEY_KEY,
+        JSON.stringify(snapshot)
+      ).catch((error) => {
+        console.warn('DETOUR active journey snapshot failed:', error);
+      });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeSideEvent,
+    activeTrace,
+    beatRemainingMeters,
+    detourStart,
+    detourStartedAt,
+    deviceHeading,
+    latitude,
+    lightContext,
+    longitude,
+    navigationBeatIndex,
+    navigationRoute,
+    photos,
+    plan,
+    sceneFailures,
+    selectedColor,
+    selectedMood,
+    selectedScene,
+    selectedTime,
+    sideEventPhotoConfirmed,
+    sideEventReplacements,
+    sideEventSlot,
+    sideEventsShown,
+    stage,
+    traveledMeters,
+    walkingRoute,
+  ]);
+
+  useEffect(() => {
+    if (stage !== 'journey' || !detourStartedAt) return;
+
+    const startedAtMs = new Date(detourStartedAt).getTime();
+    const updateElapsed = () => {
+      setElapsedJourneySeconds(
+        Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+      );
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [detourStartedAt, stage]);
+
   useEffect(() => {
     planRef.current = plan;
   }, [plan]);
@@ -661,6 +811,119 @@ export function useDetourHomeController() {
     return () => clearTimeout(timer);
   }, [stage]);
 
+  function parseActiveJourneySnapshot(raw: string | null) {
+    if (!raw) return null;
+
+    try {
+      const snapshot = JSON.parse(raw) as ActiveJourneySnapshot;
+      if (
+        snapshot.version !== 1 ||
+        (snapshot.stage !== 'journey' && snapshot.stage !== 'arrival') ||
+        !snapshot.plan ||
+        !snapshot.selectedScene ||
+        !snapshot.walkingRoute ||
+        !snapshot.navigationRoute ||
+        !snapshot.detourStartedAt
+      ) {
+        return null;
+      }
+
+      return snapshot;
+    } catch (error) {
+      console.warn('DETOUR active journey snapshot parse failed:', error);
+      return null;
+    }
+  }
+
+  async function restoreActiveJourney(snapshot: ActiveJourneySnapshot) {
+    try {
+
+      setSelectedTime(snapshot.selectedTime);
+      setSelectedMood(snapshot.selectedMood);
+      setSelectedColor(snapshot.selectedColor);
+      setLatitude(snapshot.latitude);
+      setLongitude(snapshot.longitude);
+      setDetourStart(snapshot.detourStart);
+      setActiveTrace(snapshot.activeTrace ?? []);
+      setPlan(snapshot.plan);
+      planRef.current = snapshot.plan;
+      setSelectedScene(snapshot.selectedScene);
+      selectedSceneRef.current = snapshot.selectedScene;
+      setWalkingRoute(snapshot.walkingRoute);
+      setNavigationRoute(snapshot.navigationRoute);
+      navigationRouteRef.current = snapshot.navigationRoute;
+      setNavigationBeatIndex(snapshot.navigationBeatIndex ?? 0);
+      navigationBeatIndexRef.current = snapshot.navigationBeatIndex ?? 0;
+      setBeatRemainingMeters(snapshot.beatRemainingMeters ?? 0);
+      beatRemainingMetersRef.current = snapshot.beatRemainingMeters ?? 0;
+      setDeviceHeading(snapshot.deviceHeading ?? 0);
+      setDetourStartedAt(snapshot.detourStartedAt);
+      detourStartedAtRef.current = snapshot.detourStartedAt;
+      setSceneFailures(snapshot.sceneFailures ?? []);
+      sceneFailuresRef.current = snapshot.sceneFailures ?? [];
+      setActiveSideEvent(snapshot.activeSideEvent ?? null);
+      activeSideEventRef.current = snapshot.activeSideEvent ?? null;
+      setSideEventPhotoConfirmed(snapshot.sideEventPhotoConfirmed ?? false);
+      setSideEventSlot(snapshot.sideEventSlot ?? 0);
+      sideEventSlotRef.current = snapshot.sideEventSlot ?? 0;
+      setSideEventsShown(snapshot.sideEventsShown ?? 0);
+      sideEventsShownRef.current = snapshot.sideEventsShown ?? 0;
+      setSideEventReplacements(snapshot.sideEventReplacements ?? 0);
+      sideEventReplacementsRef.current = snapshot.sideEventReplacements ?? 0;
+      sideEventSeenIdsRef.current = new Set(snapshot.sideEventSeenIds ?? []);
+      previousSideEventGazeRef.current = snapshot.previousSideEventGaze ?? null;
+      setTraveledMeters(snapshot.traveledMeters ?? 0);
+      traveledMetersRef.current = snapshot.traveledMeters ?? 0;
+      setLightContext(snapshot.lightContext ?? null);
+      setPhotos(snapshot.photos ?? []);
+      effectiveMovingSecondsRef.current = snapshot.effectiveMovingSeconds ?? 0;
+      lastTracePointRef.current =
+        snapshot.activeTrace?.[snapshot.activeTrace.length - 1] ??
+        snapshot.detourStart;
+      setShowNextBeatMap(false);
+      setRerouteFailed(false);
+      setIsRerouting(false);
+      setQuestPulse(null);
+
+      setStage(snapshot.stage);
+      stageRef.current = snapshot.stage;
+
+      if (snapshot.stage === 'journey') {
+        lastMovementSampleAtRef.current = Date.now();
+        await startTraceWatcher();
+        await startHeadingWatcher();
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('DETOUR active journey restore failed:', error);
+      await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+      return false;
+    }
+  }
+
+  async function continueRecoveredJourney() {
+    if (!recoverySnapshot || recoveryLoading) return;
+
+    setRecoveryLoading(true);
+    const restored = await restoreActiveJourney(recoverySnapshot);
+    if (restored) setRecoverySnapshot(null);
+    setRecoveryLoading(false);
+  }
+
+  async function discardRecoveredJourney() {
+    if (recoveryLoading) return;
+
+    setRecoveryLoading(true);
+    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+    setRecoverySnapshot(null);
+    setRecoveryLoading(false);
+
+    const nextStage: Stage = preferences.onboardingComplete ? 'time' : 'onboarding';
+    setStage(nextStage);
+    stageRef.current = nextStage;
+  }
+
   async function initializeApp() {
     await loadPassport();
 
@@ -675,6 +938,7 @@ export function useDetourHomeController() {
 
     try {
       const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
+      const activeJourneyRaw = await AsyncStorage.getItem(ACTIVE_JOURNEY_KEY);
       const parsed = raw
         ? (JSON.parse(raw) as Partial<DetourPreferences>)
         : null;
@@ -685,6 +949,16 @@ export function useDetourHomeController() {
 
       setPreferences(nextPreferences);
       setDevMode(nextPreferences.indoorTest);
+
+      const parsedRecoverySnapshot = parseActiveJourneySnapshot(activeJourneyRaw);
+      if (nextPreferences.onboardingComplete && parsedRecoverySnapshot) {
+        setRecoverySnapshot(parsedRecoverySnapshot);
+        return;
+      }
+
+      if (activeJourneyRaw) {
+        await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+      }
 
       const nextStage: Stage =
         nextPreferences.onboardingComplete ? 'time' : 'onboarding';
@@ -934,6 +1208,7 @@ export function useDetourHomeController() {
   function resetSideEventRuntime() {
     setActiveSideEvent(null);
     activeSideEventRef.current = null;
+    setSideEventPhotoConfirmed(false);
     setSideEventSlot(0);
     sideEventSlotRef.current = 0;
     setSideEventsShown(0);
@@ -948,6 +1223,7 @@ export function useDetourHomeController() {
 
   function resetDetour() {
     const testSessionId = playtestSessionIdRef.current;
+    void AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
 
     if (testSessionId && ABANDONABLE_STAGES.has(stageRef.current)) {
       void updatePlaytestSession(testSessionId, {
@@ -996,6 +1272,7 @@ export function useDetourHomeController() {
     rerouteInFlightRef.current = false;
     setDetourStartedAt(null);
     detourStartedAtRef.current = null;
+    setElapsedJourneySeconds(0);
     setSceneFailures([]);
     sceneFailuresRef.current = [];
     setReplacementLoading(false);
@@ -1108,12 +1385,9 @@ export function useDetourHomeController() {
   );
 
   function remainingDetourMinutes() {
-    const startedAt = detourStartedAtRef.current;
-    if (!startedAt) return selectedMinutes || TIME_MIN;
-
-    const elapsedMinutes =
-      (Date.now() - new Date(startedAt).getTime()) / 60000;
-    return Math.max(1, (selectedMinutes || TIME_MIN) - elapsedMinutes);
+    // The selected time is a planning budget, not a deadline. A replacement
+    // destination should remain viable even when a real walk runs long.
+    return selectedMinutes || TIME_MIN;
   }
 
   function replacementDistanceBudget(minutesLeft: number) {
@@ -1132,24 +1406,6 @@ export function useDetourHomeController() {
     return 'wrong-now';
   }
 
-  function currentAllowedSideEventContexts(): SideEventContext[] {
-    const allowed: SideEventContext[] = ['safe-stop'];
-    const beat =
-      navigationRouteRef.current?.beats[navigationBeatIndexRef.current] ?? null;
-    const remaining = beatRemainingMetersRef.current;
-
-    if (
-      beat &&
-      ['left', 'right', 'slight-left', 'slight-right'].includes(beat.turn) &&
-      remaining >= 45 &&
-      remaining <= 140
-    ) {
-      allowed.push('corner');
-    }
-
-    return allowed;
-  }
-
   function presentSideEvent(options?: {
     advanceSlot?: boolean;
     countAsReplacement?: boolean;
@@ -1160,7 +1416,6 @@ export function useDetourHomeController() {
     const next = pickSideEvent({
       seenIds: sideEventSeenIdsRef.current,
       previousGaze: previousSideEventGazeRef.current,
-      allowedContexts: currentAllowedSideEventContexts(),
     });
 
     if (!next) return null;
@@ -1169,6 +1424,7 @@ export function useDetourHomeController() {
     previousSideEventGazeRef.current = next.gaze;
     activeSideEventRef.current = next;
     setActiveSideEvent(next);
+    setSideEventPhotoConfirmed(false);
 
     const nextShown = sideEventsShownRef.current + 1;
     sideEventsShownRef.current = nextShown;
@@ -1186,25 +1442,24 @@ export function useDetourHomeController() {
       setSideEventReplacements(nextCount);
     }
 
-    setQuestPulse('side');
-    setTimeout(() => setQuestPulse((pulse) => (pulse === 'side' ? null : pulse)), 700);
     return next;
   }
 
+  function clearActiveSideEvent() {
+    activeSideEventRef.current = null;
+    setActiveSideEvent(null);
+    setSideEventPhotoConfirmed(false);
+  }
+
   async function acknowledgeActiveSideEvent() {
-    const next = presentSideEvent();
-    if (next) {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (!activeSideEventRef.current) return;
+    clearActiveSideEvent();
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   async function replaceActiveSideEvent() {
     const next = presentSideEvent({ countAsReplacement: true });
     if (next) await Haptics.selectionAsync();
-  }
-
-  function refreshSideEventAfterPhoto() {
-    presentSideEvent();
   }
 
   function maybeTriggerSideEvent(currentPoint: GeoPoint) {
@@ -1219,6 +1474,8 @@ export function useDetourHomeController() {
     ) {
       return;
     }
+
+    if (activeSideEventRef.current) return;
 
     const slot = sideEventSlotRef.current;
     const window = currentPlan.profile.triggerWindows[slot];
@@ -1541,7 +1798,7 @@ export function useDetourHomeController() {
             beat.turn
           ) &&
           remainingOnBeat > 12 &&
-          remainingOnBeat <= 60 &&
+          remainingOnBeat <= 30 &&
           turnReminderBeatIdRef.current !== beat.id;
 
         if (shouldRemindForTurn) {
@@ -2216,6 +2473,8 @@ export function useDetourHomeController() {
   }
 
   async function openCamera(source: CameraSource) {
+    await persistActiveJourneySnapshot();
+
     const colorWalkCameraMission: Mission =
       selectedMood === 'color' && selectedColor
         ? {
@@ -2283,7 +2542,7 @@ export function useDetourHomeController() {
     );
 
     if (result.source === 'side') {
-      refreshSideEventAfterPhoto();
+      setSideEventPhotoConfirmed(true);
     }
   }
 
@@ -2369,6 +2628,7 @@ export function useDetourHomeController() {
     const nextPassport = [entry, ...passport];
     setLastCompletedEntry(entry);
     await savePassport(nextPassport);
+    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     transitionTo('developing');
@@ -2431,11 +2691,14 @@ export function useDetourHomeController() {
     setRerouteCount,
     detourStartedAt,
     setDetourStartedAt,
+    elapsedJourneySeconds,
+    setElapsedJourneySeconds,
     sceneFailures,
     setSceneFailures,
     replacementLoading,
     setReplacementLoading,
     activeSideEvent,
+    sideEventPhotoConfirmed,
     sideEventSlot,
     sideEventsShown,
     sideEventReplacements,
@@ -2449,6 +2712,8 @@ export function useDetourHomeController() {
     setLightContext,
     photos,
     setPhotos,
+    recoverySnapshot,
+    recoveryLoading,
     passport,
     setPassport,
     passportLoaded,
@@ -2592,6 +2857,8 @@ export function useDetourHomeController() {
     shareJourney,
     openCamera,
     handleCameraRouteResult,
+    continueRecoveredJourney,
+    discardRecoveredJourney,
     completeDetour,
   };
 }
