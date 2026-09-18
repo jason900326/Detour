@@ -27,8 +27,6 @@ import {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import type { SideEvent } from '../lib/journey-engine';
 import { INK, MUTED } from '../theme/detour-theme';
 
@@ -153,14 +151,11 @@ const SHADOW_COLORS = Array.from(
 export function SideEventPaper({
   event,
   onReplace,
-  devMode = false,
 }: {
   event: SideEvent;
   onReplace: () => void | Promise<void>;
-  devMode?: boolean;
 }) {
   const { width: screenWidth } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const width = Math.max(248, Math.min(396, screenWidth - 54));
   const paperFibers = useMemo(() => buildPaperFibers(width), [width]);
   const paperPulp = useMemo(() => buildPaperPulp(width), [width]);
@@ -534,13 +529,8 @@ export function SideEventPaper({
       style={[
         styles.host,
         {
-          left: (screenWidth - width) / 2,
           width,
           height: CANVAS_HEIGHT,
-          bottom: Math.max(
-            devMode ? 214 : 136,
-            insets.bottom + (devMode ? 184 : 108)
-          ),
         },
       ]}
     >
@@ -588,7 +578,8 @@ export function SideEventPaper({
 
 const styles = StyleSheet.create({
   host: {
-    position: 'absolute',
+    position: 'relative',
+    alignSelf: 'center',
     zIndex: 48,
   },
   replaceButton: {
