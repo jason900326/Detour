@@ -62,7 +62,6 @@ export function DetourHomeView({
     questPulse,
     isRerouting,
     replacementLoading,
-    activeSideEvent,
     devMode,
     developerToolsUnlocked,
     photos,
@@ -104,7 +103,6 @@ export function DetourHomeView({
     prepareDetourTicket,
     startDetour,
     simulateNextBeat,
-    replaceActiveSideEvent,
     replaceFailedDestination,
     openCamera,
     completeDetour,
@@ -878,34 +876,6 @@ export function DetourHomeView({
                 <Text style={styles.v35JourneyInstruction}>
                   {currentNavigationBeat.instruction || '先走這一段。'}
                 </Text>
-
-                {selectedMood !== 'color' && activeSideEvent && (
-                  <View style={[styles.v41ActiveFind, { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-                    <View style={styles.v41ActiveFindCopy}>
-                      <Text style={styles.v41ActiveFindLabel}>
-                        {activeSideEvent.kind === 'context' ? '小插曲' : '路上找找看'}
-                      </Text>
-                      <Text style={styles.v41ActiveFindTitle}>{activeSideEvent.title}</Text>
-                      {activeSideEvent.instruction ? (
-                        <Text style={{ marginTop: 5, color: BONE, opacity: 0.72, fontSize: 13 }}>
-                          {activeSideEvent.instruction}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                      {activeSideEvent.photoSuggested && (
-                        <Pressable onPress={() => openCamera('side')}>
-                          <Text style={styles.v41ActiveFindAction}>拍下來 →</Text>
-                        </Pressable>
-                      )}
-                      <Pressable onPress={replaceActiveSideEvent}>
-                        <Text style={{ color: BONE, opacity: 0.72, fontSize: 13, fontWeight: '700' }}>
-                          沒感覺，換一個
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
 
                 {selectedMood === 'color' && selectedColor && (
                   <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
