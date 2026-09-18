@@ -160,7 +160,10 @@ export function SideEventPaper({
   const [expanded, setExpanded] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [replacing, setReplacing] = useState(false);
+  const [copyHidden, setCopyHidden] = useState(false);
   const replacementWaitingRef = useRef(false);
+  const startCrumpleAfterHideRef = useRef(false);
+  const revealCopyAfterUnfoldRef = useRef(false);
   const mountedEventIdRef = useRef(event.id);
 
   const reveal = useSharedValue(0);
@@ -387,6 +390,11 @@ export function SideEventPaper({
     setControlsVisible(true);
   }, []);
 
+  const prepareCopyReveal = useCallback(() => {
+    revealCopyAfterUnfoldRef.current = true;
+    setCopyHidden(false);
+  }, []);
+
   const unfoldReplacement = useCallback(() => {
     crumple.value = 1;
     crumple.value = withDelay(
@@ -398,22 +406,42 @@ export function SideEventPaper({
           easing: Easing.out(Easing.cubic),
         },
         (finished) => {
-          if (!finished) return;
-
-          inkReveal.value = withTiming(
-            1,
-            {
-              duration: 135,
-              easing: Easing.out(Easing.cubic),
-            },
-            (inkFinished) => {
-              if (inkFinished) runOnJS(finishReplaceAnimation)();
-            }
-          );
+          if (finished) runOnJS(prepareCopyReveal)();
         }
       )
     );
-  }, [crumple, finishReplaceAnimation, inkReveal]);
+  }, [crumple, prepareCopyReveal]);
+
+  useEffect(() => {
+    if (
+      copyHidden ||
+      !replacing ||
+      !revealCopyAfterUnfoldRef.current
+    ) {
+      return;
+    }
+
+    revealCopyAfterUnfoldRef.current = false;
+    const frame = requestAnimationFrame(() => {
+      inkReveal.value = withTiming(
+        1,
+        {
+          duration: 135,
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(finishReplaceAnimation)();
+        }
+      );
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [
+    copyHidden,
+    finishReplaceAnimation,
+    inkReveal,
+    replacing,
+  ]);
 
   useEffect(() => {
     if (event.id === mountedEventIdRef.current) return;
@@ -427,6 +455,9 @@ export function SideEventPaper({
 
     setExpanded(false);
     setControlsVisible(false);
+    setCopyHidden(false);
+    startCrumpleAfterHideRef.current = false;
+    revealCopyAfterUnfoldRef.current = false;
     open.value = 0;
     crumple.value = 0;
     inkReveal.value = 1;
@@ -456,6 +487,9 @@ export function SideEventPaper({
     open.value = 0;
     crumple.value = 0;
     inkReveal.value = 1;
+    setCopyHidden(false);
+    startCrumpleAfterHideRef.current = false;
+    revealCopyAfterUnfoldRef.current = false;
     reveal.value = withTiming(
       1,
       {
@@ -517,22 +551,50 @@ export function SideEventPaper({
     }
   }, [onReplace, unfoldReplacement]);
 
+  useEffect(() => {
+    if (
+      !replacing ||
+      !copyHidden ||
+      !startCrumpleAfterHideRef.current
+    ) {
+      return;
+    }
+
+    startCrumpleAfterHideRef.current = false;
+
+    // Wait until React has committed the hidden-copy frame before the Skia
+    // mesh starts moving. This prevents stale task copy from sitting on the
+    // black navigation UI while the paper is already crumpling.
+    const frame = requestAnimationFrame(() => {
+      crumple.value = withTiming(
+        1,
+        {
+          duration: 400,
+          easing: Easing.inOut(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) runOnJS(requestReplacement)();
+        }
+      );
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [
+    copyHidden,
+    crumple,
+    replacing,
+    requestReplacement,
+  ]);
+
   const replace = useCallback(() => {
     if (replacing) return;
+
+    startCrumpleAfterHideRef.current = true;
     setReplacing(true);
     setControlsVisible(false);
+    setCopyHidden(true);
     inkReveal.value = 0;
-    crumple.value = withTiming(
-      1,
-      {
-        duration: 400,
-        easing: Easing.inOut(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(requestReplacement)();
-      }
-    );
-  }, [crumple, inkReveal, replacing, requestReplacement]);
+  }, [inkReveal, replacing]);
 
   return (
     <View
@@ -565,7 +627,7 @@ export function SideEventPaper({
           />
         </Group>
 
-        {!replacing ? (
+        {!copyHidden ? (
           <>
             <Group opacity={inkOpacity}>
               <Paragraph
