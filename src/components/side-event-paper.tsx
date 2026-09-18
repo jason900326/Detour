@@ -11,11 +11,14 @@ import {
   Canvas,
   Circle,
   Group,
+  Image,
   ImageShader,
+  Line,
   Paragraph,
   Rect,
   Skia,
   Vertices,
+  useImage,
   useTexture,
   vec,
 } from '@shopify/react-native-skia';
@@ -34,10 +37,10 @@ const PAPER_HEIGHT = 62;
 const CANVAS_HEIGHT = 82;
 const GRID_COLUMNS = 8;
 const GRID_ROWS = 4;
-const PAPER_BASE = '#FAF7F0';
-const PAPER_WARM = 'rgba(206, 194, 169, 0.07)';
-const PAPER_COOL = 'rgba(255, 255, 255, 0.16)';
-const PAPER_EDGE = 'rgba(177, 163, 134, 0.08)';
+const PAPER_BASE = '#F5F1E8';
+const PAPER_WARM = 'rgba(150, 132, 101, 0.018)';
+const PAPER_COOL = 'rgba(255, 255, 255, 0.055)';
+const PAPER_EDGE = 'rgba(117, 101, 74, 0.045)';
 
 function hash01(value: number) {
   const raw = Math.sin(value * 12.9898 + 78.233) * 43758.5453;
@@ -45,39 +48,58 @@ function hash01(value: number) {
 }
 
 function buildPaperFibers(width: number) {
-  return Array.from({ length: 28 }, (_, index) => {
-    const x = hash01(index * 3.1 + 1) * width;
-    const y = hash01(index * 5.2 + 2) * PAPER_HEIGHT;
-    const fiberWidth = 4 + hash01(index * 7.4 + 3) * 14;
-    const fiberHeight = index % 7 === 0 ? 0.9 : 0.45;
-    const warm = index % 4 === 0;
+  return Array.from({ length: 92 }, (_, index) => {
+    const x = hash01(index * 3.17 + 1) * width;
+    const y = hash01(index * 5.23 + 2) * PAPER_HEIGHT;
+    const length = 3 + hash01(index * 7.41 + 3) * 17;
+    const drift = (hash01(index * 4.73 + 9) - 0.5) * 3.2;
+    const warm = index % 5 === 0;
 
     return {
-      x,
-      y,
-      width: fiberWidth,
-      height: fiberHeight,
+      x1: x,
+      y1: y,
+      x2: Math.min(width, x + length),
+      y2: Math.max(0, Math.min(PAPER_HEIGHT, y + drift)),
+      strokeWidth: index % 9 === 0 ? 0.72 : 0.46,
       color: warm
-        ? 'rgba(118, 104, 82, 0.05)'
-        : 'rgba(255, 255, 255, 0.18)',
+        ? 'rgba(105, 91, 67, 0.042)'
+        : 'rgba(255, 255, 252, 0.14)',
     };
   });
 }
 
 function buildPaperPulp(width: number) {
-  return Array.from({ length: 76 }, (_, index) => {
-    const x = hash01(index * 2.7 + 11) * width;
-    const y = hash01(index * 4.9 + 17) * PAPER_HEIGHT;
-    const r = 0.35 + hash01(index * 6.3 + 7) * 1.15;
-    const warm = index % 5 === 0;
+  return Array.from({ length: 118 }, (_, index) => {
+    const x = hash01(index * 2.71 + 11) * width;
+    const y = hash01(index * 4.91 + 17) * PAPER_HEIGHT;
+    const r = 0.28 + hash01(index * 6.31 + 7) * 0.85;
+    const warm = index % 6 === 0;
 
     return {
       x,
       y,
       r,
       color: warm
-        ? 'rgba(120, 108, 87, 0.032)'
-        : 'rgba(255, 255, 255, 0.12)',
+        ? 'rgba(110, 96, 75, 0.022)'
+        : 'rgba(255, 255, 255, 0.075)',
+    };
+  });
+}
+
+function buildPaperClouds(width: number) {
+  return Array.from({ length: 18 }, (_, index) => {
+    const x = hash01(index * 8.13 + 4) * width;
+    const y = hash01(index * 4.37 + 8) * PAPER_HEIGHT;
+    const r = 10 + hash01(index * 6.91 + 2) * 30;
+
+    return {
+      x,
+      y,
+      r,
+      color:
+        index % 3 === 0
+          ? PAPER_WARM
+          : PAPER_COOL,
     };
   });
 }
@@ -145,7 +167,7 @@ const MESH_INDICES = buildMeshIndices();
 const MESH_VERTEX_COUNT = (GRID_COLUMNS + 1) * (GRID_ROWS + 1);
 const SHADOW_COLORS = Array.from(
   { length: MESH_VERTEX_COUNT },
-  () => 'rgba(0,0,0,0.075)'
+  () => 'rgba(0,0,0,0.052)'
 );
 
 export function SideEventPaper({
@@ -159,6 +181,10 @@ export function SideEventPaper({
   const width = Math.max(248, Math.min(396, screenWidth - 54));
   const paperFibers = useMemo(() => buildPaperFibers(width), [width]);
   const paperPulp = useMemo(() => buildPaperPulp(width), [width]);
+  const paperClouds = useMemo(() => buildPaperClouds(width), [width]);
+  const paperFiberImage = useImage(
+    require('../../assets/detour/paper-fiber.jpg')
+  );
   const [displayedEvent, setDisplayedEvent] = useState(event);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [replacing, setReplacing] = useState(false);
@@ -194,36 +220,29 @@ export function SideEventPaper({
         height={PAPER_HEIGHT}
         color={PAPER_BASE}
       />
-      <Rect
-        x={0}
-        y={8}
-        width={width}
-        height={18}
-        color={PAPER_COOL}
-      />
-      <Rect
-        x={0}
-        y={35}
-        width={width}
-        height={18}
-        color={PAPER_WARM}
-      />
-      <Rect x={0} y={0} width={width} height={6} color={PAPER_EDGE} />
-      <Rect
-        x={0}
-        y={PAPER_HEIGHT - 6}
-        width={width}
-        height={6}
-        color="rgba(164, 151, 126, 0.05)"
-      />
-      <Rect x={0} y={0} width={6} height={PAPER_HEIGHT} color={PAPER_EDGE} />
-      <Rect
-        x={width - 6}
-        y={0}
-        width={6}
-        height={PAPER_HEIGHT}
-        color="rgba(255, 255, 255, 0.08)"
-      />
+
+      {paperFiberImage ? (
+        <Image
+          image={paperFiberImage}
+          x={0}
+          y={0}
+          width={width}
+          height={PAPER_HEIGHT}
+          fit="cover"
+          opacity={0.16}
+        />
+      ) : null}
+
+      {paperClouds.map((cloud, index) => (
+        <Circle
+          key={`paper-cloud-${index}`}
+          cx={cloud.x}
+          cy={cloud.y}
+          r={cloud.r}
+          color={cloud.color}
+        />
+      ))}
+
       {paperPulp.map((dot, index) => (
         <Circle
           key={`paper-pulp-${index}`}
@@ -233,16 +252,45 @@ export function SideEventPaper({
           color={dot.color}
         />
       ))}
+
       {paperFibers.map((fiber, index) => (
-        <Rect
+        <Line
           key={`paper-fiber-${index}`}
-          x={fiber.x}
-          y={fiber.y}
-          width={fiber.width}
-          height={fiber.height}
+          p1={vec(fiber.x1, fiber.y1)}
+          p2={vec(fiber.x2, fiber.y2)}
           color={fiber.color}
+          strokeWidth={fiber.strokeWidth}
         />
       ))}
+
+      <Rect
+        x={0}
+        y={0}
+        width={width}
+        height={1.4}
+        color={PAPER_EDGE}
+      />
+      <Rect
+        x={0}
+        y={PAPER_HEIGHT - 1.6}
+        width={width}
+        height={1.6}
+        color="rgba(104, 89, 67, 0.035)"
+      />
+      <Rect
+        x={0}
+        y={0}
+        width={1.2}
+        height={PAPER_HEIGHT}
+        color="rgba(112, 96, 72, 0.028)"
+      />
+      <Rect
+        x={width - 1.2}
+        y={0}
+        width={1.2}
+        height={PAPER_HEIGHT}
+        color="rgba(255, 255, 255, 0.08)"
+      />
     </>,
     { width, height: PAPER_HEIGHT }
   );
@@ -323,7 +371,7 @@ export function SideEventPaper({
   });
 
   const shadowVertices = useDerivedValue(() =>
-    paperVertices.value.map((point) => vec(point.x + 2.5, point.y + 3.5))
+    paperVertices.value.map((point) => vec(point.x + 1.8, point.y + 2.6))
   );
 
   const textureCoordinates = useMemo(() => {
