@@ -24,6 +24,7 @@ import { styles } from '../styles/home-styles';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 import { CollectionStages } from './home/collection-stages';
 import { V45MoodIcon, V45Skyline } from './mood-visuals';
+import { SideEventPaper } from './side-event-paper';
 import {
   DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_WIDTH,
@@ -62,6 +63,7 @@ export function DetourHomeView({
     questPulse,
     isRerouting,
     replacementLoading,
+    activeSideEvent,
     devMode,
     developerToolsUnlocked,
     photos,
@@ -103,6 +105,7 @@ export function DetourHomeView({
     prepareDetourTicket,
     startDetour,
     simulateNextBeat,
+    replaceActiveSideEvent,
     replaceFailedDestination,
     openCamera,
     completeDetour,
@@ -876,6 +879,21 @@ export function DetourHomeView({
                 <Text style={styles.v35JourneyInstruction}>
                   {currentNavigationBeat.instruction || '先走這一段。'}
                 </Text>
+
+                {selectedMood !== 'color' && activeSideEvent && (
+                  <View
+                    style={{
+                      width: '100%',
+                      marginTop: 24,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <SideEventPaper
+                      event={activeSideEvent}
+                      onReplace={replaceActiveSideEvent}
+                    />
+                  </View>
+                )}
 
                 {selectedMood === 'color' && selectedColor && (
                   <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
