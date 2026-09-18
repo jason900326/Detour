@@ -266,9 +266,8 @@ export function DetourHomeView({
     stage === 'journey' || stage === 'developing' || completionIrisActive;
   const navigationNeedsAttention = Boolean(
     currentNavigationBeat &&
-      (currentNavigationBeat.turn === 'arrive' ||
-        (isAttentionTurn(currentNavigationBeat.turn) &&
-          beatRemainingMeters <= 70))
+      isAttentionTurn(currentNavigationBeat.turn) &&
+      beatRemainingMeters <= 70
   );
 
   return (
