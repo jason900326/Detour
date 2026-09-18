@@ -1,10 +1,10 @@
 import { DETOUR_API_CONFIG } from './app-config';
+import { fetchDetourApi } from './api-client';
 import type { LightContext, MoodId } from './journey-engine';
 import type { SceneCandidate } from './scene-engine';
 
 const {
   aiEndpoint: AI_ENDPOINT,
-  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
 } = DETOUR_API_CONFIG;
 
 const SAFE_TAG_KEYS = [
@@ -57,7 +57,7 @@ export type AIConnectionTestResult = {
 };
 
 export function isAIEngineConfigured() {
-  return AI_ENDPOINT.length > 0 && SUPABASE_PUBLISHABLE_KEY.length > 0;
+  return AI_ENDPOINT.length > 0 && DETOUR_API_CONFIG.supabasePublishableKey.length > 0;
 }
 
 export async function testAIEngineConnection(): Promise<AIConnectionTestResult> {
@@ -68,15 +68,11 @@ export async function testAIEngineConnection(): Promise<AIConnectionTestResult> 
     };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
-
   try {
-    const response = await fetch(AI_ENDPOINT, {
+    const response = await fetchDetourApi(AI_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({
         mode: 'rank-scenes',
@@ -115,8 +111,7 @@ export async function testAIEngineConnection(): Promise<AIConnectionTestResult> 
           },
         ],
       }),
-      signal: controller.signal,
-    });
+    }, 15000);
 
     const raw = await response.text();
 
@@ -152,8 +147,6 @@ export async function testAIEngineConnection(): Promise<AIConnectionTestResult> 
       ok: false,
       message: error instanceof Error ? error.message : 'Unknown AI connection error.',
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -189,26 +182,18 @@ function serializeScene(scene: SceneCandidate): SafeScene {
 async function postAI<T>(payload: unknown, timeoutMs: number): Promise<T | null> {
   if (!AI_ENDPOINT) return null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const response = await fetch(AI_ENDPOINT, {
+    const response = await fetchDetourApi(AI_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    }, timeoutMs);
 
-    if (!response.ok) return null;
     return (await response.json()) as T;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

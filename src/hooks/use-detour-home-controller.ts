@@ -7,7 +7,6 @@ import {
   Share,
 } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
@@ -23,11 +22,14 @@ import {
   type GeoPoint,
   type JourneyPlan,
   type LightContext,
-  type Mission,
   type MoodId,
   type SideEvent,
   type SideEventGaze,
 } from '../lib/journey-engine';
+import {
+  parseActiveJourneySnapshot,
+  type ActiveJourneySnapshot,
+} from '../lib/active-journey-storage';
 
 import {
   buildNavigationRouteFromPolyline,
@@ -72,18 +74,14 @@ import {
 } from '../lib/playtest-analytics';
 
 import {
-  CAMERA_RESULT_KEY,
   ACTIVE_JOURNEY_KEY,
   DEFAULT_PREFERENCES,
-  FREE_CAMERA_MISSION,
   MOODS,
   PREFERENCES_KEY,
   TIME_MAX,
   TIME_MIN,
   TIME_STEPS,
   getPaceDistanceScale,
-  type CameraRouteResult,
-  type CameraSource,
   type DetourPreferences,
   type DetourPrewarm,
   type PassportEntry,
@@ -94,37 +92,24 @@ import {
   type WalkingPace,
 } from '../lib/app-model';
 
-type ActiveJourneySnapshot = {
-  version: 1;
-  stage: 'journey' | 'arrival';
-  selectedTime: string | null;
-  selectedMood: MoodId | null;
-  selectedColor: ColorChoice | null;
-  latitude: number | null;
-  longitude: number | null;
-  detourStart: GeoPoint | null;
-  activeTrace: GeoPoint[];
-  plan: JourneyPlan;
-  selectedScene: SceneCandidate;
-  walkingRoute: WalkingRoute;
-  navigationRoute: NavigationRoute;
-  navigationBeatIndex: number;
-  beatRemainingMeters: number;
-  deviceHeading: number;
-  detourStartedAt: string;
-  sceneFailures: SessionSceneFailure[];
-  activeSideEvent: SideEvent | null;
-  sideEventPhotoConfirmed: boolean;
-  sideEventSlot: number;
-  sideEventsShown: number;
-  sideEventReplacements: number;
-  sideEventSeenIds: string[];
-  previousSideEventGaze: SideEventGaze | null;
-  traveledMeters: number;
-  lightContext: LightContext | null;
-  photos: SessionPhoto[];
-  effectiveMovingSeconds: number;
-};
+function readPreferences(value: unknown): Partial<DetourPreferences> {
+  if (!isRecord(value)) return {};
+
+  const next: Partial<DetourPreferences> = {};
+  if (typeof value.onboardingComplete === 'boolean') {
+    next.onboardingComplete = value.onboardingComplete;
+  }
+  if (['relaxed', 'normal', 'brisk'].includes(String(value.walkingPace))) {
+    next.walkingPace = value.walkingPace as WalkingPace;
+  }
+  if (typeof value.preferLegibleRoutesAtNight === 'boolean') {
+    next.preferLegibleRoutesAtNight = value.preferLegibleRoutesAtNight;
+  }
+  if (typeof value.indoorTest === 'boolean') {
+    next.indoorTest = value.indoorTest;
+  }
+  return next;
+}
 
 import { applyFoodDestinationWeight } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
@@ -135,10 +120,16 @@ import {
   contextCode,
   parseMinutes,
 } from '../lib/detour-formatters';
+import {
+  isRecord,
+  readStored,
+  removeStored,
+  writeStored,
+} from '../lib/storage';
+import { useCameraRouteBridge } from './use-camera-route-bridge';
 
 export function useDetourHomeController() {
   const router = useRouter();
-  const activeCameraRequestRef = useRef<string | null>(null);
   const turnReminderBeatIdRef = useRef<string | null>(null);
   const [stage, setStage] = useState<Stage>('boot');
   const [preferences, setPreferences] =
@@ -302,6 +293,18 @@ export function useDetourHomeController() {
       ticketVisualReadyResolverRef.current = resolve;
     });
   }, []);
+
+  const cameraBridge = useCameraRouteBridge({
+    router,
+    selectedMood,
+    selectedColor,
+    plan,
+    activeSideEventRef,
+    photos,
+    setPhotos,
+    setSideEventPhotoConfirmed,
+    persistActiveJourneySnapshot,
+  });
 
   const mood = useMemo(
     () => MOODS.find((item) => item.id === selectedMood) ?? null,
@@ -576,7 +579,7 @@ export function useDetourHomeController() {
     if (!snapshot) return;
 
     try {
-      await AsyncStorage.setItem(ACTIVE_JOURNEY_KEY, JSON.stringify(snapshot));
+      await writeStored(ACTIVE_JOURNEY_KEY, snapshot);
     } catch (error) {
       console.warn('DETOUR active journey snapshot failed:', error);
     }
@@ -587,10 +590,7 @@ export function useDetourHomeController() {
     if (!snapshot) return;
 
     const timer = setTimeout(() => {
-      void AsyncStorage.setItem(
-        ACTIVE_JOURNEY_KEY,
-        JSON.stringify(snapshot)
-      ).catch((error) => {
+      void writeStored(ACTIVE_JOURNEY_KEY, snapshot).catch((error) => {
         console.warn('DETOUR active journey snapshot failed:', error);
       });
     }, 350);
@@ -723,14 +723,8 @@ export function useDetourHomeController() {
 
       const consumeCameraResult = async () => {
         try {
-          const raw = await AsyncStorage.getItem(CAMERA_RESULT_KEY);
-          if (!raw || cancelled) return;
-
-          await AsyncStorage.removeItem(CAMERA_RESULT_KEY);
-          const result = JSON.parse(raw) as CameraRouteResult;
           if (cancelled) return;
-
-          await handleCameraRouteResult(result);
+          await cameraBridge.consumeCameraResult();
         } catch {
           // 相機回傳失敗不應讓整趟 DETOUR crash。
         }
@@ -740,7 +734,7 @@ export function useDetourHomeController() {
       return () => {
         cancelled = true;
       };
-    }, [photos, plan, passport, activeTrace, selectedMinutes, mood, lightContext])
+    }, [cameraBridge.consumeCameraResult])
   );
 
   useEffect(() => {
@@ -811,30 +805,6 @@ export function useDetourHomeController() {
     return () => clearTimeout(timer);
   }, [stage]);
 
-  function parseActiveJourneySnapshot(raw: string | null) {
-    if (!raw) return null;
-
-    try {
-      const snapshot = JSON.parse(raw) as ActiveJourneySnapshot;
-      if (
-        snapshot.version !== 1 ||
-        (snapshot.stage !== 'journey' && snapshot.stage !== 'arrival') ||
-        !snapshot.plan ||
-        !snapshot.selectedScene ||
-        !snapshot.walkingRoute ||
-        !snapshot.navigationRoute ||
-        !snapshot.detourStartedAt
-      ) {
-        return null;
-      }
-
-      return snapshot;
-    } catch (error) {
-      console.warn('DETOUR active journey snapshot parse failed:', error);
-      return null;
-    }
-  }
-
   async function restoreActiveJourney(snapshot: ActiveJourneySnapshot) {
     try {
 
@@ -897,7 +867,7 @@ export function useDetourHomeController() {
       return true;
     } catch (error) {
       console.warn('DETOUR active journey restore failed:', error);
-      await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+      await removeStored(ACTIVE_JOURNEY_KEY).catch(() => undefined);
       return false;
     }
   }
@@ -915,7 +885,7 @@ export function useDetourHomeController() {
     if (recoveryLoading) return;
 
     setRecoveryLoading(true);
-    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+    await removeStored(ACTIVE_JOURNEY_KEY).catch(() => undefined);
     setRecoverySnapshot(null);
     setRecoveryLoading(false);
 
@@ -937,14 +907,14 @@ export function useDetourHomeController() {
     void syncAllPlaytestSessions(storedPlaytestSessions);
 
     try {
-      const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
-      const activeJourneyRaw = await AsyncStorage.getItem(ACTIVE_JOURNEY_KEY);
-      const parsed = raw
-        ? (JSON.parse(raw) as Partial<DetourPreferences>)
-        : null;
+      const [parsed, activeJourneyRaw] = await Promise.all([
+        readStored<unknown>(PREFERENCES_KEY),
+        readStored<unknown>(ACTIVE_JOURNEY_KEY),
+      ]);
+      const parsedPreferences = readPreferences(parsed);
       const nextPreferences: DetourPreferences = {
         ...DEFAULT_PREFERENCES,
-        ...(parsed ?? {}),
+        ...parsedPreferences,
       };
 
       setPreferences(nextPreferences);
@@ -957,7 +927,7 @@ export function useDetourHomeController() {
       }
 
       if (activeJourneyRaw) {
-        await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+        await removeStored(ACTIVE_JOURNEY_KEY).catch(() => undefined);
       }
 
       const nextStage: Stage =
@@ -976,10 +946,7 @@ export function useDetourHomeController() {
     setPreferences(nextPreferences);
 
     try {
-      await AsyncStorage.setItem(
-        PREFERENCES_KEY,
-        JSON.stringify(nextPreferences)
-      );
+      await writeStored(PREFERENCES_KEY, nextPreferences);
     } catch {
       Alert.alert(
         '設定暫時無法儲存',
@@ -1223,7 +1190,7 @@ export function useDetourHomeController() {
 
   function resetDetour() {
     const testSessionId = playtestSessionIdRef.current;
-    void AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
+    void removeStored(ACTIVE_JOURNEY_KEY);
 
     if (testSessionId && ABANDONABLE_STAGES.has(stageRef.current)) {
       void updatePlaytestSession(testSessionId, {
@@ -1284,7 +1251,7 @@ export function useDetourHomeController() {
     setPhotos([]);
     setLastCompletedEntry(null);
     setSelectedPassportId(null);
-    activeCameraRequestRef.current = null;
+    cameraBridge.resetCameraRequest();
     lastTracePointRef.current = null;
     planRef.current = null;
     setStage('time');
@@ -2472,80 +2439,6 @@ export function useDetourHomeController() {
     }
   }
 
-  async function openCamera(source: CameraSource) {
-    await persistActiveJourneySnapshot();
-
-    const colorWalkCameraMission: Mission =
-      selectedMood === 'color' && selectedColor
-        ? {
-            ...FREE_CAMERA_MISSION,
-            id: `color-walk-${selectedColor.id}`,
-            code: `COLOR · ${selectedColor.code}`,
-            title: `拍下${selectedColor.label}。`,
-            instruction: `看到${selectedColor.label}就拍；其他時間跟著導航走。`,
-          }
-        : FREE_CAMERA_MISSION;
-
-    const sideEventCameraMission: Mission | null =
-      activeSideEventRef.current?.photoSuggested
-        ? {
-            id: activeSideEventRef.current.id,
-            code: 'SIDE EVENT',
-            title: activeSideEventRef.current.title,
-            instruction: activeSideEventRef.current.instruction,
-            completion: '',
-            photo: true,
-            portable: true,
-          }
-        : null;
-
-    const missionForCamera: Mission | null =
-      source === 'arrival'
-        ? plan?.arrivalMission ?? null
-        : source === 'free'
-          ? colorWalkCameraMission
-          : sideEventCameraMission;
-
-    if (!missionForCamera) return;
-
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    activeCameraRequestRef.current = requestId;
-    await AsyncStorage.removeItem(CAMERA_RESULT_KEY);
-
-    router.push({
-      pathname: '/camera',
-      params: {
-        requestId,
-        source,
-        missionCode: missionForCamera.code,
-        missionTitle: missionForCamera.title,
-      },
-    });
-  }
-
-  async function handleCameraRouteResult(result: CameraRouteResult) {
-    if (
-      !activeCameraRequestRef.current ||
-      result.requestId !== activeCameraRequestRef.current
-    ) {
-      return;
-    }
-
-    activeCameraRequestRef.current = null;
-    const nextPhotos = [...photos, result.photo];
-    setPhotos(nextPhotos);
-
-    await Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    );
-
-    if (result.source === 'side') {
-      setSideEventPhotoConfirmed(true);
-    }
-  }
-
   async function completeDetour(photoOverride?: SessionPhoto[]) {
     stopLocationWatcher();
 
@@ -2628,7 +2521,7 @@ export function useDetourHomeController() {
     const nextPassport = [entry, ...passport];
     setLastCompletedEntry(entry);
     await savePassport(nextPassport);
-    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY);
+    await removeStored(ACTIVE_JOURNEY_KEY);
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     transitionTo('developing');
@@ -2636,7 +2529,7 @@ export function useDetourHomeController() {
 
   return {
     router,
-    activeCameraRequestRef,
+    activeCameraRequestRef: cameraBridge.activeCameraRequestRef,
     stage,
     setStage,
     preferences,
@@ -2855,8 +2748,8 @@ export function useDetourHomeController() {
     simulateNextBeat,
     openPassportEntry,
     shareJourney,
-    openCamera,
-    handleCameraRouteResult,
+    openCamera: cameraBridge.openCamera,
+    handleCameraRouteResult: cameraBridge.handleCameraRouteResult,
     continueRecoveredJourney,
     discardRecoveredJourney,
     completeDetour,

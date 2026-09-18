@@ -1,15 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { DETOUR_API_CONFIG } from './app-config';
+import { postDetourJson } from './api-client';
 import { DETOUR_BUILD_VERSION } from './build-info';
+import { isRecord, isString, readStored, removeStored, writeStored } from './storage';
 
 const PLAYTEST_KEY = '@detour/playtest/v1';
 const TESTER_KEY = '@detour/playtest-tester/v1';
 
-const {
-  playtestEndpoint: PLAYTEST_SYNC_ENDPOINT,
-  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
-} = DETOUR_API_CONFIG;
+const { playtestEndpoint: PLAYTEST_SYNC_ENDPOINT } = DETOUR_API_CONFIG;
 
 export const DETOUR_PLAYTEST_VERSION = DETOUR_BUILD_VERSION;
 
@@ -59,6 +56,22 @@ export type PlaytestSession = {
   runFeedbackReasons?: PlaytestFeedbackReason[];
 };
 
+function isPlaytestSession(value: unknown): value is PlaytestSession {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.id) &&
+    isString(value.createdAt) &&
+    isString(value.status) &&
+    typeof value.devMode === 'boolean' &&
+    typeof value.minutes === 'number' &&
+    isString(value.moodId)
+  );
+}
+
+function isPlaytestSessions(value: unknown): value is PlaytestSession[] {
+  return Array.isArray(value) && value.every(isPlaytestSession);
+}
+
 function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random()
     .toString(36)
@@ -67,7 +80,7 @@ function makeId(prefix: string) {
 
 export async function getPlaytestTesterId() {
   try {
-    const current = await AsyncStorage.getItem(TESTER_KEY);
+    const current = await readStored(TESTER_KEY, isString);
     if (current) return current;
 
     const id = `DTR-${Math.random()
@@ -75,7 +88,7 @@ export async function getPlaytestTesterId() {
       .slice(2, 7)
       .toUpperCase()}`;
 
-    await AsyncStorage.setItem(TESTER_KEY, id);
+    await writeStored(TESTER_KEY, id);
     return id;
   } catch {
     return 'DTR-LOCAL';
@@ -84,30 +97,21 @@ export async function getPlaytestTesterId() {
 
 async function syncPlaytestSession(session: PlaytestSession) {
   const testerId = await getPlaytestTesterId();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const response = await fetch(PLAYTEST_SYNC_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({
+    await postDetourJson(
+      PLAYTEST_SYNC_ENDPOINT,
+      {
         mode: 'sync-run',
         appVersion: DETOUR_PLAYTEST_VERSION,
         testerId,
         session,
-      }),
-      signal: controller.signal,
-    });
-
-    return response.ok;
+      },
+      5000
+    );
+    return true;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -129,11 +133,7 @@ export async function syncAllPlaytestSessions(
 
 export async function loadPlaytestSessions(): Promise<PlaytestSession[]> {
   try {
-    const raw = await AsyncStorage.getItem(PLAYTEST_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw) as PlaytestSession[];
-    return Array.isArray(parsed) ? parsed : [];
+    return (await readStored(PLAYTEST_KEY, isPlaytestSessions)) ?? [];
   } catch {
     return [];
   }
@@ -143,7 +143,7 @@ async function savePlaytestSessions(sessions: PlaytestSession[]) {
   const next = sessions.slice(0, 200);
 
   try {
-    await AsyncStorage.setItem(PLAYTEST_KEY, JSON.stringify(next));
+    await writeStored(PLAYTEST_KEY, next);
   } catch {
     // Playtest telemetry must never block DETOUR.
   }
@@ -190,7 +190,7 @@ export async function updatePlaytestSession(
 
 export async function clearPlaytestSessions() {
   try {
-    await AsyncStorage.removeItem(PLAYTEST_KEY);
+    await removeStored(PLAYTEST_KEY);
   } catch {
     // Ignore prototype storage failures.
   }

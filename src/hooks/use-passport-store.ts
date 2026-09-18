@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 
@@ -9,6 +8,25 @@ import {
   PASSPORT_KEY,
   type PassportEntry,
 } from '../lib/app-model';
+import { isRecord, isString, readStored, removeStored, writeStored } from '../lib/storage';
+
+function isPassportEntry(value: unknown): value is PassportEntry {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.id) &&
+    isString(value.completedAt) &&
+    isString(value.city) &&
+    typeof value.minutes === 'number' &&
+    isString(value.moodId) &&
+    isString(value.moodLabel) &&
+    isString(value.moodCode) &&
+    typeof value.discoveries === 'number'
+  );
+}
+
+function isPassport(value: unknown): value is PassportEntry[] {
+  return Array.isArray(value) && value.every(isPassportEntry);
+}
 
 export function usePassportStore() {
   const [passport, setPassport] =
@@ -24,12 +42,8 @@ export function usePassportStore() {
 
   async function loadPassport() {
     try {
-      const raw = await AsyncStorage.getItem(PASSPORT_KEY);
-
-      if (raw) {
-        const parsed = JSON.parse(raw) as PassportEntry[];
-        if (Array.isArray(parsed)) setPassport(parsed);
-      }
+      const parsed = await readStored(PASSPORT_KEY, isPassport);
+      if (parsed) setPassport(parsed);
     } catch {
       // Local history must never block the app.
     } finally {
@@ -41,10 +55,7 @@ export function usePassportStore() {
     setPassport(nextPassport);
 
     try {
-      await AsyncStorage.setItem(
-        PASSPORT_KEY,
-        JSON.stringify(nextPassport)
-      );
+      await writeStored(PASSPORT_KEY, nextPassport);
     } catch {
       Alert.alert(
         'Passport 暫時無法儲存',
@@ -63,7 +74,7 @@ export function usePassportStore() {
           text: '清除',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem(PASSPORT_KEY);
+            await removeStored(PASSPORT_KEY);
 
             try {
               const photoDirectory = new Directory(
