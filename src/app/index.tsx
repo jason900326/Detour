@@ -13,7 +13,6 @@ import {
   useJourneyStageMotion,
   usePhysicalController,
 } from '../components/physical-motion';
-import { SideEventPaper } from '../components/side-event-paper';
 import { TicketTearProvider } from '../components/ticket-tear-context';
 import { useDetourHomeController } from '../hooks/use-detour-home-controller';
 
@@ -27,12 +26,6 @@ export default function HomeScreen() {
 
   const tearEnabled =
     controller.stage === 'ready' && controller.ticketReadyUnlocked;
-
-  const discoveryPaperVisible =
-    controller.stage === 'journey' &&
-    controller.selectedMood !== 'color' &&
-    Boolean(controller.activeSideEvent) &&
-    !controller.showNextBeatMap;
 
   const handleTicketTorn = useCallback(() => {
     void motionController.startDetour();
@@ -74,14 +67,6 @@ export default function HomeScreen() {
           width={width}
           height={height}
         />
-
-        {discoveryPaperVisible && controller.activeSideEvent && (
-          <SideEventPaper
-            event={controller.activeSideEvent}
-            onReplace={controller.replaceActiveSideEvent}
-            devMode={controller.devMode}
-          />
-        )}
 
         {tearEnabled && (
           <View
