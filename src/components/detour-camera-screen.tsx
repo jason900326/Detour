@@ -82,7 +82,17 @@ async function cropCaptureToSquare(uri: string) {
 
 function touchDistance(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return 0; const [a,b] = touches; return Math.hypot(a.pageX-b.pageX, a.pageY-b.pageY); }
 function clampZoom(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)); }
-function zoomLabel(value: number) { return `${Number(value.toFixed(1))}×`; }
+const NORMAL_LENS_ZOOM = 1.05;
+function normalZoomForDevice(device: { minZoom: number; maxZoom: number }) {
+  // VisionCamera's logical multi-camera may keep the ultra-wide lens at exactly
+  // 1.0. A tiny offset asks iOS for the normal wide lens while still presenting
+  // the expected 1× control to the user.
+  return clampZoom(NORMAL_LENS_ZOOM, device.minZoom, device.maxZoom);
+}
+function zoomLabel(value: number, normalZoom: number) {
+  const displayValue = value <= normalZoom + 0.02 ? 1 : value;
+  return `${Number(displayValue.toFixed(1))}×`;
+}
 
 export default function DetourCameraScreen() {
   const router = useRouter();
@@ -128,6 +138,7 @@ export default function DetourCameraScreen() {
   const pinchActiveRef = useRef(false);
   const lastPinchEndedAtRef = useRef(0);
   const exposureDragRef = useRef<{ startY: number; startExposure: number } | null>(null);
+  const preparedPhotoDeviceRef = useRef<string | null>(null);
 
   const requestId = getParam(params.requestId);
   const source = getParam(params.source, 'free') as CameraSource;
@@ -146,7 +157,7 @@ export default function DetourCameraScreen() {
     focusOpacity.stopAnimation();
     focusOpacity.setValue(0);
     if (!device) return;
-    setZoom(clampZoom(1, device.minZoom, device.maxZoom));
+    setZoom(normalZoomForDevice(device));
     setExposure(
       device.supportsExposureBias
         ? clampZoom(0, device.minExposureBias, device.maxExposureBias)
@@ -169,7 +180,8 @@ export default function DetourCameraScreen() {
   }, [cameraReady, missionTitle, promptOpacity]);
 
   useEffect(() => {
-    if (!device) return;
+    if (!device || !cameraReady || preparedPhotoDeviceRef.current === device.id) return;
+    preparedPhotoDeviceRef.current = device.id;
     void photoOutput
       .prepareSettings([
         { flashMode: 'off' },
@@ -177,13 +189,22 @@ export default function DetourCameraScreen() {
         { flashMode: 'on' },
       ])
       .catch((error) => {
+        if (preparedPhotoDeviceRef.current === device.id) {
+          preparedPhotoDeviceRef.current = null;
+        }
         console.warn('DETOUR photo settings warm-up failed:', error);
       });
-  }, [device, photoOutput]);
+  }, [cameraReady, device, photoOutput]);
 
+  const normalZoom = device ? normalZoomForDevice(device) : 1;
   const lensZoomLevels = device
     ? Array.from(
-        new Set([device.minZoom, ...device.zoomLensSwitchFactors, 1])
+        new Set([
+          normalZoom,
+          ...device.zoomLensSwitchFactors.filter(
+            (value) => value > normalZoom + 0.02
+          ),
+        ])
       )
         .filter((value) => value >= device.minZoom && value <= device.maxZoom)
         .sort((a, b) => a - b)
@@ -284,7 +305,7 @@ export default function DetourCameraScreen() {
     setHasFocused(false);
     focusOpacity.stopAnimation();
     focusOpacity.setValue(0);
-    setZoom(1);
+    if (device) setZoom(normalZoomForDevice(device));
     setFlashMode('off');
     void Haptics.selectionAsync();
   }
@@ -422,20 +443,25 @@ export default function DetourCameraScreen() {
       // Capture once at source quality, then create the canonical 1:1 file.
       // Review, session storage and Photos all use this exact square result.
       const capture = await photoOutput.capturePhotoToFile(
-        { flashMode: facing === 'back' ? flashMode : 'off' },
+        {
+          flashMode:
+            facing === 'back' && device?.hasFlash ? flashMode : 'off',
+          enableShutterSound: true,
+        },
         {}
       );
+      if (!capture.filePath) throw new Error('Camera returned an empty file path');
       const captureUri = `file://${capture.filePath}`;
 
       const squareCapture = await cropCaptureToSquare(captureUri);
       setPendingCaptureUri(squareCapture.uri);
-      setTakingPhoto(false);
-
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-    } catch {
-      setTakingPhoto(false);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => undefined);
+    } catch (error) {
+      console.warn('DETOUR photo capture failed:', error);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       Alert.alert('拍照失敗', '這一格沒有曝光成功。底片沒有被使用，請再拍一次。');
+    } finally {
+      setTakingPhoto(false);
     }
   }
 
@@ -671,7 +697,7 @@ export default function DetourCameraScreen() {
                 const active = Math.abs(zoom - lensZoom) < 0.04;
                 return (
                   <Pressable key={lensZoom} onPress={() => chooseZoom(lensZoom)} style={[styles.lensButton, active && styles.lensButtonActive]}>
-                    <Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{zoomLabel(lensZoom)}</Text>
+                    <Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{zoomLabel(lensZoom, normalZoom)}</Text>
                   </Pressable>
                 );
               })}
