@@ -53,7 +53,7 @@ export type Mission = {
 };
 
 export type SideEventGaze = 'up' | 'level' | 'down' | 'flex' | 'self';
-export type SideEventKind = 'photo-target' | 'context';
+export type SideEventKind = 'photo-target';
 
 export type SideEvent = {
   id: string;
