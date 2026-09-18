@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Camera,
   useCameraDevice,
@@ -39,6 +38,7 @@ import {
   type CameraSource,
   type SessionPhoto,
 } from '../lib/app-model';
+import { writeStored } from '../lib/storage';
 
 const INK = '#11110F';
 const BONE = '#F1EFE7';
@@ -497,7 +497,7 @@ export default function DetourCameraScreen() {
         savedToLibrary,
       };
       const result: CameraRouteResult = { requestId, source, photo };
-      await AsyncStorage.setItem(CAMERA_RESULT_KEY, JSON.stringify(result));
+      await writeStored(CAMERA_RESULT_KEY, result);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {

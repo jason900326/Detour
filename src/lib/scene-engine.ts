@@ -6,6 +6,7 @@ import type {
 } from './journey-engine';
 
 import { DETOUR_API_CONFIG } from './app-config';
+import { fetchDetourApi } from './api-client';
 
 import {
   getSceneFeedbackBias,
@@ -16,7 +17,6 @@ import { isUnsafeOrRestrictedScene } from './scene-safety';
 
 const {
   sceneEndpoint: SCENE_ENDPOINT,
-  supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
 } = DETOUR_API_CONFIG;
 
 export type SceneKind =
@@ -823,39 +823,6 @@ out center 140;
 `;
 }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number
-) {
-  const controller =
-    new AbortController();
-
-  const timer = setTimeout(
-    () => controller.abort(),
-    timeoutMs
-  );
-
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (
-      controller.signal.aborted
-    ) {
-      throw new Error(
-        'Scene request timed out'
-      );
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function overpassEndpointLabel(endpoint: string) {
   return endpoint
     .replace(/^https?:\/\//, '')
@@ -874,15 +841,13 @@ async function fetchOverpass(query: string) {
     const endpointLabel = overpassEndpointLabel(endpoint);
 
     try {
-      const response = await fetchWithTimeout(
+      const response = await fetchDetourApi(
         endpoint,
         {
           method: 'POST',
           headers: {
             'Content-Type':
               'application/x-www-form-urlencoded;charset=UTF-8',
-            Accept: 'application/json',
-            apikey: SUPABASE_PUBLISHABLE_KEY,
           },
           body: `data=${encodeURIComponent(query)}`,
         },

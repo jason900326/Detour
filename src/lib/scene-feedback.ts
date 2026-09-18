@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readStored, writeStored } from './storage';
 
 export type SceneFeedbackKind =
   | 'interesting'
@@ -18,24 +18,23 @@ export type SceneFeedbackRecord = {
 
 const STORAGE_KEY = '@detour/scene-feedback/v1';
 
+function isSceneFeedbackRecord(value: unknown): value is SceneFeedbackRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Partial<SceneFeedbackRecord>;
+  return (
+    typeof record.sceneId === 'string' &&
+    typeof record.kind === 'string' &&
+    typeof record.createdAt === 'string'
+  );
+}
+
+function isSceneFeedback(value: unknown): value is SceneFeedbackRecord[] {
+  return Array.isArray(value) && value.every(isSceneFeedbackRecord);
+}
+
 export async function loadSceneFeedback() {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-
-    if (!raw) return [] as SceneFeedbackRecord[];
-
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) {
-      return [] as SceneFeedbackRecord[];
-    }
-
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item.sceneId === 'string' &&
-        typeof item.kind === 'string'
-    ) as SceneFeedbackRecord[];
+    return (await readStored(STORAGE_KEY, isSceneFeedback)) ?? [];
   } catch {
     return [] as SceneFeedbackRecord[];
   }
@@ -57,10 +56,7 @@ export async function saveSceneFeedback(
     record,
   ].slice(-400);
 
-  await AsyncStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(next)
-  );
+  await writeStored(STORAGE_KEY, next);
 }
 
 export function getSceneFeedbackBias(
