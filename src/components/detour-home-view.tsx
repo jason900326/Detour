@@ -49,6 +49,12 @@ function isAttentionTurn(turn: string) {
   );
 }
 
+function formatElapsedJourneyTime(totalSeconds: number) {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  const seconds = Math.max(0, totalSeconds) % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function DetourHomeView({
   controller,
 }: {
@@ -78,6 +84,7 @@ export function DetourHomeView({
     nextBeatSegment,
     arrowRotation,
     questPulse,
+    elapsedJourneySeconds,
     isRerouting,
     replacementLoading,
     activeSideEvent,
@@ -265,9 +272,9 @@ export function DetourHomeView({
   const chromeDark =
     stage === 'journey' || stage === 'developing' || completionIrisActive;
   const navigationNeedsAttention = Boolean(
-    currentNavigationBeat &&
+      currentNavigationBeat &&
       isAttentionTurn(currentNavigationBeat.turn) &&
-      beatRemainingMeters <= 70
+      beatRemainingMeters <= 30
   );
 
   return (
@@ -889,6 +896,9 @@ export function DetourHomeView({
               </View>
             ) : (
               <View style={styles.v35JourneyHero}>
+                <Text style={styles.v35JourneyElapsed}>
+                  已走 {formatElapsedJourneyTime(elapsedJourneySeconds)}
+                </Text>
                 <Pressable
                   onPress={() => setShowNextBeatMap(true)}
                   style={[
@@ -966,10 +976,10 @@ export function DetourHomeView({
               </View>
             )}
 
-            {questPulse && (
+            {questPulse === 'final' && (
               <View pointerEvents="none" style={styles.v35QuestPulse}>
                 <Text style={styles.v35QuestPulseText}>
-                  {questPulse === 'side' ? '路上找找看' : '到終點了'}
+                  到終點了
                 </Text>
               </View>
             )}
