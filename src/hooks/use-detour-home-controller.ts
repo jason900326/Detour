@@ -192,6 +192,9 @@ export function useDetourHomeController() {
   const [developerToolsUnlocked, setDeveloperToolsUnlocked] = useState(false);
   const [lightContext, setLightContext] = useState<LightContext | null>(null);
   const [photos, setPhotos] = useState<SessionPhoto[]>([]);
+  const [recoverySnapshot, setRecoverySnapshot] =
+    useState<ActiveJourneySnapshot | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   const {
     passport,
@@ -808,8 +811,8 @@ export function useDetourHomeController() {
     return () => clearTimeout(timer);
   }, [stage]);
 
-  async function restoreActiveJourney(raw: string | null) {
-    if (!raw) return false;
+  function parseActiveJourneySnapshot(raw: string | null) {
+    if (!raw) return null;
 
     try {
       const snapshot = JSON.parse(raw) as ActiveJourneySnapshot;
@@ -822,8 +825,18 @@ export function useDetourHomeController() {
         !snapshot.navigationRoute ||
         !snapshot.detourStartedAt
       ) {
-        return false;
+        return null;
       }
+
+      return snapshot;
+    } catch (error) {
+      console.warn('DETOUR active journey snapshot parse failed:', error);
+      return null;
+    }
+  }
+
+  async function restoreActiveJourney(snapshot: ActiveJourneySnapshot) {
+    try {
 
       setSelectedTime(snapshot.selectedTime);
       setSelectedMood(snapshot.selectedMood);
@@ -889,6 +902,28 @@ export function useDetourHomeController() {
     }
   }
 
+  async function continueRecoveredJourney() {
+    if (!recoverySnapshot || recoveryLoading) return;
+
+    setRecoveryLoading(true);
+    const restored = await restoreActiveJourney(recoverySnapshot);
+    if (restored) setRecoverySnapshot(null);
+    setRecoveryLoading(false);
+  }
+
+  async function discardRecoveredJourney() {
+    if (recoveryLoading) return;
+
+    setRecoveryLoading(true);
+    await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
+    setRecoverySnapshot(null);
+    setRecoveryLoading(false);
+
+    const nextStage: Stage = preferences.onboardingComplete ? 'time' : 'onboarding';
+    setStage(nextStage);
+    stageRef.current = nextStage;
+  }
+
   async function initializeApp() {
     await loadPassport();
 
@@ -915,11 +950,14 @@ export function useDetourHomeController() {
       setPreferences(nextPreferences);
       setDevMode(nextPreferences.indoorTest);
 
-      if (
-        nextPreferences.onboardingComplete &&
-        (await restoreActiveJourney(activeJourneyRaw))
-      ) {
+      const parsedRecoverySnapshot = parseActiveJourneySnapshot(activeJourneyRaw);
+      if (nextPreferences.onboardingComplete && parsedRecoverySnapshot) {
+        setRecoverySnapshot(parsedRecoverySnapshot);
         return;
+      }
+
+      if (activeJourneyRaw) {
+        await AsyncStorage.removeItem(ACTIVE_JOURNEY_KEY).catch(() => undefined);
       }
 
       const nextStage: Stage =
@@ -2674,6 +2712,8 @@ export function useDetourHomeController() {
     setLightContext,
     photos,
     setPhotos,
+    recoverySnapshot,
+    recoveryLoading,
     passport,
     setPassport,
     passportLoaded,
@@ -2817,6 +2857,8 @@ export function useDetourHomeController() {
     shareJourney,
     openCamera,
     handleCameraRouteResult,
+    continueRecoveredJourney,
+    discardRecoveredJourney,
     completeDetour,
   };
 }
