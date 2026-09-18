@@ -48,6 +48,24 @@ export type ActiveJourneySnapshot = {
   effectiveMovingSeconds: number;
 };
 
+export type ActiveJourneySnapshotInput = Omit<
+  ActiveJourneySnapshot,
+  'version'
+>;
+
+/**
+ * Keep the persisted shape versioned in one place so controller code only
+ * describes the current in-memory journey state.
+ */
+export function createActiveJourneySnapshot(
+  input: ActiveJourneySnapshotInput
+): ActiveJourneySnapshot {
+  return {
+    version: 1,
+    ...input,
+  };
+}
+
 export function parseActiveJourneySnapshot(
   raw: unknown
 ): ActiveJourneySnapshot | null {

@@ -27,6 +27,7 @@ import {
   type SideEventGaze,
 } from '../lib/journey-engine';
 import {
+  createActiveJourneySnapshot,
   parseActiveJourneySnapshot,
   type ActiveJourneySnapshot,
 } from '../lib/active-journey-storage';
@@ -92,25 +93,6 @@ import {
   type WalkingPace,
 } from '../lib/app-model';
 
-function readPreferences(value: unknown): Partial<DetourPreferences> {
-  if (!isRecord(value)) return {};
-
-  const next: Partial<DetourPreferences> = {};
-  if (typeof value.onboardingComplete === 'boolean') {
-    next.onboardingComplete = value.onboardingComplete;
-  }
-  if (['relaxed', 'normal', 'brisk'].includes(String(value.walkingPace))) {
-    next.walkingPace = value.walkingPace as WalkingPace;
-  }
-  if (typeof value.preferLegibleRoutesAtNight === 'boolean') {
-    next.preferLegibleRoutesAtNight = value.preferLegibleRoutesAtNight;
-  }
-  if (typeof value.indoorTest === 'boolean') {
-    next.indoorTest = value.indoorTest;
-  }
-  return next;
-}
-
 import { applyFoodDestinationWeight } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
 import { ABANDONABLE_STAGES, canTransition } from '../lib/stage-flow';
@@ -121,11 +103,11 @@ import {
   parseMinutes,
 } from '../lib/detour-formatters';
 import {
-  isRecord,
   readStored,
   removeStored,
   writeStored,
 } from '../lib/storage';
+import { parseDetourPreferences } from '../lib/preferences-storage';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
 
 export function useDetourHomeController() {
@@ -541,8 +523,7 @@ export function useDetourHomeController() {
       return null;
     }
 
-    return {
-      version: 1,
+    return createActiveJourneySnapshot({
       stage,
       selectedTime,
       selectedMood,
@@ -571,7 +552,7 @@ export function useDetourHomeController() {
       lightContext,
       photos,
       effectiveMovingSeconds: effectiveMovingSecondsRef.current,
-    };
+    });
   }
 
   async function persistActiveJourneySnapshot() {
@@ -911,11 +892,7 @@ export function useDetourHomeController() {
         readStored<unknown>(PREFERENCES_KEY),
         readStored<unknown>(ACTIVE_JOURNEY_KEY),
       ]);
-      const parsedPreferences = readPreferences(parsed);
-      const nextPreferences: DetourPreferences = {
-        ...DEFAULT_PREFERENCES,
-        ...parsedPreferences,
-      };
+      const nextPreferences = parseDetourPreferences(parsed);
 
       setPreferences(nextPreferences);
       setDevMode(nextPreferences.indoorTest);
