@@ -2,8 +2,13 @@ function normalizedSceneText(tags: Record<string, string>) {
   return [
     tags.name,
     tags['name:zh'],
+    tags['name:en'],
     tags.official_name,
+    tags['official_name:en'],
     tags.alt_name,
+    tags['alt_name:en'],
+    tags.loc_name,
+    tags.old_name,
     tags['short_name'],
     tags.operator,
     tags.brand,
