@@ -109,6 +109,7 @@ import {
 } from '../lib/storage';
 import { parseDetourPreferences } from '../lib/preferences-storage';
 import { measureMovementSample } from '../lib/location-trace-logic';
+import { evaluateReroute } from '../lib/reroute-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
 import { useLocationWatchers } from './use-location-watchers';
 
@@ -1720,17 +1721,15 @@ export function useDetourHomeController() {
       );
     }
 
-    const offRouteDistance = distanceToPolyline(nextPoint, route.coordinates);
-    const gpsAccuracy = newLocation.coords.accuracy ?? 0;
-    const offRouteThreshold = Math.max(45, Math.min(70, gpsAccuracy + 30));
+    const rerouteCheck = evaluateReroute({
+      offRouteDistanceMeters: distanceToPolyline(nextPoint, route.coordinates),
+      gpsAccuracyMeters: newLocation.coords.accuracy ?? 0,
+      offRouteCount: offRouteCountRef.current,
+      rerouteInFlight: rerouteInFlightRef.current,
+    });
+    offRouteCountRef.current = rerouteCheck.nextOffRouteCount;
 
-    if (offRouteDistance > offRouteThreshold) {
-      offRouteCountRef.current += 1;
-    } else {
-      offRouteCountRef.current = 0;
-    }
-
-    if (offRouteCountRef.current >= 3 && !rerouteInFlightRef.current) {
+    if (rerouteCheck.shouldReroute) {
       offRouteCountRef.current = 0;
       void rerouteFromCurrentPosition(nextPoint);
       return;
