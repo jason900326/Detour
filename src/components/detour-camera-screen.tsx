@@ -43,6 +43,7 @@ const INK = '#11110F';
 const BONE = '#F1EFE7';
 const MUTED = '#B7B2A8';
 const SIGNAL = '#FF5A36';
+const EXPOSURE_SLIDER_WIDTH = 108;
 const ABSOLUTE_FILL = {
   position: 'absolute' as const,
   top: 0,
@@ -54,10 +55,6 @@ const ABSOLUTE_FILL = {
 function getParam(value: string | string[] | undefined, fallback = '') {
   if (Array.isArray(value)) return value[0] ?? fallback;
   return value ?? fallback;
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function cropCaptureToSquare(uri: string) {
@@ -95,18 +92,21 @@ export default function DetourCameraScreen() {
 
   const { hasPermission, canRequestPermission, requestPermission } =
     useCameraPermission();
+  const [facing, setFacing] = useState<TargetCameraPosition>('back');
+  const device = useCameraDevice(facing);
   const photoOutput = usePhotoOutput({
-    quality: 1,
-    qualityPrioritization: 'quality',
+    quality: 0.9,
+    qualityPrioritization: device?.supportsSpeedQualityPrioritization
+      ? 'speed'
+      : 'balanced',
   });
   const [cameraReady, setCameraReady] = useState(false);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
   const [pendingCaptureUri, setPendingCaptureUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
-  const [facing, setFacing] = useState<TargetCameraPosition>('back');
-  const device = useCameraDevice(facing);
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
+  const [exposure, setExposure] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
@@ -130,7 +130,25 @@ export default function DetourCameraScreen() {
     setMountError(null);
     if (!device) return;
     setZoom(clampZoom(1, device.minZoom, device.maxZoom));
+    setExposure(
+      device.supportsExposureBias
+        ? clampZoom(0, device.minExposureBias, device.maxExposureBias)
+        : 0
+    );
   }, [device]);
+
+  useEffect(() => {
+    if (!device) return;
+    void photoOutput
+      .prepareSettings([
+        { flashMode: 'off' },
+        { flashMode: 'auto' },
+        { flashMode: 'on' },
+      ])
+      .catch((error) => {
+        console.warn('DETOUR photo settings warm-up failed:', error);
+      });
+  }, [device, photoOutput]);
 
   const lensZoomLevels = device
     ? Array.from(
@@ -139,6 +157,32 @@ export default function DetourCameraScreen() {
         .filter((value) => value >= device.minZoom && value <= device.maxZoom)
         .sort((a, b) => a - b)
     : [];
+  const exposureMin = device?.supportsExposureBias
+    ? device.minExposureBias
+    : -2;
+  const exposureMax = device?.supportsExposureBias
+    ? device.maxExposureBias
+    : 2;
+  const exposureRange = Math.max(0.001, exposureMax - exposureMin);
+  const exposureProgress = Math.min(
+    1,
+    Math.max(0, (exposure - exposureMin) / exposureRange)
+  );
+
+  function formatExposure(value: number) {
+    if (Math.abs(value) < 0.01) return '0';
+    return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+  }
+
+  function updateExposureFromSlider(locationX: number) {
+    if (!device?.supportsExposureBias) return;
+    const progress = Math.min(
+      1,
+      Math.max(0, locationX / EXPOSURE_SLIDER_WIDTH)
+    );
+    const next = exposureMin + progress * exposureRange;
+    setExposure(Number(next.toFixed(2)));
+  }
 
   async function persistPhoto(tempUri: string) {
     try {
@@ -318,12 +362,6 @@ export default function DetourCameraScreen() {
     runShutterMotion();
 
     try {
-      // Give the shutter blackout one frame to land before native capture.
-      // iOS may suppress Taptic Engine feedback while CameraView is active, so
-      // the visual shutter is primary and the crisp impact is fired after the
-      // captured frame replaces CameraView.
-      await delay(45);
-
       // Capture once at source quality, then create the canonical 1:1 file.
       // Review, session storage and Photos all use this exact square result.
       const capture = await photoOutput.capturePhotoToFile(
@@ -336,7 +374,6 @@ export default function DetourCameraScreen() {
       setPendingCaptureUri(squareCapture.uri);
       setTakingPhoto(false);
 
-      await delay(45);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
     } catch {
       setTakingPhoto(false);
@@ -467,6 +504,7 @@ export default function DetourCameraScreen() {
           outputs={[photoOutput]}
           isActive={!pendingCaptureUri}
           zoom={zoom}
+          exposure={device.supportsExposureBias ? exposure : undefined}
           orientationSource="device"
           onStarted={() => { setCameraReady(true); setMountError(null); }}
           onStopped={() => setCameraReady(false)}
@@ -551,7 +589,50 @@ export default function DetourCameraScreen() {
             </View>
           )}
           <View style={styles.cameraBottom}>
-            <View style={styles.statusColumn} />
+            <View style={styles.statusColumn}>
+              {device?.supportsExposureBias ? (
+                <>
+                  <Text style={styles.exposureLabel}>
+                    曝光 {formatExposure(exposure)}
+                  </Text>
+                  <View
+                    accessibilityLabel="調整曝光"
+                    style={styles.exposureSlider}
+                    onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
+                    onTouchStart={(event) => {
+                      updateExposureFromSlider(
+                        event.nativeEvent.locationX
+                      );
+                    }}
+                    onTouchMove={(event) => {
+                      updateExposureFromSlider(
+                        event.nativeEvent.locationX
+                      );
+                    }}
+                  >
+                    <View style={styles.exposureTrack} />
+                    <View
+                      style={[
+                        styles.exposureProgress,
+                        { width: EXPOSURE_SLIDER_WIDTH * exposureProgress },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.exposureThumb,
+                        {
+                          left:
+                            EXPOSURE_SLIDER_WIDTH * exposureProgress - 5,
+                        },
+                      ]}
+                    />
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.exposureLabel}>自動曝光</Text>
+              )}
+            </View>
 
             <Animated.View style={{ transform: [{ scale: shutterScale }] }}>
               <Pressable
@@ -637,8 +718,12 @@ const styles = StyleSheet.create({
   lensButtonText: { fontSize: 11, fontWeight: '700', color: BONE },
   lensButtonTextActive: { color: INK },
   cameraBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusColumn: { width: 108, gap: 5 },
-  statusText: { fontSize: 8, letterSpacing: 1.4, color: BONE },
+  statusColumn: { width: EXPOSURE_SLIDER_WIDTH, gap: 5 },
+  exposureLabel: { fontSize: 9, letterSpacing: 0.8, color: BONE },
+  exposureSlider: { width: EXPOSURE_SLIDER_WIDTH, height: 24, justifyContent: 'center' },
+  exposureTrack: { position: 'absolute', left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(241,239,231,0.34)' },
+  exposureProgress: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: BONE },
+  exposureThumb: { position: 'absolute', top: 7, width: 10, height: 10, borderRadius: 5, backgroundColor: BONE },
   errorText: { fontSize: 7, lineHeight: 12, color: SIGNAL },
   shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: BONE, alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: BONE },
