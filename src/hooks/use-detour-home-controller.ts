@@ -104,7 +104,6 @@ import { usePassportStore } from './use-passport-store';
 import { usePlaytestStore } from './use-playtest-store';
 import {
   contextCode,
-  formatPassportDate,
   parseMinutes,
 } from '../lib/detour-formatters';
 
