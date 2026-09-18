@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   },
   replaceText: {
     fontSize: 14,
-    fontWeight: '750',
+    fontWeight: '700',
     color: MUTED,
   },
   pressed: {
