@@ -4,7 +4,7 @@ import {
   Animated,
   Easing,
   Image,
-  Platform,
+  Linking,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -14,12 +14,14 @@ import {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  CameraView,
-  useCameraPermissions,
-  type CameraCapturedPicture,
-  type CameraType,
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+  usePhotoOutput,
+  type CameraRef,
   type FlashMode,
-} from 'expo-camera';
+  type TargetCameraPosition,
+} from 'react-native-vision-camera';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import {
@@ -58,44 +60,60 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function cropCaptureToSquare(capture: CameraCapturedPicture) {
-  const side = Math.min(capture.width, capture.height);
-  const originX = Math.max(0, Math.round((capture.width - side) / 2));
-  const originY = Math.max(0, Math.round((capture.height - side) / 2));
+async function cropCaptureToSquare(uri: string) {
+  const dimensions = await new Promise<{ width: number; height: number }>(
+    (resolve, reject) => {
+      Image.getSize(
+        uri,
+        (width, height) => resolve({ width, height }),
+        reject
+      );
+    }
+  );
+  const side = Math.min(dimensions.width, dimensions.height);
+  const originX = Math.max(0, Math.round((dimensions.width - side) / 2));
+  const originY = Math.max(0, Math.round((dimensions.height - side) / 2));
   return ImageManipulator.manipulateAsync(
-    capture.uri,
+    uri,
     [{ crop: { originX, originY, width: side, height: side } }],
     { compress: 0.84, format: ImageManipulator.SaveFormat.JPEG }
   );
 }
 
-const MAX_DIGITAL_ZOOM = 0.48;
-function clampZoom(value: number) { return Math.min(MAX_DIGITAL_ZOOM, Math.max(0, value)); }
 function touchDistance(touches: readonly { pageX: number; pageY: number }[]) { if (touches.length < 2) return 0; const [a,b] = touches; return Math.hypot(a.pageX-b.pageX, a.pageY-b.pageY); }
-function lensLabel(lens: string) { const key = lens.toLowerCase(); if (key.includes('ultrawide')) return '0.5×'; if (key.includes('wideangle')) return '1×'; if (key.includes('telephoto')) return '望遠'; return '鏡頭'; }
-function lensPriority(lens: string) { const key = lens.toLowerCase(); if (key.includes('ultrawide')) return 0; if (key.includes('wideangle')) return 1; if (key.includes('telephoto')) return 2; return 9; }
+function clampZoom(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)); }
+function zoomLabel(value: number) { return `${Number(value.toFixed(1))}×`; }
 
 export default function DetourCameraScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const cameraRef = useRef<CameraView | null>(null);
+  const cameraRef = useRef<CameraRef | null>(null);
   const shutterFlash = useRef(new Animated.Value(0)).current;
   const shutterScale = useRef(new Animated.Value(1)).current;
+  const focusOpacity = useRef(new Animated.Value(0)).current;
+  const focusScale = useRef(new Animated.Value(1)).current;
 
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission, canRequestPermission, requestPermission } =
+    useCameraPermission();
+  const photoOutput = usePhotoOutput({
+    quality: 1,
+    qualityPrioritization: 'quality',
+  });
   const [cameraReady, setCameraReady] = useState(false);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
   const [pendingCaptureUri, setPendingCaptureUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
-  const [facing, setFacing] = useState<CameraType>('back');
+  const [facing, setFacing] = useState<TargetCameraPosition>('back');
+  const device = useCameraDevice(facing);
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
-  const [zoom, setZoom] = useState(0);
-  const [availableLenses, setAvailableLenses] = useState<string[]>([]);
-  const [selectedLens, setSelectedLens] = useState<string | undefined>(undefined);
+  const [zoom, setZoom] = useState(1);
+  const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
+  const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const pinchStartDistanceRef = useRef(0);
-  const pinchStartZoomRef = useRef(0);
+  const pinchStartZoomRef = useRef(1);
   const pinchActiveRef = useRef(false);
+  const lastPinchEndedAtRef = useRef(0);
 
   const requestId = getParam(params.requestId);
   const source = getParam(params.source, 'free') as CameraSource;
@@ -104,9 +122,23 @@ export default function DetourCameraScreen() {
   const isArrivalCapture = source === 'arrival';
 
   useEffect(() => {
-    if (!permission) return;
-    if (!permission.granted && permission.canAskAgain) requestPermission();
-  }, [permission, requestPermission]);
+    if (canRequestPermission) void requestPermission();
+  }, [canRequestPermission, requestPermission]);
+
+  useEffect(() => {
+    setCameraReady(false);
+    setMountError(null);
+    if (!device) return;
+    setZoom(clampZoom(1, device.minZoom, device.maxZoom));
+  }, [device]);
+
+  const lensZoomLevels = device
+    ? Array.from(
+        new Set([device.minZoom, ...device.zoomLensSwitchFactors, 1])
+      )
+        .filter((value) => value >= device.minZoom && value <= device.maxZoom)
+        .sort((a, b) => a - b)
+    : [];
 
   async function persistPhoto(tempUri: string) {
     try {
@@ -140,36 +172,6 @@ export default function DetourCameraScreen() {
     }
   }
 
-  async function refreshAvailableLenses() {
-    setZoom(0);
-    if (Platform.OS !== 'ios' || facing !== 'back' || !cameraRef.current) {
-      setAvailableLenses([]);
-      setSelectedLens(undefined);
-      return;
-    }
-
-    try {
-      const lenses = (await cameraRef.current.getAvailableLensesAsync()) as string[];
-      const physical = lenses
-        .filter((lens) => {
-          const key = lens.toLowerCase();
-          return key.includes('ultrawide') || key.includes('wideangle') || key.includes('telephoto');
-        })
-        .sort((a, b) => lensPriority(a) - lensPriority(b));
-      const normalized = Array.from(new Set(physical));
-      setAvailableLenses(normalized);
-      const mainWide = normalized.find((lens) => {
-        const key = lens.toLowerCase();
-        return key.includes('wideangle') && !key.includes('ultrawide');
-      });
-      setSelectedLens(mainWide);
-    } catch {
-      setAvailableLenses([]);
-      setSelectedLens(undefined);
-      setZoom(0);
-    }
-  }
-
   function cycleFlash() {
     setFlashMode((current) => current === 'off' ? 'auto' : current === 'auto' ? 'on' : 'off');
     void Haptics.selectionAsync();
@@ -177,16 +179,14 @@ export default function DetourCameraScreen() {
 
   function switchFacing() {
     setFacing((current) => current === 'back' ? 'front' : 'back');
-    setZoom(0);
-    setSelectedLens(undefined);
-    setAvailableLenses([]);
+    setCameraReady(false);
+    setZoom(1);
     setFlashMode('off');
     void Haptics.selectionAsync();
   }
 
-  function chooseLens(lens: string) {
-    setSelectedLens(lens);
-    setZoom(0);
+  function chooseZoom(nextZoom: number) {
+    setZoom(nextZoom);
     void Haptics.selectionAsync();
   }
 
@@ -204,13 +204,73 @@ export default function DetourCameraScreen() {
     const distance = touchDistance(touches);
     if (distance <= 0) return;
     const ratio = distance / pinchStartDistanceRef.current;
-    const delta = Math.log2(Math.max(0.35, ratio)) * 0.24;
-    setZoom(clampZoom(pinchStartZoomRef.current + delta));
+    if (!device) return;
+    setZoom(
+      clampZoom(
+        pinchStartZoomRef.current * Math.max(0.35, ratio),
+        device.minZoom,
+        device.maxZoom
+      )
+    );
   }
 
   function handlePinchEnd() {
+    if (pinchActiveRef.current) lastPinchEndedAtRef.current = Date.now();
     pinchActiveRef.current = false;
     pinchStartDistanceRef.current = 0;
+  }
+
+  async function focusAt(x: number, y: number) {
+    if (
+      !cameraReady ||
+      !cameraRef.current ||
+      !device?.supportsFocusMetering ||
+      Date.now() - lastPinchEndedAtRef.current < 250
+    ) {
+      return;
+    }
+
+    const squareTop = Math.max(
+      0,
+      (cameraLayout.height - cameraLayout.width) / 2
+    );
+    if (y < squareTop || y > squareTop + cameraLayout.width) return;
+
+    setFocusPoint({ x, y });
+    focusOpacity.stopAnimation();
+    focusScale.stopAnimation();
+    focusOpacity.setValue(1);
+    focusScale.setValue(1.25);
+    Animated.parallel([
+      Animated.spring(focusScale, {
+        toValue: 1,
+        speed: 28,
+        bounciness: 2,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(focusOpacity, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    try {
+      await cameraRef.current.focusTo(
+        { x, y },
+        {
+          responsiveness: 'snappy',
+          adaptiveness: 'continuous',
+          autoResetAfter: 5,
+        }
+      );
+      void Haptics.selectionAsync();
+    } catch (error) {
+      console.warn('DETOUR tap focus failed:', error);
+    }
   }
 
   function runShutterMotion() {
@@ -266,10 +326,13 @@ export default function DetourCameraScreen() {
 
       // Capture once at source quality, then create the canonical 1:1 file.
       // Review, session storage and Photos all use this exact square result.
-      const capture = await cameraRef.current.takePictureAsync({ quality: 1 });
-      if (!capture?.uri) throw new Error('No photo URI');
+      const capture = await photoOutput.capturePhotoToFile(
+        { flashMode: facing === 'back' ? flashMode : 'off' },
+        {}
+      );
+      const captureUri = `file://${capture.filePath}`;
 
-      const squareCapture = await cropCaptureToSquare(capture);
+      const squareCapture = await cropCaptureToSquare(captureUri);
       setPendingCaptureUri(squareCapture.uri);
       setTakingPhoto(false);
 
@@ -315,16 +378,7 @@ export default function DetourCameraScreen() {
     }
   }
 
-  if (!permission) {
-    return (
-      <View style={styles.blackScreen}>
-        <StatusBar barStyle="light-content" />
-        <Text style={styles.centerMessage}>正在開啟相機</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <View style={styles.permissionScreen}>
         <StatusBar barStyle="dark-content" />
@@ -334,7 +388,7 @@ export default function DetourCameraScreen() {
           <Text style={styles.permissionBody}>DETOUR 只會在你主動按下快門時使用相機。</Text>
         </View>
         <View>
-          {permission.canAskAgain ? (
+          {canRequestPermission ? (
             <Pressable
               onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); void requestPermission(); }}
               style={styles.permissionButton}
@@ -343,7 +397,13 @@ export default function DetourCameraScreen() {
               <Text style={styles.permissionButtonText}>→</Text>
             </Pressable>
           ) : (
-            <Text style={styles.permissionBody}>請到 iPhone 設定裡允許 DETOUR / Expo Go 使用相機。</Text>
+            <Pressable
+              onPress={() => { void Haptics.selectionAsync(); void Linking.openSettings(); }}
+              style={styles.permissionButton}
+            >
+              <Text style={styles.permissionButtonText}>前往設定允許相機</Text>
+              <Text style={styles.permissionButtonText}>→</Text>
+            </Pressable>
           )}
           <Pressable
             onPress={() => { void Haptics.selectionAsync(); router.back(); }}
@@ -392,24 +452,56 @@ export default function DetourCameraScreen() {
   return (
     <View
       style={styles.cameraScreen}
+      onLayout={(event) => setCameraLayout(event.nativeEvent.layout)}
       onTouchStart={(event) => handlePinchStart(event.nativeEvent.touches)}
       onTouchMove={(event) => handlePinchMove(event.nativeEvent.touches)}
       onTouchEnd={(event) => { if (event.nativeEvent.touches.length < 2) handlePinchEnd(); }}
       onTouchCancel={handlePinchEnd}
     >
       <StatusBar barStyle="light-content" />
-      <CameraView
-        ref={cameraRef}
-        style={styles.cameraView}
-        facing={facing}
-        flash={facing === 'back' ? flashMode : 'off'}
-        zoom={zoom}
-        selectedLens={Platform.OS === 'ios' && facing === 'back' ? selectedLens : undefined}
-        autofocus="on"
-        responsiveOrientationWhenOrientationLocked
-        onCameraReady={() => { setZoom(0); setCameraReady(true); setMountError(null); void refreshAvailableLenses(); }}
-        onMountError={(event) => { setCameraReady(false); setMountError(event.message); }}
+      {device ? (
+        <Camera
+          ref={cameraRef}
+          style={styles.cameraView}
+          device={device}
+          outputs={[photoOutput]}
+          isActive={!pendingCaptureUri}
+          zoom={zoom}
+          orientationSource="device"
+          onStarted={() => { setCameraReady(true); setMountError(null); }}
+          onStopped={() => setCameraReady(false)}
+          onError={(error) => { setCameraReady(false); setMountError(error.message); }}
+        />
+      ) : (
+        <View style={styles.cameraLoading}>
+          <Text style={styles.centerMessage}>正在開啟相機</Text>
+        </View>
+      )}
+
+      <Pressable
+        accessibilityLabel="點一下畫面對焦"
+        onPress={(event) => {
+          void focusAt(event.nativeEvent.locationX, event.nativeEvent.locationY);
+        }}
+        style={styles.focusLayer}
       />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.focusRing,
+          {
+            left: focusPoint.x - 34,
+            top: focusPoint.y - 34,
+            opacity: focusOpacity,
+            transform: [{ scale: focusScale }],
+          },
+        ]}
+      >
+        <View style={[styles.focusCorner, styles.focusCornerTopLeft]} />
+        <View style={[styles.focusCorner, styles.focusCornerTopRight]} />
+        <View style={[styles.focusCorner, styles.focusCornerBottomLeft]} />
+        <View style={[styles.focusCorner, styles.focusCornerBottomRight]} />
+      </Animated.View>
 
       <View pointerEvents="none" style={styles.squareMaskWrap}>
         <View style={styles.squareMaskBand} />
@@ -446,13 +538,13 @@ export default function DetourCameraScreen() {
         </View>
 
         <View style={styles.cameraControlZone}>
-          {facing === 'back' && availableLenses.length > 1 && (
+          {facing === 'back' && lensZoomLevels.length > 1 && (
             <View style={styles.lensRow}>
-              {availableLenses.map((lens) => {
-                const active = selectedLens === lens;
+              {lensZoomLevels.map((lensZoom) => {
+                const active = Math.abs(zoom - lensZoom) < 0.04;
                 return (
-                  <Pressable key={lens} onPress={() => chooseLens(lens)} style={[styles.lensButton, active && styles.lensButtonActive]}>
-                    <Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{lensLabel(lens)}</Text>
+                  <Pressable key={lensZoom} onPress={() => chooseZoom(lensZoom)} style={[styles.lensButton, active && styles.lensButtonActive]}>
+                    <Text style={[styles.lensButtonText, active && styles.lensButtonTextActive]}>{zoomLabel(lensZoom)}</Text>
                   </Pressable>
                 );
               })}
@@ -514,6 +606,14 @@ const styles = StyleSheet.create({
   cancelPermissionText: { textAlign: 'center', fontSize: 13, color: '#706C64' },
   cameraScreen: { flex: 1, backgroundColor: '#000' },
   cameraView: { flex: 1 },
+  cameraLoading: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center' },
+  focusLayer: { ...ABSOLUTE_FILL, zIndex: 2 },
+  focusRing: { position: 'absolute', width: 68, height: 68, zIndex: 3 },
+  focusCorner: { position: 'absolute', width: 17, height: 17, borderColor: BONE },
+  focusCornerTopLeft: { top: 0, left: 0, borderTopWidth: 2, borderLeftWidth: 2 },
+  focusCornerTopRight: { top: 0, right: 0, borderTopWidth: 2, borderRightWidth: 2 },
+  focusCornerBottomLeft: { bottom: 0, left: 0, borderBottomWidth: 2, borderLeftWidth: 2 },
+  focusCornerBottomRight: { bottom: 0, right: 0, borderBottomWidth: 2, borderRightWidth: 2 },
   squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
   squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
   squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
