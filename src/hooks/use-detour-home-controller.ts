@@ -110,6 +110,7 @@ import {
 import { parseDetourPreferences } from '../lib/preferences-storage';
 import { measureMovementSample } from '../lib/location-trace-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
+import { useLocationWatchers } from './use-location-watchers';
 
 export function useDetourHomeController() {
   const router = useRouter();
@@ -213,8 +214,6 @@ export function useDetourHomeController() {
     useState<'not-run' | 'ai' | 'fallback'>('not-run');
   const [aiConnectionTesting, setAIConnectionTesting] = useState(false);
 
-  const locationWatcher = useRef<Location.LocationSubscription | null>(null);
-  const headingWatcher = useRef<Location.LocationSubscription | null>(null);
   const lastTracePointRef = useRef<GeoPoint | null>(null);
   const lastMovementSampleAtRef = useRef<number | null>(null);
   const effectiveMovingSecondsRef = useRef(0);
@@ -1007,32 +1006,10 @@ export function useDetourHomeController() {
     setOnboardingStep((value) => value + 1);
   }
 
-  function stopLocationWatcher() {
-    if (locationWatcher.current) {
-      locationWatcher.current.remove();
-      locationWatcher.current = null;
-    }
-    if (headingWatcher.current) {
-      headingWatcher.current.remove();
-      headingWatcher.current = null;
-    }
-  }
-
-  async function startHeadingWatcher() {
-    if (headingWatcher.current) {
-      headingWatcher.current.remove();
-      headingWatcher.current = null;
-    }
-
-    try {
-      headingWatcher.current = await Location.watchHeadingAsync((heading) => {
-        const value =
-          heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
-        if (Number.isFinite(value)) setDeviceHeading(value);
-      });
-    } catch {
-      // Heading is useful, but the route can still render without it.
-    }
+  function handleHeadingUpdate(heading: Location.LocationHeadingObject) {
+    const value =
+      heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+    if (Number.isFinite(value)) setDeviceHeading(value);
   }
 
   function advanceTicketProgress(_toValue: number, status: string) {
@@ -1670,123 +1647,110 @@ export function useDetourHomeController() {
     }
   }
 
-  async function startTraceWatcher() {
-    stopLocationWatcher();
-    if (devMode) return;
+  function handleLocationUpdate(newLocation: Location.LocationObject) {
+    const nextPoint: GeoPoint = {
+      latitude: newLocation.coords.latitude,
+      longitude: newLocation.coords.longitude,
+    };
+    const sampleAt = newLocation.timestamp || Date.now();
+    const previousSampleAt = lastMovementSampleAtRef.current;
+    lastMovementSampleAtRef.current = sampleAt;
 
-    locationWatcher.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 5,
-        timeInterval: 3000,
-      },
-      (newLocation) => {
-        const nextPoint: GeoPoint = {
-          latitude: newLocation.coords.latitude,
-          longitude: newLocation.coords.longitude,
-        };
-        const sampleAt = newLocation.timestamp || Date.now();
-        const previousSampleAt = lastMovementSampleAtRef.current;
-        lastMovementSampleAtRef.current = sampleAt;
+    setLatitude(nextPoint.latitude);
+    setLongitude(nextPoint.longitude);
 
-        setLatitude(nextPoint.latitude);
-        setLongitude(nextPoint.longitude);
+    const previous = lastTracePointRef.current;
+    lastTracePointRef.current = nextPoint;
 
-        const previous = lastTracePointRef.current;
-        lastTracePointRef.current = nextPoint;
+    if (!previous) {
+      setActiveTrace((trace) => [...trace, nextPoint]);
+      return;
+    }
 
-        if (!previous) {
-          setActiveTrace((trace) => [...trace, nextPoint]);
-          return;
-        }
+    const movement = measureMovementSample({
+      previous,
+      next: nextPoint,
+      previousSampleAt,
+      sampleAt,
+      distanceMeters: (from, to) =>
+        getDistanceInMeters(
+          from.latitude,
+          from.longitude,
+          to.latitude,
+          to.longitude
+        ),
+    });
 
-        const movement = measureMovementSample({
-          previous,
-          next: nextPoint,
-          previousSampleAt,
-          sampleAt,
-          distanceMeters: (from, to) =>
-            getDistanceInMeters(
-              from.latitude,
-              from.longitude,
-              to.latitude,
-              to.longitude
-            ),
-        });
+    if (!movement) return;
+    effectiveMovingSecondsRef.current += movement.sampleSeconds;
 
-        if (!movement) return;
-        effectiveMovingSecondsRef.current += movement.sampleSeconds;
-
-        setActiveTrace((trace) =>
-          trace.length >= 700 ? trace : [...trace, nextPoint]
-        );
-
-        if (stageRef.current !== 'journey') return;
-
-        const nextTraveled =
-          traveledMetersRef.current + movement.movedMeters;
-        traveledMetersRef.current = nextTraveled;
-        setTraveledMeters(nextTraveled);
-
-        const route = navigationRouteRef.current;
-        const beat = route?.beats[navigationBeatIndexRef.current] ?? null;
-        if (!route || !beat) return;
-
-        const remainingOnBeat = remainingDistanceOnPolyline(
-          nextPoint,
-          beat.segmentCoordinates
-        );
-        setBeatRemainingMeters(remainingOnBeat);
-        beatRemainingMetersRef.current = remainingOnBeat;
-
-        const shouldRemindForTurn =
-          ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
-            beat.turn
-          ) &&
-          remainingOnBeat > 12 &&
-          remainingOnBeat <= 30 &&
-          turnReminderBeatIdRef.current !== beat.id;
-
-        if (shouldRemindForTurn) {
-          turnReminderBeatIdRef.current = beat.id;
-          void Haptics.notificationAsync(
-            Haptics.NotificationFeedbackType.Warning
-          );
-        }
-
-        const offRouteDistance = distanceToPolyline(
-          nextPoint,
-          route.coordinates
-        );
-        const gpsAccuracy = newLocation.coords.accuracy ?? 0;
-        const offRouteThreshold = Math.max(
-          45,
-          Math.min(70, gpsAccuracy + 30)
-        );
-
-        if (offRouteDistance > offRouteThreshold) {
-          offRouteCountRef.current += 1;
-        } else {
-          offRouteCountRef.current = 0;
-        }
-
-        if (
-          offRouteCountRef.current >= 3 &&
-          !rerouteInFlightRef.current
-        ) {
-          offRouteCountRef.current = 0;
-          void rerouteFromCurrentPosition(nextPoint);
-          return;
-        }
-
-        maybeTriggerSideEvent(nextPoint);
-
-        if (remainingOnBeat <= 12) {
-          void reachCurrentNavigationBeat();
-        }
-      }
+    setActiveTrace((trace) =>
+      trace.length >= 700 ? trace : [...trace, nextPoint]
     );
+
+    if (stageRef.current !== 'journey') return;
+
+    const nextTraveled = traveledMetersRef.current + movement.movedMeters;
+    traveledMetersRef.current = nextTraveled;
+    setTraveledMeters(nextTraveled);
+
+    const route = navigationRouteRef.current;
+    const beat = route?.beats[navigationBeatIndexRef.current] ?? null;
+    if (!route || !beat) return;
+
+    const remainingOnBeat = remainingDistanceOnPolyline(
+      nextPoint,
+      beat.segmentCoordinates
+    );
+    setBeatRemainingMeters(remainingOnBeat);
+    beatRemainingMetersRef.current = remainingOnBeat;
+
+    const shouldRemindForTurn =
+      ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
+        beat.turn
+      ) &&
+      remainingOnBeat > 12 &&
+      remainingOnBeat <= 30 &&
+      turnReminderBeatIdRef.current !== beat.id;
+
+    if (shouldRemindForTurn) {
+      turnReminderBeatIdRef.current = beat.id;
+      void Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Warning
+      );
+    }
+
+    const offRouteDistance = distanceToPolyline(nextPoint, route.coordinates);
+    const gpsAccuracy = newLocation.coords.accuracy ?? 0;
+    const offRouteThreshold = Math.max(45, Math.min(70, gpsAccuracy + 30));
+
+    if (offRouteDistance > offRouteThreshold) {
+      offRouteCountRef.current += 1;
+    } else {
+      offRouteCountRef.current = 0;
+    }
+
+    if (offRouteCountRef.current >= 3 && !rerouteInFlightRef.current) {
+      offRouteCountRef.current = 0;
+      void rerouteFromCurrentPosition(nextPoint);
+      return;
+    }
+
+    maybeTriggerSideEvent(nextPoint);
+
+    if (remainingOnBeat <= 12) {
+      void reachCurrentNavigationBeat();
+    }
   }
+
+  const locationWatchers = useLocationWatchers({
+    devMode,
+    onLocation: handleLocationUpdate,
+    onHeading: handleHeadingUpdate,
+  });
+  const stopLocationWatcher = locationWatchers.stopLocationWatcher;
+  const startHeadingWatcher = locationWatchers.startHeadingWatcher;
+  const startTraceWatcher = locationWatchers.startTraceWatcher;
 
   async function prewarmDetour(moodOverride?: MoodId) {
     const targetMood = moodOverride ?? selectedMood;
@@ -2612,8 +2576,8 @@ export function useDetourHomeController() {
     setLastAIResult,
     aiConnectionTesting,
     setAIConnectionTesting,
-    locationWatcher,
-    headingWatcher,
+    locationWatcher: locationWatchers.locationWatcher,
+    headingWatcher: locationWatchers.headingWatcher,
     lastTracePointRef,
     planRef,
     navigationRouteRef,
