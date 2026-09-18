@@ -108,6 +108,7 @@ import {
   writeStored,
 } from '../lib/storage';
 import { parseDetourPreferences } from '../lib/preferences-storage';
+import { measureMovementSample } from '../lib/location-trace-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
 
 export function useDetourHomeController() {
@@ -1699,22 +1700,22 @@ export function useDetourHomeController() {
           return;
         }
 
-        const moved = getDistanceInMeters(
-          previous.latitude,
-          previous.longitude,
-          nextPoint.latitude,
-          nextPoint.longitude
-        );
+        const movement = measureMovementSample({
+          previous,
+          next: nextPoint,
+          previousSampleAt,
+          sampleAt,
+          distanceMeters: (from, to) =>
+            getDistanceInMeters(
+              from.latitude,
+              from.longitude,
+              to.latitude,
+              to.longitude
+            ),
+        });
 
-        if (moved < 4 || moved > 80) return;
-
-        if (previousSampleAt !== null) {
-          const sampleSeconds = Math.max(
-            0,
-            Math.min(10, (sampleAt - previousSampleAt) / 1000)
-          );
-          effectiveMovingSecondsRef.current += sampleSeconds;
-        }
+        if (!movement) return;
+        effectiveMovingSecondsRef.current += movement.sampleSeconds;
 
         setActiveTrace((trace) =>
           trace.length >= 700 ? trace : [...trace, nextPoint]
@@ -1722,7 +1723,8 @@ export function useDetourHomeController() {
 
         if (stageRef.current !== 'journey') return;
 
-        const nextTraveled = traveledMetersRef.current + moved;
+        const nextTraveled =
+          traveledMetersRef.current + movement.movedMeters;
         traveledMetersRef.current = nextTraveled;
         setTraveledMeters(nextTraveled);
 
