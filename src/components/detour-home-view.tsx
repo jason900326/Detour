@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import MapView, { Circle, Polyline } from 'react-native-maps';
+import MapView, { Circle, Polygon, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
@@ -19,6 +19,7 @@ import { isAIEngineConfigured } from '../lib/ai-engine';
 import type { SceneIssueReason, WalkingPace } from '../lib/app-model';
 import { MOODS } from '../lib/app-model';
 import { ticketSerial } from '../lib/detour-formatters';
+import { offsetPoint } from '../lib/navigation-engine';
 import { DETOUR_PLAYTEST_VERSION } from '../lib/playtest-analytics';
 import { styles } from '../styles/home-styles';
 import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
@@ -47,6 +48,14 @@ function formatElapsedJourneyTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function headingSectorCoordinates(center: { latitude: number; longitude: number }, heading: number) {
+  const safeHeading = Number.isFinite(heading) ? heading : 0;
+  const tip = offsetPoint(center, 54, safeHeading);
+  const left = offsetPoint(center, 40, safeHeading - 25);
+  const right = offsetPoint(center, 40, safeHeading + 25);
+  return [left, tip, right];
+}
+
 export function DetourHomeView({
   controller,
 }: {
@@ -69,12 +78,14 @@ export function DetourHomeView({
     selectedScene,
     navigationRoute,
     currentNavigationBeat,
+    deviceHeading,
     nextBeatSegment,
     questPulse,
     elapsedJourneySeconds,
     isRerouting,
     replacementLoading,
     activeSideEvent,
+    sideEventPhotoConfirmed,
     devMode,
     developerToolsUnlocked,
     photos,
@@ -115,7 +126,6 @@ export function DetourHomeView({
     continueFromMood,
     prepareDetourTicket,
     startDetour,
-    simulateNextBeat,
     acknowledgeActiveSideEvent,
     replaceActiveSideEvent,
     replaceFailedDestination,
@@ -846,12 +856,28 @@ export function DetourHomeView({
                     latitudeDelta: 0.0022,
                     longitudeDelta: 0.0022,
                   }}
-                  showsUserLocation
+                  showsUserLocation={false}
                   showsMyLocationButton={false}
                   showsCompass={false}
                   pitchEnabled={false}
                   rotateEnabled={false}
                 >
+                  <Polygon
+                    coordinates={headingSectorCoordinates(
+                      { latitude, longitude },
+                      deviceHeading
+                    )}
+                    fillColor="rgba(30, 135, 255, 0.28)"
+                    strokeColor="rgba(30, 135, 255, 0.5)"
+                    strokeWidth={1}
+                  />
+                  <Circle
+                    center={{ latitude, longitude }}
+                    radius={8}
+                    strokeColor="#FFFFFF"
+                    strokeWidth={2}
+                    fillColor="#1683FF"
+                  />
                   <Polyline coordinates={nextBeatSegment} strokeColor={SIGNAL} strokeWidth={5} lineCap="round" />
                   <Circle center={currentNavigationBeat.point} radius={10} strokeColor={BONE} strokeWidth={1} fillColor={SIGNAL} />
                 </MapView>
@@ -874,7 +900,9 @@ export function DetourHomeView({
                   >
                     <SideEventPaper
                       event={activeSideEvent}
-                      onFound={acknowledgeActiveSideEvent}
+                      onFound={() => openCamera('side')}
+                      onCompleted={acknowledgeActiveSideEvent}
+                      photoConfirmed={sideEventPhotoConfirmed}
                       onReplace={replaceActiveSideEvent}
                     />
                   </View>
@@ -905,10 +933,18 @@ export function DetourHomeView({
                 <Text style={styles.v35JourneyCameraText}>拍照</Text>
                 <Text style={styles.v35JourneyCameraArrow}>→</Text>
               </Pressable>
-              {devMode && (
-                <Pressable onPress={simulateNextBeat} style={styles.v41DevAdvance}>
-                  <Text style={styles.v41DevAdvanceText}>室內測試 · 下一段 →</Text>
-                </Pressable>
+              {photos.length > 0 && (
+                <View accessible accessibilityLabel="即時相簿" style={styles.v35JourneyAlbum}>
+                  <Image
+                    source={{ uri: photos[photos.length - 1].uri }}
+                    style={styles.v35JourneyAlbumImage}
+                  />
+                  {photos.length > 1 && (
+                    <View style={styles.v35JourneyAlbumCount}>
+                      <Text style={styles.v35JourneyAlbumCountText}>{photos.length}</Text>
+                    </View>
+                  )}
+                </View>
               )}
             </View>
           </View>
