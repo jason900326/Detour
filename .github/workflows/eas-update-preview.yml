@@ -8,7 +8,18 @@ on:
       - "README*"
       - "docs/**"
       - "backend/**"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "README*"
+      - "docs/**"
+      - "backend/**"
   workflow_dispatch:
+
+concurrency:
+  group: detour-preview
+  cancel-in-progress: true
 
 jobs:
   update:
@@ -16,6 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
+    # Repository secrets are intentionally unavailable to forked PRs.
+    # Agent-created branches in this repository can publish normally.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Check Expo token
@@ -32,6 +47,8 @@ jobs:
       - name: Checkout repository
         if: steps.expo_token.outputs.skip != 'true'
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node
         if: steps.expo_token.outputs.skip != 'true'
@@ -58,4 +75,10 @@ jobs:
       - name: Publish preview update
         if: steps.expo_token.outputs.skip != 'true'
         shell: bash
-        run: eas update --channel preview --message "GitHub main ${GITHUB_SHA::7}" --non-interactive
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            MESSAGE="PR #${{ github.event.pull_request.number }} ${{ github.head_ref }} ${{ github.event.pull_request.head.sha }}"
+          else
+            MESSAGE="GitHub main ${GITHUB_SHA::7}"
+          fi
+          eas update --channel preview --message "$MESSAGE" --non-interactive
