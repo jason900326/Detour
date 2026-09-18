@@ -455,33 +455,120 @@ export function V46ReviewArtwork({
   );
 }
 
+function ShareRouteGraphic({ entry }: { entry: PassportEntry }) {
+  const route = projectedRoute(routeForEntry(entry));
+
+  if (!route) {
+    return (
+      <View style={styles.v57ShareRouteFallback}>
+        <View style={styles.v57ShareRouteFallbackLine} />
+      </View>
+    );
+  }
+
+  return (
+    <Svg
+      width="100%"
+      height="100%"
+      viewBox={`0 0 ${ROUTE_VIEW_WIDTH} ${ROUTE_VIEW_HEIGHT}`}
+    >
+      <SvgPolyline
+        points={route.points}
+        fill="none"
+        stroke="#11110F"
+        strokeWidth={7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <SvgCircle
+        cx={route.start.x}
+        cy={route.start.y}
+        r={8}
+        fill="#FF5A35"
+        stroke="#FBF7EE"
+        strokeWidth={3}
+      />
+      <SvgRect
+        x={route.end.x - 8}
+        y={route.end.y - 8}
+        width={16}
+        height={16}
+        rx={2}
+        fill="#FF5A35"
+        stroke="#FBF7EE"
+        strokeWidth={3}
+      />
+    </Svg>
+  );
+}
+
 export function V45SharePoster({
   entry,
   photoUri,
+  headline = '出門的時候，\n我還不知道要去哪。',
 }: {
   entry: PassportEntry;
   photoUri?: string;
+  headline?: string;
 }) {
-  const photos = useMemo(() => {
-    const source = entry.photos ?? [];
-    if (!photoUri) return source;
-    const selected = source.find((photo) => photo.uri === photoUri);
-    if (!selected) return source;
-    return [selected, ...source.filter((photo) => photo.id !== selected.id)];
-  }, [entry.photos, photoUri]);
+  const selectedPhotoUri = useMemo(
+    () => photoUri ?? entry.photos?.[0]?.uri,
+    [entry.photos, photoUri]
+  );
+  const minutes = entry.actualDurationMinutes ?? entry.minutes;
+  const discoveries = entry.discoveries ?? entry.photos?.length ?? 0;
 
   return (
-    <View style={styles.v56SharePoster}>
-      <Text style={styles.v56ShareBrand}>DETOUR<Text style={styles.v56ShareBrandDot}>.</Text></Text>
-      <Text style={styles.v56ShareMoodTitle}>{entry.moodLabel}</Text>
-      <View style={styles.v56ShareAccent} />
-      <View style={styles.v56ShareCardWrap}>
-        <JourneySummaryCard
-          entry={entry}
-          photos={photos}
-          fallbackDestination={entry.sceneName ?? `${entry.city}的一趟 DETOUR`}
-          fallbackMinutes={entry.actualDurationMinutes ?? entry.minutes}
+    <View style={styles.v57SharePoster}>
+      {selectedPhotoUri ? (
+        <Image
+          source={{ uri: selectedPhotoUri }}
+          style={styles.v57ShareBackground}
+          resizeMode="cover"
+          blurRadius={24}
         />
+      ) : (
+        <View style={styles.v57ShareBackgroundFallback} />
+      )}
+      <View style={styles.v57ShareBackdropTint} />
+
+      <View style={styles.v57ShareTicket}>
+        <Text style={styles.v57ShareLogo}>
+          DETOUR<Text style={styles.v57ShareLogoDot}>.</Text>
+        </Text>
+
+        <View style={styles.v57ShareHero}>
+          {selectedPhotoUri ? (
+            <Image
+              source={{ uri: selectedPhotoUri }}
+              style={styles.v57ShareHeroPhoto}
+              resizeMode="cover"
+            />
+          ) : (
+            <ShareRouteGraphic entry={entry} />
+          )}
+        </View>
+
+        <Text style={styles.v57ShareHeadline} numberOfLines={2}>
+          {headline}
+        </Text>
+        <View style={styles.v57ShareUnderlineWrap}>
+          <View style={styles.v57ShareUnderline} />
+          <View style={styles.v57ShareUnderlineEcho} />
+        </View>
+
+        <View style={styles.v57ShareRoute}>
+          <ShareRouteGraphic entry={entry} />
+        </View>
+
+        <Text style={styles.v57ShareStats}>
+          {minutes} 分鐘　·　{discoveries} 個發現
+        </Text>
+
+        <View style={styles.v57ShareFooterLine} />
+        <Text style={styles.v57ShareFooterBrand}>
+          DETOUR<Text style={styles.v57ShareLogoDot}>.</Text>
+        </Text>
       </View>
     </View>
   );
