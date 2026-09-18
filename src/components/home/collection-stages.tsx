@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Image,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -9,6 +11,7 @@ import {
 } from 'react-native';
 
 import type { useDetourHomeController } from '../../hooks/use-detour-home-controller';
+import type { PassportEntry } from '../../lib/app-model';
 import { styles } from '../../styles/home-styles';
 import { DetourAccentStroke } from '../ticket-visuals';
 import {
@@ -19,6 +22,12 @@ import {
 } from '../journey-recap-visuals';
 
 type Controller = ReturnType<typeof useDetourHomeController>;
+
+const SHARE_HEADLINES = [
+  '出門的時候，\n我還不知道要去哪。',
+  '只是跟著路走，\n就走到了這裡。',
+  '不是為了抵達，\n才開始這趟路。',
+] as const;
 
 function CompletionTransition({ onComplete }: { onComplete: () => void }) {
   const sweep = useRef(new Animated.Value(0)).current;
@@ -115,6 +124,44 @@ export function CollectionStages({
     transitionTo,
   } = controller;
 
+  const [shareEntry, setShareEntry] = useState<PassportEntry | null>(null);
+  const [sharePhotoIndex, setSharePhotoIndex] = useState(0);
+  const [shareHeadlineIndex, setShareHeadlineIndex] = useState(0);
+  const [shareComposerVisible, setShareComposerVisible] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  const sharePhotos = shareEntry?.photos ?? [];
+  const safeSharePhotoIndex = Math.min(
+    sharePhotoIndex,
+    Math.max(0, sharePhotos.length - 1)
+  );
+  const sharePhotoUri = sharePhotos[safeSharePhotoIndex]?.uri;
+  const shareHeadline = SHARE_HEADLINES[shareHeadlineIndex];
+
+  function openShareComposer(entry: PassportEntry, preferredPhotoIndex = 0) {
+    const photoCount = entry.photos?.length ?? 0;
+    setShareEntry(entry);
+    setSharePhotoIndex(
+      photoCount > 0
+        ? Math.min(Math.max(0, preferredPhotoIndex), photoCount - 1)
+        : 0
+    );
+    setShareHeadlineIndex(0);
+    setShareComposerVisible(true);
+  }
+
+  async function shareSelectedPoster() {
+    if (!shareEntry || !sharePhotoUri || shareBusy) return;
+
+    setShareBusy(true);
+    try {
+      await shareJourney(shareEntry, shareHeadline);
+      setShareComposerVisible(false);
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   return (
     <>
       {stage === 'developing' && (
@@ -168,7 +215,7 @@ export function CollectionStages({
               <Pressable
                 disabled={!lastCompletedEntry}
                 onPress={() => {
-                  if (lastCompletedEntry) void shareJourney(lastCompletedEntry);
+                  if (lastCompletedEntry) openShareComposer(lastCompletedEntry);
                 }}
                 style={({ pressed }) => [
                   styles.v56FinishShareButton,
@@ -185,15 +232,6 @@ export function CollectionStages({
             </Pressable>
           </ScrollView>
 
-          {lastCompletedEntry && (
-            <View
-              ref={shareTicketRef}
-              collapsable={false}
-              style={styles.v45SharePosterOffscreen}
-            >
-              <V45SharePoster entry={lastCompletedEntry} />
-            </View>
-          )}
         </View>
       )}
 
@@ -271,7 +309,9 @@ export function CollectionStages({
             />
 
             <Pressable
-              onPress={() => void shareJourney(selectedPassportEntry)}
+              onPress={() =>
+                openShareComposer(selectedPassportEntry, passportPhotoIndex)
+              }
               style={({ pressed }) => [
                 styles.v56DetailShareButton,
                 pressed && { opacity: 0.78 },
@@ -282,23 +322,132 @@ export function CollectionStages({
             </Pressable>
           </ScrollView>
 
-          <View
-            ref={shareTicketRef}
-            collapsable={false}
-            style={styles.v45SharePosterOffscreen}
-          >
-            <V45SharePoster
-              entry={selectedPassportEntry}
-              photoUri={
-                selectedPassportEntry.photos?.[
-                  Math.min(
-                    passportPhotoIndex,
-                    Math.max(0, (selectedPassportEntry.photos?.length ?? 1) - 1)
-                  )
-                ]?.uri
-              }
-            />
+        </View>
+      )}
+
+      <Modal
+        visible={shareComposerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (!shareBusy) setShareComposerVisible(false);
+        }}
+      >
+        <View style={styles.v57ComposerScreen}>
+          <View style={styles.v57ComposerTop}>
+            <Text style={styles.v57ComposerTitle}>分享這趟 DETOUR</Text>
+            <Pressable
+              disabled={shareBusy}
+              onPress={() => setShareComposerVisible(false)}
+              style={styles.v57ComposerClose}
+              hitSlop={12}
+            >
+              <Text style={styles.v57ComposerCloseText}>×</Text>
+            </Pressable>
           </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.v57ComposerScroll}
+          >
+            <Text style={styles.v57ComposerSectionLabel}>選一張代表照片</Text>
+
+            <View style={styles.v57ComposerPhotoPreview}>
+              {sharePhotoUri ? (
+                <Image
+                  source={{ uri: sharePhotoUri }}
+                  style={styles.v57ComposerPhotoPreviewImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.v57ComposerNoPhoto}>
+                  <Text style={styles.v57ComposerNoPhotoText}>
+                    這趟沒有可用照片。DETOUR 分享圖需要先選一張旅程照片。
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {sharePhotos.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.v57ComposerThumbScroller}
+                contentContainerStyle={styles.v57ComposerThumbContent}
+              >
+                {sharePhotos.map((photo, index) => (
+                  <Pressable
+                    key={photo.id}
+                    onPress={() => setSharePhotoIndex(index)}
+                    style={styles.v57ComposerThumbPress}
+                  >
+                    <Image
+                      source={{ uri: photo.uri }}
+                      style={[
+                        styles.v57ComposerThumb,
+                        index === safeSharePhotoIndex &&
+                          styles.v57ComposerThumbActive,
+                      ]}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.v57ComposerHeadlineSection}>
+              <Text style={styles.v57ComposerSectionLabel}>選一句話</Text>
+              {SHARE_HEADLINES.map((headline, index) => (
+                <Pressable
+                  key={headline}
+                  onPress={() => setShareHeadlineIndex(index)}
+                  style={[
+                    styles.v57ComposerHeadlineOption,
+                    index === shareHeadlineIndex &&
+                      styles.v57ComposerHeadlineOptionActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.v57ComposerHeadlineText,
+                      index === shareHeadlineIndex &&
+                        styles.v57ComposerHeadlineTextActive,
+                    ]}
+                  >
+                    {headline}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable
+              disabled={!sharePhotoUri || shareBusy}
+              onPress={() => void shareSelectedPoster()}
+              style={[
+                styles.v57ComposerShareButton,
+                (!sharePhotoUri || shareBusy) &&
+                  styles.v57ComposerShareButtonDisabled,
+              ]}
+            >
+              <Text style={styles.v57ComposerShareText}>
+                {shareBusy ? '正在準備分享圖…' : '分享這張圖'}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {shareEntry && (
+        <View
+          ref={shareTicketRef}
+          collapsable={false}
+          style={styles.v45SharePosterOffscreen}
+        >
+          <V45SharePoster
+            entry={shareEntry}
+            photoUri={sharePhotoUri}
+            headline={shareHeadline}
+          />
         </View>
       )}
     </>
