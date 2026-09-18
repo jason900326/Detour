@@ -94,10 +94,7 @@ import {
   type WalkingPace,
 } from '../lib/app-model';
 
-import {
-  applyFoodDestinationWeight,
-  getFilmRollCapacity,
-} from '../lib/journey-selection';
+import { applyFoodDestinationWeight } from '../lib/journey-selection';
 import { getDistanceInMeters, getRouteDistance } from '../lib/geo-utils';
 import { ABANDONABLE_STAGES, canTransition } from '../lib/stage-flow';
 import { usePassportStore } from './use-passport-store';
@@ -111,6 +108,7 @@ import {
 export function useDetourHomeController() {
   const router = useRouter();
   const activeCameraRequestRef = useRef<string | null>(null);
+  const turnReminderBeatIdRef = useRef<string | null>(null);
   const [stage, setStage] = useState<Stage>('boot');
   const [preferences, setPreferences] =
     useState<DetourPreferences>(DEFAULT_PREFERENCES);
@@ -275,7 +273,6 @@ export function useDetourHomeController() {
   );
 
   const selectedMinutes = parseMinutes(selectedTime);
-  const rollCapacity = getFilmRollCapacity(selectedMinutes || TIME_MIN);
   const previewProfile = getJourneyProfile(selectedMinutes || TIME_MIN);
 
   const timeIndexFromRatio = (ratio: number) =>
@@ -1195,6 +1192,13 @@ export function useDetourHomeController() {
     return next;
   }
 
+  async function acknowledgeActiveSideEvent() {
+    const next = presentSideEvent();
+    if (next) {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }
+
   async function replaceActiveSideEvent() {
     const next = presentSideEvent({ countAsReplacement: true });
     if (next) await Haptics.selectionAsync();
@@ -1532,6 +1536,21 @@ export function useDetourHomeController() {
         );
         setBeatRemainingMeters(remainingOnBeat);
         beatRemainingMetersRef.current = remainingOnBeat;
+
+        const shouldRemindForTurn =
+          ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
+            beat.turn
+          ) &&
+          remainingOnBeat > 12 &&
+          remainingOnBeat <= 60 &&
+          turnReminderBeatIdRef.current !== beat.id;
+
+        if (shouldRemindForTurn) {
+          turnReminderBeatIdRef.current = beat.id;
+          void Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Warning
+          );
+        }
 
         const offRouteDistance = distanceToPolyline(
           nextPoint,
@@ -2202,14 +2221,6 @@ export function useDetourHomeController() {
   }
 
   async function openCamera(source: CameraSource) {
-    if (photos.length >= rollCapacity) {
-      Alert.alert(
-        '這趟已經拍滿了',
-        `每趟 DETOUR 最多留下 ${rollCapacity} 張照片。`
-      );
-      return;
-    }
-
     const colorWalkCameraMission: Mission =
       selectedMood === 'color' && selectedColor
         ? {
@@ -2256,8 +2267,6 @@ export function useDetourHomeController() {
         source,
         missionCode: missionForCamera.code,
         missionTitle: missionForCamera.title,
-        savedCount: String(photos.length),
-        rollCapacity: String(rollCapacity),
       },
     });
   }
@@ -2309,7 +2318,6 @@ export function useDetourHomeController() {
       threadCode: undefined,
       threadLabel: undefined,
       photoCount: finalPhotos.length,
-      rollCapacity,
       photos: finalPhotos,
       sideEventsShown: sideEventsShownRef.current,
       sideEventReplacements: sideEventReplacementsRef.current,
@@ -2514,7 +2522,6 @@ export function useDetourHomeController() {
     homeRouteMotion,
     mood,
     selectedMinutes,
-    rollCapacity,
     previewProfile,
     timeIndexFromRatio,
     snapMinutesFromRatio,
@@ -2573,6 +2580,7 @@ export function useDetourHomeController() {
     remainingDetourMinutes,
     replacementDistanceBudget,
     feedbackKindForIssue,
+    acknowledgeActiveSideEvent,
     replaceActiveSideEvent,
     replaceFailedDestination,
     rerouteFromCurrentPosition,
