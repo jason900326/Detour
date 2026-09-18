@@ -2172,19 +2172,15 @@ export function useDetourHomeController() {
     transitionTo('passportDetail');
   }
 
-  async function shareJourney(entry: PassportEntry) {
-    const message = [
-      'DETOUR 旅程票',
-      entry.sceneName ? `終點：${entry.sceneName}` : null,
-      `${formatPassportDate(entry.completedAt)} · ${entry.minutes} 分鐘`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+  async function shareJourney(entry: PassportEntry, headline?: string) {
+    const message =
+      headline?.replace(/\s*\n\s*/g, ' ').trim() ||
+      `DETOUR · ${entry.moodLabel}`;
 
     try {
       const ticketUri = await captureRef(shareTicketRef, {
         format: 'jpg',
-        quality: 0.94,
+        quality: 0.96,
         result: 'tmpfile',
       });
 
