@@ -54,15 +54,6 @@ export type Mission = {
 
 export type SideEventGaze = 'up' | 'level' | 'down' | 'flex' | 'self';
 export type SideEventKind = 'photo-target' | 'context';
-export type SideEventContext =
-  | 'safe-stop'
-  | 'seat'
-  | 'shade'
-  | 'corner'
-  | 'traffic'
-  | 'busy'
-  | 'quiet'
-  | 'open-space';
 
 export type SideEvent = {
   id: string;
@@ -71,7 +62,6 @@ export type SideEvent = {
   instruction: string;
   photoSuggested: boolean;
   gaze: SideEventGaze;
-  context?: SideEventContext;
 };
 
 export type SideEventTriggerWindow = {
@@ -111,11 +101,6 @@ export const COLORS: ColorChoice[] = [
 type PhotoTargetDefinition = {
   label: string;
   gaze: SideEventGaze;
-};
-
-type ContextEventDefinition = {
-  title: string;
-  context: SideEventContext;
 };
 
 // Reviewed 2026-09-16. Keep these objective and instantly judgeable. New
@@ -191,19 +176,6 @@ export const PHOTO_TARGETS: readonly PhotoTargetDefinition[] = [
   { label: '自己的影子', gaze: 'self' },
 ];
 
-export const CONTEXT_SIDE_EVENTS: readonly ContextEventDefinition[] = [
-  { title: '找個地方坐一下。', context: 'seat' },
-  { title: '找個不擋路的地方停一下。', context: 'safe-stop' },
-  { title: '有適合休息的地方，就休息一下。', context: 'safe-stop' },
-  { title: '有遮蔭的地方，可以停一下。', context: 'shade' },
-  { title: '在街角停一下，看看人流。', context: 'corner' },
-  { title: '找個安全的位置停一下，看看車流。', context: 'traffic' },
-  { title: '經過比較熱鬧的地方，可以停一下看看。', context: 'busy' },
-  { title: '經過比較安靜的地方，可以停一下。', context: 'quiet' },
-  { title: '到比較開闊的地方時，停一下看看周圍。', context: 'open-space' },
-  { title: '前面如果有可以坐的地方，就坐一下再走。', context: 'seat' },
-];
-
 const PHOTO_SIDE_EVENTS: readonly SideEvent[] = PHOTO_TARGETS.map(
   (target, index) => ({
     id: `photo-${String(index + 1).padStart(3, '0')}`,
@@ -223,18 +195,6 @@ const PHOTO_SIDE_EVENTS: readonly SideEvent[] = PHOTO_TARGETS.map(
           : `找找看有沒有${target.label}。`,
     instruction: target.gaze === 'self' ? '' : '如果有的話拍下它。',
     photoSuggested: true,
-  })
-);
-
-const CONTEXT_EVENTS: readonly SideEvent[] = CONTEXT_SIDE_EVENTS.map(
-  (event, index) => ({
-    id: `context-${String(index + 1).padStart(2, '0')}`,
-    kind: 'context',
-    gaze: 'flex',
-    title: event.title,
-    instruction: '',
-    photoSuggested: false,
-    context: event.context,
   })
 );
 
@@ -330,16 +290,11 @@ export function getContextMeta(context: LightContext) {
 }
 
 export function getSideEventCount(minutes: number) {
-  // Side events are optional seasoning, not mandatory stops. The previous
-  // 3/5/7/9/10 schedule made short tickets reserve several minutes for events
-  // before routing even started, which could reject perfectly reasonable
-  // nearby routes. Keep enough moments to make the walk feel alive without
-  // letting them consume the journey's feasibility budget.
-  if (minutes <= 15) return 1;
-  if (minutes <= 25) return 2;
-  if (minutes <= 35) return 3;
-  if (minutes <= 45) return 4;
-  return 5;
+  if (minutes <= 15) return 3;
+  if (minutes <= 25) return 5;
+  if (minutes <= 35) return 7;
+  if (minutes <= 45) return 9;
+  return 10;
 }
 
 function targetDistance(minutes: number) {
@@ -401,20 +356,8 @@ function shuffle<T>(items: readonly T[]) {
 export function pickSideEvent(args: {
   seenIds?: Iterable<string>;
   previousGaze?: SideEventGaze | null;
-  allowedContexts?: readonly SideEventContext[];
 }) {
   const seen = new Set(args.seenIds ?? []);
-  const allowedContexts = new Set(args.allowedContexts ?? []);
-  const contextCandidates = CONTEXT_EVENTS.filter(
-    (event) => event.context && allowedContexts.has(event.context)
-  );
-
-  // Context events are seasoning, not the main loop. When context is actually
-  // available, give it roughly one chance in five.
-  const preferContext =
-    contextCandidates.length > 0 && Math.random() < 0.2;
-  const primary = preferContext ? contextCandidates : PHOTO_SIDE_EVENTS;
-  const secondary = preferContext ? PHOTO_SIDE_EVENTS : contextCandidates;
 
   const choose = (pool: readonly SideEvent[]) => {
     const shuffled = shuffle(pool);
@@ -433,7 +376,7 @@ export function pickSideEvent(args: {
     );
   };
 
-  return choose(primary) ?? choose(secondary);
+  return choose(PHOTO_SIDE_EVENTS);
 }
 
 function arrivalMission(args: {
