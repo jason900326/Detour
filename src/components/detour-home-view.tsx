@@ -48,6 +48,17 @@ function formatElapsedJourneyTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function formatRecoveryTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '剛剛';
+  return date.toLocaleString('zh-TW', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function headingSectorCoordinates(center: { latitude: number; longitude: number }, heading: number) {
   const safeHeading = Number.isFinite(heading) ? heading : 0;
   const tip = offsetPoint(center, 54, safeHeading);
@@ -89,6 +100,8 @@ export function DetourHomeView({
     devMode,
     developerToolsUnlocked,
     photos,
+    recoverySnapshot,
+    recoveryLoading,
     passport,
     playtestSessions,
     playtestTesterId,
@@ -131,6 +144,8 @@ export function DetourHomeView({
     replaceFailedDestination,
     openCamera,
     simulateNextBeat,
+    continueRecoveredJourney,
+    discardRecoveredJourney,
     completeDetour,
   } = controller;
 
@@ -282,11 +297,69 @@ export function DetourHomeView({
           { opacity: screenOpacity, transform: [{ translateY: screenY }] },
         ]}
       >
-        {stage === 'boot' && (
+        {recoverySnapshot ? (
+          <View style={styles.v52RecoveryScreen}>
+            <View style={styles.v52RecoveryTop}>
+              <Text style={styles.v52RecoveryBrand}>DETOUR</Text>
+              <Text style={styles.v52RecoveryEyebrow}>旅程還沒結束</Text>
+            </View>
+
+            <View style={styles.v52RecoveryHero}>
+              <Text style={styles.v52RecoveryTitle}>要繼續上一趟嗎？</Text>
+              <Text style={styles.v52RecoveryBody}>
+                上次離開 App 時，這趟 DETOUR 還在進行中。你可以接著走，也可以結束這趟旅程重新開始。
+              </Text>
+
+              <View style={styles.v52RecoveryFacts}>
+                <View style={styles.v52RecoveryFact}>
+                  <Text style={styles.v52RecoveryFactLabel}>旅程開始</Text>
+                  <Text style={styles.v52RecoveryFactValue}>
+                    {formatRecoveryTimestamp(recoverySnapshot.detourStartedAt)}
+                  </Text>
+                </View>
+                <View style={styles.v52RecoveryFact}>
+                  <Text style={styles.v52RecoveryFactLabel}>已拍照片</Text>
+                  <Text style={styles.v52RecoveryFactValue}>
+                    {recoverySnapshot.photos.length} 張
+                  </Text>
+                </View>
+              </View>
+
+              {recoverySnapshot.photos[recoverySnapshot.photos.length - 1] && (
+                <Image
+                  source={{
+                    uri: recoverySnapshot.photos[recoverySnapshot.photos.length - 1].uri,
+                  }}
+                  style={styles.v52RecoveryPhoto}
+                />
+              )}
+            </View>
+
+            <View style={styles.v52RecoveryActions}>
+              <Pressable
+                disabled={recoveryLoading}
+                onPress={() => void continueRecoveredJourney()}
+                style={[styles.v52RecoveryContinue, recoveryLoading && styles.v52RecoveryDisabled]}
+              >
+                <Text style={styles.v52RecoveryContinueText}>
+                  {recoveryLoading ? '正在處理…' : '繼續上一趟'}
+                </Text>
+                <Text style={styles.v52RecoveryContinueArrow}>→</Text>
+              </Pressable>
+              <Pressable
+                disabled={recoveryLoading}
+                onPress={() => void discardRecoveredJourney()}
+                style={styles.v52RecoveryDiscard}
+              >
+                <Text style={styles.v52RecoveryDiscardText}>結束這趟，重新開始</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : stage === 'boot' ? (
           <View style={styles.bootScreen}>
             <Text style={styles.bootBrand}>DETOUR</Text>
           </View>
-        )}
+        ) : null}
 
         {stage === 'onboarding' && (
           <View style={styles.onboardingScreen}>
