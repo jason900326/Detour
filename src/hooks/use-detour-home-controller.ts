@@ -114,6 +114,7 @@ type ActiveJourneySnapshot = {
   detourStartedAt: string;
   sceneFailures: SessionSceneFailure[];
   activeSideEvent: SideEvent | null;
+  sideEventPhotoConfirmed: boolean;
   sideEventSlot: number;
   sideEventsShown: number;
   sideEventReplacements: number;
@@ -182,6 +183,7 @@ export function useDetourHomeController() {
   const [replacementLoading, setReplacementLoading] = useState(false);
 
   const [activeSideEvent, setActiveSideEvent] = useState<SideEvent | null>(null);
+  const [sideEventPhotoConfirmed, setSideEventPhotoConfirmed] = useState(false);
   const [sideEventSlot, setSideEventSlot] = useState(0);
   const [sideEventsShown, setSideEventsShown] = useState(0);
   const [sideEventReplacements, setSideEventReplacements] = useState(0);
@@ -553,6 +555,7 @@ export function useDetourHomeController() {
       detourStartedAt,
       sceneFailures,
       activeSideEvent,
+      sideEventPhotoConfirmed,
       sideEventSlot,
       sideEventsShown,
       sideEventReplacements,
@@ -609,6 +612,7 @@ export function useDetourHomeController() {
     selectedMood,
     selectedScene,
     selectedTime,
+    sideEventPhotoConfirmed,
     sideEventReplacements,
     sideEventSlot,
     sideEventsShown,
@@ -846,6 +850,7 @@ export function useDetourHomeController() {
       sceneFailuresRef.current = snapshot.sceneFailures ?? [];
       setActiveSideEvent(snapshot.activeSideEvent ?? null);
       activeSideEventRef.current = snapshot.activeSideEvent ?? null;
+      setSideEventPhotoConfirmed(snapshot.sideEventPhotoConfirmed ?? false);
       setSideEventSlot(snapshot.sideEventSlot ?? 0);
       sideEventSlotRef.current = snapshot.sideEventSlot ?? 0;
       setSideEventsShown(snapshot.sideEventsShown ?? 0);
@@ -1165,6 +1170,7 @@ export function useDetourHomeController() {
   function resetSideEventRuntime() {
     setActiveSideEvent(null);
     activeSideEventRef.current = null;
+    setSideEventPhotoConfirmed(false);
     setSideEventSlot(0);
     sideEventSlotRef.current = 0;
     setSideEventsShown(0);
@@ -1380,6 +1386,7 @@ export function useDetourHomeController() {
     previousSideEventGazeRef.current = next.gaze;
     activeSideEventRef.current = next;
     setActiveSideEvent(next);
+    setSideEventPhotoConfirmed(false);
 
     const nextShown = sideEventsShownRef.current + 1;
     sideEventsShownRef.current = nextShown;
@@ -1403,6 +1410,7 @@ export function useDetourHomeController() {
   function clearActiveSideEvent() {
     activeSideEventRef.current = null;
     setActiveSideEvent(null);
+    setSideEventPhotoConfirmed(false);
   }
 
   async function acknowledgeActiveSideEvent() {
@@ -2496,7 +2504,7 @@ export function useDetourHomeController() {
     );
 
     if (result.source === 'side') {
-      clearActiveSideEvent();
+      setSideEventPhotoConfirmed(true);
     }
   }
 
@@ -2652,6 +2660,7 @@ export function useDetourHomeController() {
     replacementLoading,
     setReplacementLoading,
     activeSideEvent,
+    sideEventPhotoConfirmed,
     sideEventSlot,
     sideEventsShown,
     sideEventReplacements,
