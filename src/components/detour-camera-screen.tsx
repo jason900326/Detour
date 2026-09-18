@@ -360,6 +360,7 @@ export default function DetourCameraScreen() {
       (cameraLayout.height - cameraLayout.width) / 2
     );
     if (y < squareTop || y > squareTop + cameraLayout.width) return;
+    const previewY = y - squareTop;
 
     setFocusPoint({ x, y });
     setHasFocused(true);
@@ -382,7 +383,7 @@ export default function DetourCameraScreen() {
 
     try {
       await cameraRef.current.focusTo(
-        { x, y },
+        { x, y: previewY },
         {
           responsiveness: 'snappy',
           adaptiveness: 'continuous',
@@ -579,25 +580,31 @@ export default function DetourCameraScreen() {
       onTouchCancel={handlePinchEnd}
     >
       <StatusBar barStyle="light-content" />
-      {device ? (
-        <Camera
-          ref={cameraRef}
-          style={styles.cameraView}
-          device={device}
-          outputs={[photoOutput]}
-          isActive={!pendingCaptureUri}
-          zoom={zoom}
-          exposure={device.supportsExposureBias ? exposure : undefined}
-          orientationSource="device"
-          onStarted={() => { setCameraReady(true); setMountError(null); }}
-          onStopped={() => setCameraReady(false)}
-          onError={(error) => { setCameraReady(false); setMountError(error.message); }}
-        />
-      ) : (
-        <View style={styles.cameraLoading}>
-          <Text style={styles.centerMessage}>正在開啟相機</Text>
+      <View pointerEvents="none" style={styles.cameraPreviewStage}>
+        <View style={styles.squareViewport}>
+          {device ? (
+            <Camera
+              ref={cameraRef}
+              style={styles.cameraView}
+              device={device}
+              outputs={[photoOutput]}
+              isActive={!pendingCaptureUri}
+              zoom={zoom}
+              exposure={device.supportsExposureBias ? exposure : undefined}
+              orientationSource="device"
+              resizeMode="cover"
+              onStarted={() => { setCameraReady(true); setMountError(null); }}
+              onStopped={() => setCameraReady(false)}
+              onError={(error) => { setCameraReady(false); setMountError(error.message); }}
+            />
+          ) : (
+            <View style={styles.cameraLoading}>
+              <Text style={styles.centerMessage}>正在開啟相機</Text>
+            </View>
+          )}
+          <View pointerEvents="none" style={styles.squareGuide} />
         </View>
-      )}
+      </View>
 
       <Pressable
         accessibilityLabel="點一下畫面對焦"
@@ -652,14 +659,6 @@ export default function DetourCameraScreen() {
           </View>
         </View>
       )}
-
-      <View pointerEvents="none" style={styles.squareMaskWrap}>
-        <View style={styles.squareMaskBand} />
-        <View style={styles.squareViewport}>
-          <View style={styles.squareGuide} />
-        </View>
-        <View style={styles.squareMaskBand} />
-      </View>
 
       <Animated.View pointerEvents="none" style={[styles.shutterFlash, { opacity: shutterFlash }]} />
 
@@ -758,6 +757,7 @@ const styles = StyleSheet.create({
   cancelPermission: { marginTop: 12, paddingVertical: 16 },
   cancelPermissionText: { textAlign: 'center', fontSize: 13, color: '#706C64' },
   cameraScreen: { flex: 1, backgroundColor: '#000' },
+  cameraPreviewStage: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center' },
   cameraView: { flex: 1 },
   cameraLoading: { ...ABSOLUTE_FILL, alignItems: 'center', justifyContent: 'center' },
   focusLayer: { ...ABSOLUTE_FILL, zIndex: 2 },
@@ -771,10 +771,8 @@ const styles = StyleSheet.create({
   focusExposureTrack: { position: 'absolute', top: 7, bottom: 7, width: 2, borderRadius: 1, backgroundColor: 'rgba(255,214,10,0.72)' },
   focusExposureThumb: { position: 'absolute', left: 7, width: 14, height: 14, borderRadius: 7, backgroundColor: FOCUS_YELLOW, alignItems: 'center', justifyContent: 'center' },
   focusExposureSun: { fontSize: 11, lineHeight: 13, color: INK },
-  squareMaskWrap: { ...ABSOLUTE_FILL, zIndex: 3 },
-  squareMaskBand: { flex: 1, width: '100%', backgroundColor: '#000' },
   squareViewport: { width: '100%', aspectRatio: 1, position: 'relative' },
-  squareGuide: { ...ABSOLUTE_FILL, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
+  squareGuide: { ...ABSOLUTE_FILL, zIndex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.46)' },
   shutterFlash: { ...ABSOLUTE_FILL, backgroundColor: '#000', zIndex: 4 },
   cameraOverlay: { ...ABSOLUTE_FILL, paddingTop: 58, paddingHorizontal: 18, paddingBottom: 28, justifyContent: 'space-between', zIndex: 5 },
   cameraTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
