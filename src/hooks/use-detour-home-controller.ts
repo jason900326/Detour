@@ -1212,6 +1212,8 @@ export function useDetourHomeController() {
       return;
     }
 
+    if (activeSideEventRef.current) return;
+
     const slot = sideEventSlotRef.current;
     const window = currentPlan.profile.triggerWindows[slot];
     if (!window) return;
