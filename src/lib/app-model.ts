@@ -113,6 +113,7 @@ export type PassportEntry = {
 export const CAMERA_RESULT_KEY = '@detour/camera/result/v1';
 export const PASSPORT_KEY = '@detour/passport/v1';
 export const PREFERENCES_KEY = '@detour/preferences/v1';
+export const ACTIVE_JOURNEY_KEY = '@detour/active-journey/v1';
 
 export const TIME_STEPS = [
   10,
