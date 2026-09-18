@@ -26,7 +26,6 @@ import {
   type Mission,
   type MoodId,
   type SideEvent,
-  type SideEventContext,
   type SideEventGaze,
 } from '../lib/journey-engine';
 
@@ -146,6 +145,7 @@ export function useDetourHomeController() {
   const [rerouteFailed, setRerouteFailed] = useState(false);
   const [rerouteCount, setRerouteCount] = useState(0);
   const [detourStartedAt, setDetourStartedAt] = useState<string | null>(null);
+  const [elapsedJourneySeconds, setElapsedJourneySeconds] = useState(0);
   const [sceneFailures, setSceneFailures] = useState<SessionSceneFailure[]>([]);
   const [replacementLoading, setReplacementLoading] = useState(false);
 
@@ -488,6 +488,21 @@ export function useDetourHomeController() {
   useEffect(() => {
     stageRef.current = stage;
   }, [stage]);
+
+  useEffect(() => {
+    if (stage !== 'journey' || !detourStartedAt) return;
+
+    const startedAtMs = new Date(detourStartedAt).getTime();
+    const updateElapsed = () => {
+      setElapsedJourneySeconds(
+        Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+      );
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [detourStartedAt, stage]);
 
   useEffect(() => {
     planRef.current = plan;
@@ -996,6 +1011,7 @@ export function useDetourHomeController() {
     rerouteInFlightRef.current = false;
     setDetourStartedAt(null);
     detourStartedAtRef.current = null;
+    setElapsedJourneySeconds(0);
     setSceneFailures([]);
     sceneFailuresRef.current = [];
     setReplacementLoading(false);
@@ -1108,12 +1124,9 @@ export function useDetourHomeController() {
   );
 
   function remainingDetourMinutes() {
-    const startedAt = detourStartedAtRef.current;
-    if (!startedAt) return selectedMinutes || TIME_MIN;
-
-    const elapsedMinutes =
-      (Date.now() - new Date(startedAt).getTime()) / 60000;
-    return Math.max(1, (selectedMinutes || TIME_MIN) - elapsedMinutes);
+    // The selected time is a planning budget, not a deadline. A replacement
+    // destination should remain viable even when a real walk runs long.
+    return selectedMinutes || TIME_MIN;
   }
 
   function replacementDistanceBudget(minutesLeft: number) {
@@ -1132,24 +1145,6 @@ export function useDetourHomeController() {
     return 'wrong-now';
   }
 
-  function currentAllowedSideEventContexts(): SideEventContext[] {
-    const allowed: SideEventContext[] = ['safe-stop'];
-    const beat =
-      navigationRouteRef.current?.beats[navigationBeatIndexRef.current] ?? null;
-    const remaining = beatRemainingMetersRef.current;
-
-    if (
-      beat &&
-      ['left', 'right', 'slight-left', 'slight-right'].includes(beat.turn) &&
-      remaining >= 45 &&
-      remaining <= 140
-    ) {
-      allowed.push('corner');
-    }
-
-    return allowed;
-  }
-
   function presentSideEvent(options?: {
     advanceSlot?: boolean;
     countAsReplacement?: boolean;
@@ -1160,7 +1155,6 @@ export function useDetourHomeController() {
     const next = pickSideEvent({
       seenIds: sideEventSeenIdsRef.current,
       previousGaze: previousSideEventGazeRef.current,
-      allowedContexts: currentAllowedSideEventContexts(),
     });
 
     if (!next) return null;
@@ -1186,25 +1180,23 @@ export function useDetourHomeController() {
       setSideEventReplacements(nextCount);
     }
 
-    setQuestPulse('side');
-    setTimeout(() => setQuestPulse((pulse) => (pulse === 'side' ? null : pulse)), 700);
     return next;
   }
 
+  function clearActiveSideEvent() {
+    activeSideEventRef.current = null;
+    setActiveSideEvent(null);
+  }
+
   async function acknowledgeActiveSideEvent() {
-    const next = presentSideEvent();
-    if (next) {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (!activeSideEventRef.current) return;
+    clearActiveSideEvent();
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   async function replaceActiveSideEvent() {
     const next = presentSideEvent({ countAsReplacement: true });
     if (next) await Haptics.selectionAsync();
-  }
-
-  function refreshSideEventAfterPhoto() {
-    presentSideEvent();
   }
 
   function maybeTriggerSideEvent(currentPoint: GeoPoint) {
@@ -1541,7 +1533,7 @@ export function useDetourHomeController() {
             beat.turn
           ) &&
           remainingOnBeat > 12 &&
-          remainingOnBeat <= 60 &&
+          remainingOnBeat <= 30 &&
           turnReminderBeatIdRef.current !== beat.id;
 
         if (shouldRemindForTurn) {
@@ -2283,7 +2275,7 @@ export function useDetourHomeController() {
     );
 
     if (result.source === 'side') {
-      refreshSideEventAfterPhoto();
+      clearActiveSideEvent();
     }
   }
 
@@ -2431,6 +2423,8 @@ export function useDetourHomeController() {
     setRerouteCount,
     detourStartedAt,
     setDetourStartedAt,
+    elapsedJourneySeconds,
+    setElapsedJourneySeconds,
     sceneFailures,
     setSceneFailures,
     replacementLoading,
