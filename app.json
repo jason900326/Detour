@@ -18,10 +18,14 @@
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.jasonbuildslab.detour",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "讓你在 DETOUR 旅程中拍下沿途發現。"
       }
     },
     "android": {
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
