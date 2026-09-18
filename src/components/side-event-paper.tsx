@@ -123,10 +123,14 @@ const SHADOW_COLORS = Array.from(
 export function SideEventPaper({
   event,
   onFound,
+  onCompleted,
+  photoConfirmed = false,
   onReplace,
 }: {
   event: SideEvent;
   onFound: () => void | Promise<void>;
+  onCompleted?: () => void | Promise<void>;
+  photoConfirmed?: boolean;
   onReplace: () => void | Promise<void>;
 }) {
   const { width: screenWidth } = useWindowDimensions();
@@ -141,6 +145,7 @@ export function SideEventPaper({
   const [displayedEvent, setDisplayedEvent] = useState(event);
   const [interaction, setInteraction] = useState<Interaction>(null);
   const mountedEventIdRef = useRef(event.id);
+  const photoCompletionEventRef = useRef<string | null>(null);
   const pendingInteractionRef = useRef<Exclude<Interaction, null> | null>(null);
   const copyOpacity = useRef(new Animated.Value(0)).current;
   const copyX = useRef(new Animated.Value(22)).current;
@@ -345,19 +350,6 @@ export function SideEventPaper({
     }
   }, [onReplace, restoreWithoutChange]);
 
-  const requestFound = useCallback(async () => {
-    const previousId = mountedEventIdRef.current;
-    try {
-      await onFound();
-    } finally {
-      setTimeout(() => {
-        if (mountedEventIdRef.current === previousId) {
-          restoreWithoutChange('found');
-        }
-      }, 220);
-    }
-  }, [onFound, restoreWithoutChange]);
-
   useEffect(() => {
     reveal.value = withTiming(1, {
       duration: 290,
@@ -371,6 +363,7 @@ export function SideEventPaper({
 
     const pending = pendingInteractionRef.current;
     mountedEventIdRef.current = event.id;
+    photoCompletionEventRef.current = null;
     pendingInteractionRef.current = null;
     setDisplayedEvent(event);
 
@@ -400,28 +393,45 @@ export function SideEventPaper({
     showCopy();
   }, [crumple, event, reveal, showCopy]);
 
-  const found = useCallback(() => {
-    if (interaction) return;
+  const completePhoto = useCallback(() => {
+    void (onCompleted ? onCompleted() : onFound());
+  }, [onCompleted, onFound]);
 
-    pendingInteractionRef.current = 'found';
+  useEffect(() => {
+    if (
+      !photoConfirmed ||
+      photoCompletionEventRef.current === displayedEvent.id
+    ) {
+      return;
+    }
+
+    photoCompletionEventRef.current = displayedEvent.id;
     setInteraction('found');
-    Animated.timing(copyOpacity, {
-      toValue: 0,
-      duration: 110,
-      useNativeDriver: true,
-    }).start(() => {
-      crumple.value = withTiming(
-        1,
-        {
-          duration: 400,
-          easing: Easing.inOut(Easing.cubic),
-        },
-        (finished) => {
-          if (finished) runOnJS(requestFound)();
-        }
-      );
-    });
-  }, [copyOpacity, crumple, interaction, requestFound]);
+    copyOpacity.stopAnimation();
+    copyOpacity.setValue(0);
+    crumple.value = 0;
+    crumple.value = withTiming(
+      1,
+      {
+        duration: 400,
+        easing: Easing.inOut(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) runOnJS(completePhoto)();
+      }
+    );
+  }, [completePhoto, copyOpacity, crumple, displayedEvent.id, photoConfirmed]);
+
+  const found = useCallback(async () => {
+    if (interaction || photoConfirmed) return;
+
+    setInteraction('found');
+    try {
+      await onFound();
+    } finally {
+      setInteraction(null);
+    }
+  }, [interaction, onFound, photoConfirmed]);
 
   const replace = useCallback(() => {
     if (interaction) return;
