@@ -46,6 +46,7 @@ const SIGNAL = '#FF5A36';
 const FOCUS_YELLOW = '#FFD60A';
 const EXPOSURE_RAIL_HEIGHT = 132;
 const EXPOSURE_RAIL_WIDTH = 28;
+const EXPOSURE_DRAG_DAMPING = 0.45;
 const ABSOLUTE_FILL = {
   position: 'absolute' as const,
   top: 0,
@@ -118,6 +119,7 @@ export default function DetourCameraScreen() {
   const pinchStartZoomRef = useRef(1);
   const pinchActiveRef = useRef(false);
   const lastPinchEndedAtRef = useRef(0);
+  const exposureDragRef = useRef<{ startY: number; startExposure: number } | null>(null);
 
   const requestId = getParam(params.requestId);
   const source = getParam(params.source, 'free') as CameraSource;
@@ -206,11 +208,25 @@ export default function DetourCameraScreen() {
     )
   );
 
+  function beginExposureDrag(locationY: number) {
+    if (!device?.supportsExposureBias) return;
+    exposureDragRef.current = { startY: locationY, startExposure: exposure };
+  }
+
   function updateExposureFromRail(locationY: number) {
     if (!device?.supportsExposureBias) return;
-    const progress = Math.min(1, Math.max(0, 1 - locationY / EXPOSURE_RAIL_HEIGHT));
-    const next = exposureMin + progress * exposureRange;
+    const drag = exposureDragRef.current ?? {
+      startY: locationY,
+      startExposure: exposure,
+    };
+    exposureDragRef.current = drag;
+    const movement = (drag.startY - locationY) / EXPOSURE_RAIL_HEIGHT;
+    const next = drag.startExposure + movement * exposureRange * EXPOSURE_DRAG_DAMPING;
     setExposure(Number(next.toFixed(2)));
+  }
+
+  function endExposureDrag() {
+    exposureDragRef.current = null;
   }
 
   async function persistPhoto(tempUri: string) {
@@ -314,6 +330,12 @@ export default function DetourCameraScreen() {
 
     setFocusPoint({ x, y });
     setHasFocused(true);
+    exposureDragRef.current = null;
+    setExposure(
+      device.supportsExposureBias
+        ? clampZoom(0, device.minExposureBias, device.maxExposureBias)
+        : 0
+    );
     focusOpacity.stopAnimation();
     focusScale.stopAnimation();
     focusOpacity.setValue(1);
@@ -573,11 +595,13 @@ export default function DetourCameraScreen() {
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
           onTouchStart={(event) => {
-            updateExposureFromRail(event.nativeEvent.locationY);
+            beginExposureDrag(event.nativeEvent.locationY);
           }}
           onTouchMove={(event) => {
             updateExposureFromRail(event.nativeEvent.locationY);
           }}
+          onTouchEnd={endExposureDrag}
+          onTouchCancel={endExposureDrag}
         >
           <View style={styles.focusExposureTrack} />
           <View
