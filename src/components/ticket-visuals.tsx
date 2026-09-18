@@ -1061,8 +1061,8 @@ export function V45Ticket({
             style={[
               ticketOverlayStyles.secretStamp,
               {
-                left: renderArtPx(655),
-                top: renderArtPx(535),
+                left: renderArtPx(128),
+                top: renderArtPx(748),
                 borderWidth: renderUiPx(2),
                 paddingHorizontal: renderUiPx(9),
                 paddingVertical: renderUiPx(6),
