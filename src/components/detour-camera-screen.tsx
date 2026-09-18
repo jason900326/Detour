@@ -97,7 +97,15 @@ export default function DetourCameraScreen() {
   const { hasPermission, canRequestPermission, requestPermission } =
     useCameraPermission();
   const [facing, setFacing] = useState<TargetCameraPosition>('back');
-  const device = useCameraDevice(facing);
+  // Request the logical back-camera device that includes the physical lenses.
+  // Without this filter iOS may return only the default wide camera, so the
+  // zoom buttons change the number while the preview remains visually 1×.
+  const device = useCameraDevice(
+    facing,
+    facing === 'back'
+      ? { physicalDevices: ['ultra-wide-angle', 'wide-angle', 'telephoto'] }
+      : undefined
+  );
   const photoOutput = usePhotoOutput({
     quality: 0.9,
     qualityPrioritization: device?.supportsSpeedQualityPrioritization
