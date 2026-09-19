@@ -17,7 +17,6 @@ import {
   COLORS,
   getJourneyProfile,
   getLightContext,
-  pickSideEvent,
   type ColorChoice,
   type GeoPoint,
   type JourneyPlan,
@@ -37,7 +36,6 @@ import {
   guidanceBearingOnPolyline,
   moveToward,
   relativeArrowDegrees,
-  remainingDistanceOnPolyline,
   type NavigationRoute,
 } from '../lib/navigation-engine';
 
@@ -112,6 +110,7 @@ import { useJourneyLocationController } from './use-journey-location-controller'
 import { useLocationWatchers } from './use-location-watchers';
 import { useNavigationBeatController } from './use-navigation-beat-controller';
 import { useRerouteController } from './use-reroute-controller';
+import { useSideEventController } from './use-side-event-controller';
 
 export function useDetourHomeController() {
   const router = useRouter();
@@ -327,6 +326,34 @@ export function useDetourHomeController() {
   const setBeat = navigationBeatController.setBeat;
   const reachCurrentNavigationBeat =
     navigationBeatController.reachCurrentNavigationBeat;
+
+  const sideEventController = useSideEventController({
+    selectedMood,
+    stageRef,
+    planRef,
+    lastMovementSampleAtRef,
+    navigationRouteRef,
+    navigationBeatIndexRef,
+    beatRemainingMetersRef,
+    effectiveMovingSecondsRef,
+    activeSideEventRef,
+    sideEventSlotRef,
+    sideEventsShownRef,
+    sideEventReplacementsRef,
+    sideEventSeenIdsRef,
+    previousSideEventGazeRef,
+    setActiveSideEvent,
+    setSideEventPhotoConfirmed,
+    setSideEventSlot,
+    setSideEventsShown,
+    setSideEventReplacements,
+  });
+  const {
+    acknowledgeActiveSideEvent,
+    maybeTriggerSideEvent,
+    replaceActiveSideEvent,
+    resetSideEventRuntime,
+  } = sideEventController;
 
   const journeyLocationController = useJourneyLocationController({
     stageRef,
@@ -1185,22 +1212,6 @@ export function useDetourHomeController() {
     transitionTo('preparing');
   }
 
-  function resetSideEventRuntime() {
-    setActiveSideEvent(null);
-    activeSideEventRef.current = null;
-    setSideEventPhotoConfirmed(false);
-    setSideEventSlot(0);
-    sideEventSlotRef.current = 0;
-    setSideEventsShown(0);
-    sideEventsShownRef.current = 0;
-    setSideEventReplacements(0);
-    sideEventReplacementsRef.current = 0;
-    sideEventSeenIdsRef.current = new Set();
-    previousSideEventGazeRef.current = null;
-    effectiveMovingSecondsRef.current = 0;
-    lastMovementSampleAtRef.current = null;
-  }
-
   function resetDetour() {
     const testSessionId = playtestSessionIdRef.current;
     void removeStored(ACTIVE_JOURNEY_KEY);
@@ -1384,110 +1395,6 @@ export function useDetourHomeController() {
     if (reason === 'inaccessible') return 'inaccessible';
     if (reason === 'not-worth-it') return 'not-worth-it';
     return 'wrong-now';
-  }
-
-  function presentSideEvent(options?: {
-    advanceSlot?: boolean;
-    countAsReplacement?: boolean;
-  }) {
-    const currentPlan = planRef.current;
-    if (!currentPlan || selectedMood === 'color') return null;
-
-    const next = pickSideEvent({
-      seenIds: sideEventSeenIdsRef.current,
-      previousGaze: previousSideEventGazeRef.current,
-    });
-
-    if (!next) return null;
-
-    sideEventSeenIdsRef.current.add(next.id);
-    previousSideEventGazeRef.current = next.gaze;
-    activeSideEventRef.current = next;
-    setActiveSideEvent(next);
-    setSideEventPhotoConfirmed(false);
-
-    const nextShown = sideEventsShownRef.current + 1;
-    sideEventsShownRef.current = nextShown;
-    setSideEventsShown(nextShown);
-
-    if (options?.advanceSlot) {
-      const nextSlot = sideEventSlotRef.current + 1;
-      sideEventSlotRef.current = nextSlot;
-      setSideEventSlot(nextSlot);
-    }
-
-    if (options?.countAsReplacement) {
-      const nextCount = sideEventReplacementsRef.current + 1;
-      sideEventReplacementsRef.current = nextCount;
-      setSideEventReplacements(nextCount);
-    }
-
-    return next;
-  }
-
-  function clearActiveSideEvent() {
-    activeSideEventRef.current = null;
-    setActiveSideEvent(null);
-    setSideEventPhotoConfirmed(false);
-  }
-
-  async function acknowledgeActiveSideEvent() {
-    if (!activeSideEventRef.current) return;
-    clearActiveSideEvent();
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }
-
-  async function replaceActiveSideEvent() {
-    const next = presentSideEvent({ countAsReplacement: true });
-    if (next) await Haptics.selectionAsync();
-  }
-
-  function maybeTriggerSideEvent(currentPoint: GeoPoint) {
-    const currentPlan = planRef.current;
-    const route = navigationRouteRef.current;
-
-    if (
-      !currentPlan ||
-      !route ||
-      stageRef.current !== 'journey' ||
-      selectedMood === 'color'
-    ) {
-      return;
-    }
-
-    if (activeSideEventRef.current) return;
-
-    const slot = sideEventSlotRef.current;
-    const window = currentPlan.profile.triggerWindows[slot];
-    if (!window) return;
-
-    const remainingRoute = remainingDistanceOnPolyline(
-      currentPoint,
-      route.coordinates
-    );
-    const progress = Math.max(
-      0,
-      Math.min(1, 1 - remainingRoute / Math.max(1, route.totalDistanceMeters))
-    );
-    const movingSeconds = effectiveMovingSecondsRef.current;
-    const due =
-      progress >= window.targetProgress ||
-      movingSeconds >= window.targetMovingSeconds;
-
-    if (!due || remainingRoute < 55) return;
-
-    const beat = route.beats[navigationBeatIndexRef.current];
-    const remainingBeat = beatRemainingMetersRef.current;
-    const nearNavigationDecision =
-      beat &&
-      beat.turn !== 'continue' &&
-      beat.turn !== 'start' &&
-      remainingBeat > 0 &&
-      remainingBeat < 32;
-
-    if (nearNavigationDecision) return;
-
-    presentSideEvent({ advanceSlot: true });
   }
 
   async function replaceFailedDestination(reason: SceneIssueReason) {
