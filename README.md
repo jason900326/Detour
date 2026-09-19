@@ -90,10 +90,8 @@ eas update --channel preview
 - [`IPAD_DEV.md`](./IPAD_DEV.md)：iPad / Codespaces / Expo Go 開發流程
 - `docs/product-decisions/`：日期明確、可覆蓋單一主題的最新產品決策
 - `docs/` 內的 V2 文件：目前仍在使用的 domain / import / route 參考
-- `docs/releases/`：早期 `README_vXX.txt` release notes 歷史快照
-- [`V039_PRODUCT_CONVERGENCE.md`](./V039_PRODUCT_CONVERGENCE.md)：歷史收斂紀錄，不是目前規則來源
 
-新的產品或開發狀態請更新正式文件，不再新增 `README_vXX.txt` 或沒有狀態標記的根目錄說明檔。
+舊版 release notes 與 v0.39 收斂快照已移除；Git 歷史仍可追溯。新的產品或開發狀態請更新正式文件，不再新增 `README_vXX.txt` 或沒有狀態標記的根目錄說明檔。
 
 ## 開發優先順序
 

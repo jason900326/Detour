@@ -27,9 +27,9 @@
 - [`design-reference/README.md`](./design-reference/README.md)：完成頁與歷史頁的視覺參考規則。
 - [`../IPAD_DEV.md`](../IPAD_DEV.md)：iPad 外出開發流程，不是產品決策文件。
 
-## 歷史資料
+## 清理規則
 
-- [`../V039_PRODUCT_CONVERGENCE.md`](../V039_PRODUCT_CONVERGENCE.md)：v0.39 的歷史收斂快照；其中的舊時間節點與 Mood 數量已被後續決策取代。
-- [`releases/README.md`](./releases/README.md)：`README_vXX.txt` 的歷史 release notes。
-
-歷史文件保留原始內容，方便追查 commit、issue 或實走測試，但不能直接作為新功能規格。新的決策請建立日期檔名，例如 `product-decisions/YYYY-MM-DD-topic.md`，並在本索引補上連結與狀態。
+- 已移除舊版 `README_vXX.txt`、v0.39 收斂快照與未使用的 Expo starter 資料；Git 歷史仍可追溯。
+- 已移除不再存在的「慢慢走」目的地選擇器；目前 Mood 只維持三個正式玩法。
+- 正式使用的素材、Scene migration、Arrival／紙張／ticket interaction 與 active product decisions 不因清理而移除。
+- 新的決策請建立日期檔名，例如 `product-decisions/YYYY-MM-DD-topic.md`，並在本索引補上連結與狀態。
