@@ -2,7 +2,7 @@
 
 Detour 把現實世界變成一場 10–60 分鐘的小型探索遊戲。手機負責指路、出題與記錄；真正的遊戲畫面是使用者面前的城市。
 
-產品決策的正式基準請先看 [`PRODUCT_FOUNDATION.md`](./PRODUCT_FOUNDATION.md)。
+產品決策與歷史文件的閱讀順序請先看 [`docs/README.md`](./docs/README.md)。目前產品基準是 [`PRODUCT_FOUNDATION.md`](./PRODUCT_FOUNDATION.md)，較晚且明確的主題決策會覆蓋該主題的舊內容。
 
 ## 目前狀態
 
@@ -28,33 +28,32 @@ npx expo start
 
 ```bash
 npm run start
+npm run start:ipad
 npm run ios
 npm run android
 npm run web
 npm run lint
 npm run typecheck
+npm test
+npm run quality
 ```
+
+`npm run quality` 是合併前的本機快速檢查；GitHub Actions 另外會執行 iOS Expo bundle 與 Preview 發布。
 
 ## 專案結構
 
 ```text
 src/
-  app/
-    index.tsx          # 主旅程畫面與流程 orchestration
-    camera.tsx         # 相機、鏡頭切換、拍攝與照片確認
-    explore.tsx        # Explore route
-  lib/
-    app-model.ts       # App stage、session / passport model、固定 UI flow constants
-    journey-engine.ts  # Journey / Mood / 任務規則
-    navigation-engine.ts
-    routing-engine.ts
-    scene-engine.ts
-    ai-engine.ts
-    playtest-analytics.ts
-    scene-feedback.ts
+  app/                  # Expo Router route 入口
+    index.tsx           # 主旅程畫面與流程 orchestration
+    camera.tsx          # 相機 route
+    explore.tsx         # Explore route
+  components/           # Journey、相機、出票與共用 UI
+  hooks/                # controller、GPS、相機與 persistence boundary
+  lib/                  # 純規則、資料模型、導航、routing、Scene 與 storage
 assets/
-  detour/              # 正式 Detour artwork
-  mood/                # Mood SVG
+  detour/               # 正式 Detour artwork
+  mood/                 # Mood SVG
 ```
 
 ## 架構原則
@@ -66,8 +65,9 @@ assets/
 1. **資料 model / 固定規則** 放 `src/lib`，不要宣告在畫面檔。
 2. **Journey / routing / scene / AI 計算** 留在各自 engine。
 3. **可重用 UI** 應逐步移到 `src/components`，不要再新增 `v50 / v51 / v52` 形式的整套複製樣式。
-4. UI 重構必須保持既有產品行為；先拆結構，再改視覺。
-5. 每次影響主要旅程的修改至少要通過 TypeScript typecheck 與 iOS Expo bundle，之後再合併到 `main`。
+4. **Controller lifecycle** 放 `src/hooks`；畫面只保留 route 與 UI orchestration。
+5. UI 重構必須保持既有產品行為；先拆結構，再改視覺。
+6. 每次影響主要旅程的修改至少要通過 TypeScript、測試與 iOS Expo bundle，之後再合併到 `main`。
 
 ## Preview 發布
 
@@ -83,22 +83,24 @@ eas update --channel preview
 - 大型重構先走獨立 branch，驗證後再合併。
 - EAS Update 成功代表 bundle / 發布成功，不等於完整旅程已經被自動化測試。
 
-## 文件整理方式
+## 文件與決策
 
-- `README.md`：目前專案入口與開發方式（唯一主 README）
-- `PRODUCT_FOUNDATION.md`：產品決策與體驗基準
-- `docs/releases/`：舊版 `README_vXX.txt` release notes / 交付說明歸檔
-- `V039_PRODUCT_CONVERGENCE.md`：特定產品收斂紀錄
-- `IPAD_DEV.md`：iPad 開發環境說明
+- [`docs/README.md`](./docs/README.md)：文件權責、閱讀順序與歷史資料規則
+- [`PRODUCT_FOUNDATION.md`](./PRODUCT_FOUNDATION.md)：產品定位與跨主題基線
+- [`IPAD_DEV.md`](./IPAD_DEV.md)：iPad / Codespaces / Expo Go 開發流程
+- `docs/product-decisions/`：日期明確、可覆蓋單一主題的最新產品決策
+- `docs/` 內的 V2 文件：目前仍在使用的 domain / import / route 參考
+- `docs/releases/`：早期 `README_vXX.txt` release notes 歷史快照
+- [`V039_PRODUCT_CONVERGENCE.md`](./V039_PRODUCT_CONVERGENCE.md)：歷史收斂紀錄，不是目前規則來源
 
-舊版 release notes 不再放在 repository 根目錄；歷史檔名保留，方便追溯當時版本內容。
+新的產品或開發狀態請更新正式文件，不再新增 `README_vXX.txt` 或沒有狀態標記的根目錄說明檔。
 
 ## 開發優先順序
 
 目前先以可實際 Playtest 的完整旅程為目標。新增功能前，優先處理：
 
 - 真機 journey flow 的 bug
-- `index.tsx` 拆分
+- controller / persistence / GPS / camera 邊界
 - 共用 UI component 化
 - 基本自動驗證
-- README / 架構文件與產品基準保持同步
+- README、架構文件與產品基準保持同步
