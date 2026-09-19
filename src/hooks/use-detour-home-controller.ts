@@ -112,6 +112,7 @@ import { measureMovementSample } from '../lib/location-trace-logic';
 import { evaluateReroute } from '../lib/reroute-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
 import { useLocationWatchers } from './use-location-watchers';
+import { useRerouteController } from './use-reroute-controller';
 
 export function useDetourHomeController() {
   const router = useRouter();
@@ -224,7 +225,6 @@ export function useDetourHomeController() {
   const beatRemainingMetersRef = useRef(0);
   const selectedSceneRef = useRef<SceneCandidate | null>(null);
   const offRouteCountRef = useRef(0);
-  const rerouteInFlightRef = useRef(false);
   const checkpointLockedRef = useRef(false);
   const rerouteCountRef = useRef(0);
   const detourStartedAtRef = useRef<string | null>(null);
@@ -288,6 +288,29 @@ export function useDetourHomeController() {
     setSideEventPhotoConfirmed,
     persistActiveJourneySnapshot,
   });
+
+  const rerouteController = useRerouteController({
+    devMode,
+    routeContext: routingContext(lightContext ?? 'day'),
+    planRef,
+    selectedSceneRef,
+    offRouteCountRef,
+    rerouteCountRef,
+    navigationRouteRef,
+    navigationBeatIndexRef,
+    beatRemainingMetersRef,
+    setIsRerouting,
+    setRerouteFailed,
+    setWalkingRoute,
+    setNavigationRoute,
+    setNavigationBeatIndex,
+    setBeatRemainingMeters,
+    setShowNextBeatMap,
+    setRerouteCount,
+  });
+  const rerouteInFlightRef = rerouteController.rerouteInFlightRef;
+  const rerouteFromCurrentPosition =
+    rerouteController.rerouteFromCurrentPosition;
 
   const mood = useMemo(
     () => MOODS.find((item) => item.id === selectedMood) ?? null,
@@ -1589,62 +1612,6 @@ export function useDetourHomeController() {
       );
     } finally {
       setReplacementLoading(false);
-    }
-  }
-
-  async function rerouteFromCurrentPosition(currentPoint: GeoPoint) {
-    if (rerouteInFlightRef.current || devMode) return;
-
-    const scene = selectedSceneRef.current;
-    if (!scene || !planRef.current) return;
-
-    rerouteInFlightRef.current = true;
-    setIsRerouting(true);
-    setRerouteFailed(false);
-
-    try {
-      const nextWalkingRoute = await fetchWalkingRoute(
-        currentPoint,
-        scene.point,
-        undefined,
-        { context: routingContext(lightContext ?? 'day') }
-      );
-      const nextNavigationRoute = buildNavigationRouteFromPolyline({
-        coordinates: nextWalkingRoute.coordinates,
-        totalDistanceMeters: nextWalkingRoute.distanceMeters,
-        durationSeconds: nextWalkingRoute.durationSeconds,
-      });
-
-      if (nextNavigationRoute.beats.length < 1) {
-        throw new Error('No reroute beats');
-      }
-
-      setWalkingRoute(nextWalkingRoute);
-      setNavigationRoute(nextNavigationRoute);
-      navigationRouteRef.current = nextNavigationRoute;
-      setNavigationBeatIndex(0);
-      navigationBeatIndexRef.current = 0;
-
-      const firstDistance =
-        nextNavigationRoute.beats[0]?.segmentDistanceMeters ?? 0;
-      setBeatRemainingMeters(firstDistance);
-      beatRemainingMetersRef.current = firstDistance;
-      setShowNextBeatMap(false);
-      offRouteCountRef.current = 0;
-
-      const nextCount = rerouteCountRef.current + 1;
-      rerouteCountRef.current = nextCount;
-      setRerouteCount(nextCount);
-
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success
-      );
-    } catch {
-      setRerouteFailed(true);
-      offRouteCountRef.current = 0;
-    } finally {
-      setIsRerouting(false);
-      rerouteInFlightRef.current = false;
     }
   }
 
