@@ -34,7 +34,6 @@ import {
 
 import {
   buildNavigationRouteFromPolyline,
-  distanceToPolyline,
   guidanceBearingOnPolyline,
   moveToward,
   relativeArrowDegrees,
@@ -108,16 +107,14 @@ import {
   writeStored,
 } from '../lib/storage';
 import { parseDetourPreferences } from '../lib/preferences-storage';
-import { measureMovementSample } from '../lib/location-trace-logic';
-import { evaluateReroute } from '../lib/reroute-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
+import { useJourneyLocationController } from './use-journey-location-controller';
 import { useLocationWatchers } from './use-location-watchers';
 import { useNavigationBeatController } from './use-navigation-beat-controller';
 import { useRerouteController } from './use-reroute-controller';
 
 export function useDetourHomeController() {
   const router = useRouter();
-  const turnReminderBeatIdRef = useRef<string | null>(null);
   const [stage, setStage] = useState<Stage>('boot');
   const [preferences, setPreferences] =
     useState<DetourPreferences>(DEFAULT_PREFERENCES);
@@ -330,6 +327,30 @@ export function useDetourHomeController() {
   const setBeat = navigationBeatController.setBeat;
   const reachCurrentNavigationBeat =
     navigationBeatController.reachCurrentNavigationBeat;
+
+  const journeyLocationController = useJourneyLocationController({
+    stageRef,
+    lastTracePointRef,
+    lastMovementSampleAtRef,
+    effectiveMovingSecondsRef,
+    traveledMetersRef,
+    navigationRouteRef,
+    navigationBeatIndexRef,
+    beatRemainingMetersRef,
+    offRouteCountRef,
+    rerouteInFlightRef,
+    setLatitude,
+    setLongitude,
+    setDeviceHeading,
+    setActiveTrace,
+    setTraveledMeters,
+    setBeatRemainingMeters,
+    rerouteFromCurrentPosition,
+    maybeTriggerSideEvent,
+    reachCurrentNavigationBeat,
+  });
+  const handleHeadingUpdate = journeyLocationController.handleHeadingUpdate;
+  const handleLocationUpdate = journeyLocationController.handleLocationUpdate;
 
   const mood = useMemo(
     () => MOODS.find((item) => item.id === selectedMood) ?? null,
@@ -1049,12 +1070,6 @@ export function useDetourHomeController() {
     setOnboardingStep((value) => value + 1);
   }
 
-  function handleHeadingUpdate(heading: Location.LocationHeadingObject) {
-    const value =
-      heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
-    if (Number.isFinite(value)) setDeviceHeading(value);
-  }
-
   function advanceTicketProgress(_toValue: number, status: string) {
     setTicketBuildStatus(status);
   }
@@ -1631,100 +1646,6 @@ export function useDetourHomeController() {
       );
     } finally {
       setReplacementLoading(false);
-    }
-  }
-
-  function handleLocationUpdate(newLocation: Location.LocationObject) {
-    const nextPoint: GeoPoint = {
-      latitude: newLocation.coords.latitude,
-      longitude: newLocation.coords.longitude,
-    };
-    const sampleAt = newLocation.timestamp || Date.now();
-    const previousSampleAt = lastMovementSampleAtRef.current;
-    lastMovementSampleAtRef.current = sampleAt;
-
-    setLatitude(nextPoint.latitude);
-    setLongitude(nextPoint.longitude);
-
-    const previous = lastTracePointRef.current;
-    lastTracePointRef.current = nextPoint;
-
-    if (!previous) {
-      setActiveTrace((trace) => [...trace, nextPoint]);
-      return;
-    }
-
-    const movement = measureMovementSample({
-      previous,
-      next: nextPoint,
-      previousSampleAt,
-      sampleAt,
-      distanceMeters: (from, to) =>
-        getDistanceInMeters(
-          from.latitude,
-          from.longitude,
-          to.latitude,
-          to.longitude
-        ),
-    });
-
-    if (!movement) return;
-    effectiveMovingSecondsRef.current += movement.sampleSeconds;
-
-    setActiveTrace((trace) =>
-      trace.length >= 700 ? trace : [...trace, nextPoint]
-    );
-
-    if (stageRef.current !== 'journey') return;
-
-    const nextTraveled = traveledMetersRef.current + movement.movedMeters;
-    traveledMetersRef.current = nextTraveled;
-    setTraveledMeters(nextTraveled);
-
-    const route = navigationRouteRef.current;
-    const beat = route?.beats[navigationBeatIndexRef.current] ?? null;
-    if (!route || !beat) return;
-
-    const remainingOnBeat = remainingDistanceOnPolyline(
-      nextPoint,
-      beat.segmentCoordinates
-    );
-    setBeatRemainingMeters(remainingOnBeat);
-    beatRemainingMetersRef.current = remainingOnBeat;
-
-    const shouldRemindForTurn =
-      ['left', 'right', 'slight-left', 'slight-right', 'arrive'].includes(
-        beat.turn
-      ) &&
-      remainingOnBeat > 12 &&
-      remainingOnBeat <= 30 &&
-      turnReminderBeatIdRef.current !== beat.id;
-
-    if (shouldRemindForTurn) {
-      turnReminderBeatIdRef.current = beat.id;
-      void Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Warning
-      );
-    }
-
-    const rerouteCheck = evaluateReroute({
-      offRouteDistanceMeters: distanceToPolyline(nextPoint, route.coordinates),
-      gpsAccuracyMeters: newLocation.coords.accuracy ?? 0,
-      offRouteCount: offRouteCountRef.current,
-      rerouteInFlight: rerouteInFlightRef.current,
-    });
-    offRouteCountRef.current = rerouteCheck.nextOffRouteCount;
-
-    if (rerouteCheck.shouldReroute) {
-      offRouteCountRef.current = 0;
-      void rerouteFromCurrentPosition(nextPoint);
-      return;
-    }
-
-    maybeTriggerSideEvent(nextPoint);
-
-    if (remainingOnBeat <= 12) {
-      void reachCurrentNavigationBeat();
     }
   }
 
