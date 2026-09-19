@@ -112,6 +112,7 @@ import { measureMovementSample } from '../lib/location-trace-logic';
 import { evaluateReroute } from '../lib/reroute-logic';
 import { useCameraRouteBridge } from './use-camera-route-bridge';
 import { useLocationWatchers } from './use-location-watchers';
+import { useNavigationBeatController } from './use-navigation-beat-controller';
 import { useRerouteController } from './use-reroute-controller';
 
 export function useDetourHomeController() {
@@ -311,6 +312,24 @@ export function useDetourHomeController() {
   const rerouteInFlightRef = rerouteController.rerouteInFlightRef;
   const rerouteFromCurrentPosition =
     rerouteController.rerouteFromCurrentPosition;
+
+  const navigationBeatController = useNavigationBeatController({
+    navigationRouteRef,
+    navigationBeatIndexRef,
+    beatRemainingMetersRef,
+    checkpointLockedRef,
+    setLatitude,
+    setLongitude,
+    setNavigationBeatIndex,
+    setBeatRemainingMeters,
+    setShowNextBeatMap,
+    setActiveTrace,
+    setQuestPulse,
+    transitionTo,
+  });
+  const setBeat = navigationBeatController.setBeat;
+  const reachCurrentNavigationBeat =
+    navigationBeatController.reachCurrentNavigationBeat;
 
   const mood = useMemo(
     () => MOODS.find((item) => item.id === selectedMood) ?? null,
@@ -2164,72 +2183,6 @@ export function useDetourHomeController() {
     transitionTo('journey');
     await startTraceWatcher();
     await startHeadingWatcher();
-  }
-
-  function setBeat(index: number) {
-    const route = navigationRouteRef.current;
-    if (!route) return false;
-
-    const beat = route.beats[index];
-    if (!beat) return false;
-
-    setNavigationBeatIndex(index);
-    navigationBeatIndexRef.current = index;
-    setBeatRemainingMeters(beat.segmentDistanceMeters);
-    beatRemainingMetersRef.current = beat.segmentDistanceMeters;
-    setShowNextBeatMap(false);
-    return true;
-  }
-
-  async function reachCurrentNavigationBeat() {
-    if (checkpointLockedRef.current) return;
-
-    const route = navigationRouteRef.current;
-    if (!route) return;
-
-    const beatIndex = navigationBeatIndexRef.current;
-    const beat = route.beats[beatIndex];
-    if (!beat) return;
-
-    checkpointLockedRef.current = true;
-    setLatitude(beat.point.latitude);
-    setLongitude(beat.point.longitude);
-    setBeatRemainingMeters(0);
-    beatRemainingMetersRef.current = 0;
-
-    setActiveTrace((trace) => {
-      const previous = trace[trace.length - 1];
-      if (
-        previous &&
-        getDistanceInMeters(
-          previous.latitude,
-          previous.longitude,
-          beat.point.latitude,
-          beat.point.longitude
-        ) < 2
-      ) {
-        return trace;
-      }
-      return [...trace, beat.point];
-    });
-
-    const isFinal = beatIndex >= route.beats.length - 1;
-
-    if (isFinal) {
-      setQuestPulse('final');
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success
-      );
-      await new Promise<void>((resolve) => setTimeout(resolve, 720));
-      setQuestPulse(null);
-      checkpointLockedRef.current = false;
-      transitionTo('arrival');
-      return;
-    }
-
-    await Haptics.selectionAsync();
-    setBeat(beatIndex + 1);
-    checkpointLockedRef.current = false;
   }
 
   async function simulateWalk() {
