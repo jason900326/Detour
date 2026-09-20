@@ -87,12 +87,18 @@ export function useHybridDetourController() {
   const segmentsRef = useRef(0);
   const recentDirectionsRef = useRef<HybridDirection[]>([]);
   const traceRef = useRef<GeoPoint[]>([]);
+  const stopWatchersRef = useRef<(() => void) | null>(null);
 
-  const resetToHome = useCallback(() => {
+  const stopActiveSession = useCallback(() => {
     activeRef.current = false;
     sessionRef.current += 1;
     preparingRef.current = false;
     routeRef.current = null;
+    stopWatchersRef.current?.();
+  }, []);
+
+  const resetToHome = useCallback(() => {
+    stopActiveSession();
     pointRef.current = null;
     previousPointRef.current = null;
     previousSampleAtRef.current = null;
@@ -108,14 +114,12 @@ export function useHybridDetourController() {
     setInstruction('先走第一小段。');
     setHint('只看眼前這個方向。');
     setPhase('home');
-  }, []);
+  }, [stopActiveSession]);
 
   const finish = useCallback(() => {
-    activeRef.current = false;
-    sessionRef.current += 1;
-    routeRef.current = null;
+    stopActiveSession();
     setPhase('finished');
-  }, []);
+  }, [stopActiveSession]);
 
   const prepareNextSegment = useCallback(
     async (startPoint: GeoPoint, sessionId: number) => {
@@ -219,15 +223,14 @@ export function useHybridDetourController() {
           return;
         }
 
-        activeRef.current = false;
-        routeRef.current = null;
+        stopActiveSession();
         setError(errorMessage(nextError));
         setPhase('error');
       } finally {
         preparingRef.current = false;
       }
     },
-    []
+    [stopActiveSession]
   );
 
   const completeSegment = useCallback(async () => {
@@ -295,7 +298,7 @@ export function useHybridDetourController() {
         distanceBetween(nextPoint, beat.point) <= BEAT_REACHED_METERS;
       const closeToSegment =
         distanceToPolyline(nextPoint, beat.segmentCoordinates) <=
-        ROUTE_CLOSE_METERS &&
+          ROUTE_CLOSE_METERS &&
         remainingDistanceOnPolyline(
           nextPoint,
           beat.segmentCoordinates
@@ -339,6 +342,7 @@ export function useHybridDetourController() {
     onLocation: handleLocation,
     onHeading: handleHeading,
   });
+  stopWatchersRef.current = stopLocationWatcher;
 
   const start = useCallback(async () => {
     if (activeRef.current) return;
@@ -394,8 +398,7 @@ export function useHybridDetourController() {
     } catch (startError) {
       if (sessionRef.current !== sessionId) return;
 
-      activeRef.current = false;
-      stopLocationWatcher();
+      stopActiveSession();
       setError(errorMessage(startError));
       setPhase('error');
     }
@@ -403,7 +406,7 @@ export function useHybridDetourController() {
     prepareNextSegment,
     startHeadingWatcher,
     startTraceWatcher,
-    stopLocationWatcher,
+    stopActiveSession,
   ]);
 
   const continueChapter = useCallback(async () => {
@@ -416,11 +419,9 @@ export function useHybridDetourController() {
 
   useEffect(() => {
     return () => {
-      activeRef.current = false;
-      sessionRef.current += 1;
-      stopLocationWatcher();
+      stopActiveSession();
     };
-  }, [stopLocationWatcher]);
+  }, [stopActiveSession]);
 
   return {
     phase,
