@@ -587,7 +587,7 @@ export function DetourHomeView({
             <DetourAccentStroke width={126} style={styles.v35Underline} />
             <View style={{ flex: 1 }} />
 
-            <Pressable onPress={startDirectDetour} style={styles.v35TicketButton}>
+            <Pressable onPress={() => void startDirectDetour()} style={styles.v35TicketButton}>
               <View style={styles.v35TicketNotchLeft} />
               <View style={styles.v35TicketNotchRight} />
               <Text style={styles.v35TicketArrow}>→</Text>
@@ -800,7 +800,7 @@ export function DetourHomeView({
 
             {stage === 'ready' && ticketReadyUnlocked && (
               <Pressable
-                onPress={startDetour}
+                onPress={() => void startDetour()}
                 style={[
                   styles.v48DepartButton,
                   {
