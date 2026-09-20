@@ -37,6 +37,9 @@ export function HybridSwipeStart(props: { onStart: () => void }) {
   const knobScale = useDerivedValue(
     () => 1 + Math.sin(progress.value * Math.PI) * 0.05
   );
+  const knobRadius = useDerivedValue(
+    () => KNOB_RADIUS * knobScale.value
+  );
   const haloOpacity = useDerivedValue(
     () => 0.12 + progress.value * 0.22
   );
@@ -143,7 +146,7 @@ export function HybridSwipeStart(props: { onStart: () => void }) {
           <Circle
             cx={knobX}
             cy={TRACK_HEIGHT / 2}
-            r={KNOB_RADIUS * knobScale}
+            r={knobRadius}
             color="#F5F0E8"
           />
           <Circle
