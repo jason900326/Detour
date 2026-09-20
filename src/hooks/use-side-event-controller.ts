@@ -152,6 +152,10 @@ export function useSideEventController(args: Args) {
     [args, presentSideEvent]
   );
 
+  const presentInitialSideEvent = useCallback(() => {
+    return presentSideEvent({ advanceSlot: true });
+  }, [presentSideEvent]);
+
   const resetSideEventRuntime = useCallback(() => {
     args.setActiveSideEvent(null);
     args.activeSideEventRef.current = null;
@@ -172,6 +176,7 @@ export function useSideEventController(args: Args) {
     acknowledgeActiveSideEvent,
     maybeTriggerSideEvent,
     replaceActiveSideEvent,
+    presentInitialSideEvent,
     resetSideEventRuntime,
   };
 }
