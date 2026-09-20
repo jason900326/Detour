@@ -36,6 +36,8 @@ const SEGMENTS_PER_CHAPTER = 3;
 const SEGMENT_TARGET_METERS = 120;
 const BEAT_REACHED_METERS = 24;
 const ROUTE_CLOSE_METERS = 35;
+const OFF_ROUTE_METERS = 65;
+const OFF_ROUTE_COOLDOWN_MS = 12000;
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -90,6 +92,7 @@ export function useHybridDetourController() {
   const recentDirectionsRef = useRef<HybridDirection[]>([]);
   const recentRoutesRef = useRef<GeoPoint[][]>([]);
   const traceRef = useRef<GeoPoint[]>([]);
+  const lastRerouteAtRef = useRef(0);
   const stopWatchersRef = useRef<(() => void) | null>(null);
 
   const stopActiveSession = useCallback(() => {
@@ -107,6 +110,7 @@ export function useHybridDetourController() {
     previousSampleAtRef.current = null;
     recentDirectionsRef.current = [];
     recentRoutesRef.current = [];
+    lastRerouteAtRef.current = 0;
     segmentsRef.current = 0;
     traceRef.current = [];
     setTrace([]);
@@ -276,6 +280,25 @@ export function useHybridDetourController() {
     [stopActiveSession]
   );
 
+  const advanceSegment = useCallback(
+    async (endPoint: GeoPoint) => {
+      if (!activeRef.current || preparingRef.current) return;
+
+      segmentsRef.current += 1;
+      routeRef.current = null;
+
+      if (segmentsRef.current >= SEGMENTS_PER_CHAPTER) {
+        setPhase('chapter');
+        setInstruction('這一小段完成了。');
+        setHint('要不要讓 DETOUR 再替你岔一次？');
+        return;
+      }
+
+      await prepareNextSegment(endPoint, sessionRef.current);
+    },
+    [prepareNextSegment]
+  );
+
   const completeSegment = useCallback(async () => {
     if (
       !activeRef.current ||
@@ -285,18 +308,39 @@ export function useHybridDetourController() {
       return;
     }
 
-    segmentsRef.current += 1;
-    routeRef.current = null;
+    await advanceSegment(pointRef.current);
+  }, [advanceSegment]);
 
-    if (segmentsRef.current >= SEGMENTS_PER_CHAPTER) {
-      setPhase('chapter');
-      setInstruction('這一小段完成了。');
-      setHint('要不要讓 DETOUR 再替你岔一次？');
+  const simulateSegment = useCallback(async () => {
+    if (
+      !activeRef.current ||
+      preparingRef.current ||
+      !pointRef.current ||
+      !routeRef.current
+    ) {
       return;
     }
 
-    await prepareNextSegment(pointRef.current, sessionRef.current);
-  }, [prepareNextSegment]);
+    const route = routeRef.current;
+    const endPoint = route.coordinates[route.coordinates.length - 1];
+    if (!endPoint) return;
+
+    const simulatedTrace = [
+      ...traceRef.current,
+      ...route.coordinates.slice(1),
+    ];
+    traceRef.current = simulatedTrace;
+    setTrace(simulatedTrace);
+    setDistanceTraveled(
+      (current) => current + route.totalDistanceMeters
+    );
+
+    pointRef.current = endPoint;
+    previousPointRef.current = endPoint;
+    previousSampleAtRef.current = Date.now();
+
+    await advanceSegment(endPoint);
+  }, [advanceSegment]);
 
   const handleLocation = useCallback(
     (location: Location.LocationObject) => {
@@ -334,6 +378,26 @@ export function useHybridDetourController() {
       const route = routeRef.current;
       if (!route || preparingRef.current) return;
 
+      const now = Date.now();
+      const distanceFromRoute = distanceToPolyline(
+        nextPoint,
+        route.coordinates
+      );
+      if (
+        distanceFromRoute > OFF_ROUTE_METERS &&
+        now - lastRerouteAtRef.current >= OFF_ROUTE_COOLDOWN_MS
+      ) {
+        lastRerouteAtRef.current = now;
+        routeRef.current = null;
+        setDecisionLabel('改走下一段');
+        setInstruction('先往前走。');
+        setHint(
+          '剛剛偏離了這段路，DETOUR 正在接下一段安全的路。'
+        );
+        void prepareNextSegment(nextPoint, sessionRef.current);
+        return;
+      }
+
       const beat = route.beats[beatIndexRef.current];
       if (!beat) return;
 
@@ -359,7 +423,7 @@ export function useHybridDetourController() {
       setInstruction(nextBeat.instruction);
       setHint(nextBeat.hint);
     },
-    [completeSegment]
+    [completeSegment, prepareNextSegment]
   );
 
   const handleHeading = useCallback(
@@ -395,6 +459,7 @@ export function useHybridDetourController() {
     activeRef.current = true;
     preparingRef.current = false;
     routeRef.current = null;
+    lastRerouteAtRef.current = 0;
     segmentsRef.current = 0;
     recentDirectionsRef.current = [];
     traceRef.current = [];
@@ -479,6 +544,7 @@ export function useHybridDetourController() {
     start,
     finish,
     continueChapter,
+    simulateSegment,
     resetToHome,
   };
 }

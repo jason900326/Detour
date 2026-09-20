@@ -13,6 +13,7 @@ function ActionButton(props: {
   label: string;
   onPress: () => void;
   secondary?: boolean;
+  test?: boolean;
 }) {
   return (
     <Pressable
@@ -21,6 +22,7 @@ function ActionButton(props: {
       style={({ pressed }) => [
         styles.actionButton,
         props.secondary && styles.secondaryButton,
+        props.test && styles.testButton,
         pressed && styles.pressed,
       ]}
     >
@@ -28,6 +30,7 @@ function ActionButton(props: {
         style={[
           styles.actionButtonLabel,
           props.secondary && styles.secondaryButtonLabel,
+          props.test && styles.testButtonLabel,
         ]}
       >
         {props.label}
@@ -101,11 +104,18 @@ export function HybridDetourExperiment() {
             <Text style={styles.progressLabel}>
               HYBRID · 第 {controller.segmentNumber} 段
             </Text>
-            <ActionButton
-              label="結束這趟"
-              onPress={controller.finish}
-              secondary
-            />
+            <View style={styles.buttonStack}>
+              <ActionButton
+                label="室內測試：模擬走一段"
+                onPress={() => void controller.simulateSegment()}
+                test
+              />
+              <ActionButton
+                label="結束這趟"
+                onPress={controller.finish}
+                secondary
+              />
+            </View>
           </View>
         </View>
       </SafeAreaView>
@@ -340,6 +350,9 @@ const styles = StyleSheet.create({
     borderColor: '#3A383B',
     borderWidth: 1,
   },
+  testButton: {
+    backgroundColor: '#D9A85D',
+  },
   actionButtonLabel: {
     color: '#141316',
     fontSize: 16,
@@ -347,6 +360,9 @@ const styles = StyleSheet.create({
   },
   secondaryButtonLabel: {
     color: '#E2DCD3',
+  },
+  testButtonLabel: {
+    color: '#141316',
   },
   pressed: {
     opacity: 0.72,
