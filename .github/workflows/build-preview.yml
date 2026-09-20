@@ -1,0 +1,74 @@
+name: Build DETOUR iOS preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "app.json"
+      - "ios/**"
+      - "modules/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "app.json"
+      - "ios/**"
+      - "modules/**"
+  workflow_dispatch:
+
+concurrency:
+  group: detour-ios-preview-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: EAS iOS internal distribution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Check Expo token
+        id: expo_token
+        shell: bash
+        run: |
+          if [ -z "\${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "EXPO_TOKEN is not configured yet; skipping iOS Preview build."
+            echo "skip=true" >> "\$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "\$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup EAS
+        if: steps.expo_token.outputs.skip != 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: \${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        if: steps.expo_token.outputs.skip != 'true'
+        run: npm ci --no-audit --no-fund
+
+      - name: Build iOS Preview
+        if: steps.expo_token.outputs.skip != 'true'
+        run: eas build --platform ios --profile preview --non-interactive
