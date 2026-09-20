@@ -103,9 +103,9 @@ export function useHybridDetourController() {
 
       preparingRef.current = true;
       routeRef.current = null;
-      setPhase('starting');
-      setInstruction('正在找下一段路。');
-      setHint('不用先決定終點，只處理眼前這一段。');
+      setPhase('walking');
+      setInstruction('先往前走。');
+      setHint('先沿著眼前安全的方向走，不用等 DETOUR 告訴你去哪裡。');
 
       try {
         const context = getLightContext(startPoint);
@@ -321,7 +321,9 @@ export function useHybridDetourController() {
     setDistanceTraveled(0);
     setSegmentNumber(0);
     setError(null);
-    setPhase('starting');
+    setInstruction('先往前走。');
+    setHint('先沿著眼前安全的方向走，不用等 DETOUR 告訴你去哪裡。');
+    setPhase('walking');
 
     try {
       const permission =

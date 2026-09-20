@@ -1,7 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  PanResponder,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -10,6 +7,7 @@ import {
 } from 'react-native';
 
 import { useHybridDetourController } from '../hooks/use-hybrid-detour-controller';
+import { HybridSwipeStart } from './hybrid-swipe-start';
 
 function ActionButton(props: {
   label: string;
@@ -38,62 +36,6 @@ function ActionButton(props: {
   );
 }
 
-function SwipeStart(props: { onStart: () => void }) {
-  const [railWidth, setRailWidth] = useState(0);
-  const dragX = useRef(new Animated.Value(0)).current;
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 4,
-        onPanResponderMove: (_, gesture) => {
-          const maxTravel = Math.max(0, railWidth - 72);
-          dragX.setValue(
-            Math.max(0, Math.min(maxTravel, gesture.dx))
-          );
-        },
-        onPanResponderRelease: (_, gesture) => {
-          const maxTravel = Math.max(0, railWidth - 72);
-
-          if (gesture.dx >= Math.max(80, railWidth * 0.45)) {
-            Animated.timing(dragX, {
-              toValue: maxTravel,
-              duration: 120,
-              useNativeDriver: true,
-            }).start(() => {
-              dragX.setValue(0);
-              props.onStart();
-            });
-            return;
-          }
-
-          Animated.spring(dragX, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 18,
-            bounciness: 5,
-          }).start();
-        },
-      }),
-    [dragX, railWidth, props]
-  );
-
-  return (
-    <View
-      onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}
-      style={styles.swipeRail}
-      {...responder.panHandlers}
-    >
-      <Text style={styles.swipeLabel}>滑一下，出去晃晃</Text>
-      <Animated.View
-        style={[styles.swipeHandle, { transform: [{ translateX: dragX }] }]}
-      >
-        <Text style={styles.swipeArrow}>→</Text>
-      </Animated.View>
-    </View>
-  );
-}
-
 export function HybridDetourExperiment() {
   const controller = useHybridDetourController();
 
@@ -110,7 +52,7 @@ export function HybridDetourExperiment() {
             </Text>
           </View>
 
-          <SwipeStart onStart={() => void controller.start()} />
+          <HybridSwipeStart onStart={() => void controller.start()} />
 
           <Text style={styles.versionLabel}>HYBRID EXPERIMENT V0</Text>
         </View>
