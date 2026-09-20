@@ -18,8 +18,10 @@ import {
 } from '../lib/journey-engine';
 import { fetchWalkingRoute } from '../lib/routing-engine';
 import {
-  chooseHybridDirection,
+  chooseHybridRouteCandidate,
+  getHybridDirectionCandidates,
   type HybridDirection,
+  type HybridRouteCandidate,
 } from '../lib/hybrid-detour/decision-engine';
 
 export type HybridDetourPhase =
@@ -86,6 +88,7 @@ export function useHybridDetourController() {
   const beatIndexRef = useRef(0);
   const segmentsRef = useRef(0);
   const recentDirectionsRef = useRef<HybridDirection[]>([]);
+  const recentRoutesRef = useRef<GeoPoint[][]>([]);
   const traceRef = useRef<GeoPoint[]>([]);
   const stopWatchersRef = useRef<(() => void) | null>(null);
 
@@ -103,6 +106,7 @@ export function useHybridDetourController() {
     previousPointRef.current = null;
     previousSampleAtRef.current = null;
     recentDirectionsRef.current = [];
+    recentRoutesRef.current = [];
     segmentsRef.current = 0;
     traceRef.current = [];
     setTrace([]);
@@ -149,11 +153,60 @@ export function useHybridDetourController() {
 
         setLightLabel(contextMeta.label);
 
-        const decision = chooseHybridDirection({
+        const directionCandidates = getHybridDirectionCandidates({
           headingDegrees: headingRef.current,
           recentDirections: recentDirectionsRef.current,
           step: segmentsRef.current,
         });
+        const routeCandidates: HybridRouteCandidate[] = [];
+        const routingDeadlineAt = Date.now() + 6500;
+
+        for (const candidate of directionCandidates) {
+          try {
+            const destination = offsetPoint(
+              startPoint,
+              SEGMENT_TARGET_METERS,
+              candidate.bearingDegrees
+            );
+            const candidateRoute = await fetchWalkingRoute(
+              startPoint,
+              destination,
+              2400,
+              {
+                purpose: 'interactive',
+                deadlineAt: routingDeadlineAt,
+                context,
+              }
+            );
+
+            if (
+              candidateRoute.coordinates.length < 2 ||
+              candidateRoute.distanceMeters < 24
+            ) {
+              continue;
+            }
+
+            routeCandidates.push({
+              ...candidate,
+              route: candidateRoute,
+            });
+          } catch {
+            // One unavailable direction should not end the whole decision.
+          }
+        }
+
+        const decision = chooseHybridRouteCandidate({
+          headingDegrees: headingRef.current,
+          recentDirections: recentDirectionsRef.current,
+          recentRoutes: recentRoutesRef.current,
+          step: segmentsRef.current,
+          candidates: routeCandidates,
+        });
+
+        if (!decision) {
+          throw new Error('附近沒有可用的步行方向，請換個位置再試。');
+        }
+
         const decisionMessage = directionCopy(decision.direction);
 
         setDecisionLabel(decisionMessage.label);
@@ -162,21 +215,7 @@ export function useHybridDetourController() {
           setHint(decisionMessage.hint);
         }
 
-        const destination = offsetPoint(
-          startPoint,
-          SEGMENT_TARGET_METERS,
-          decision.bearingDegrees
-        );
-        const route = await fetchWalkingRoute(
-          startPoint,
-          destination,
-          5200,
-          {
-            purpose: 'interactive',
-            deadlineAt: Date.now() + 6500,
-            context,
-          }
-        );
+        const route = decision.route;
 
         if (
           !activeRef.current ||
@@ -204,6 +243,10 @@ export function useHybridDetourController() {
         recentDirectionsRef.current = [
           ...recentDirectionsRef.current,
           decision.direction,
+        ].slice(-4);
+        recentRoutesRef.current = [
+          ...recentRoutesRef.current,
+          route.coordinates,
         ].slice(-4);
         const firstBeat = navigationRoute.beats[0];
 
