@@ -1985,7 +1985,11 @@ export function useDetourHomeController() {
       stageRef.current = 'ready';
 
       if (directStartRef.current) {
-        await startDetour({ directStart: true, immediateSideEvent: true });
+        await startDetour({
+          directStart: true,
+          immediateSideEvent: true,
+          startPoint,
+        });
       }
     } catch (error) {
       stopLocationWatcher();
@@ -2016,8 +2020,9 @@ export function useDetourHomeController() {
   async function startDetour(options?: {
     directStart?: boolean;
     immediateSideEvent?: boolean;
+    startPoint?: GeoPoint;
   }) {
-    const startPoint = detourStart;
+    const startPoint = options?.startPoint ?? detourStart;
     const route = navigationRouteRef.current;
 
     if (
