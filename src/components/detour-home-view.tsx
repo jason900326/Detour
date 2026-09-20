@@ -852,68 +852,99 @@ export function DetourHomeView({
             </View>
 
             <View style={styles.v35JourneyHero}>
-              {latitude !== null && longitude !== null ? (
-                <View style={styles.v35JourneyMapWrap}>
-                <MapView
-                  style={styles.v35JourneyMap}
-                  mapType="standard"
-                  initialRegion={{
-                    latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
-                    longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
-                    latitudeDelta: 0.0022,
-                    longitudeDelta: 0.0022,
+              {selectedMood !== 'color' && activeSideEvent && (
+                <View
+                  style={{
+                    width: '100%',
+                    marginBottom: 14,
+                    alignItems: 'center',
                   }}
-                  showsUserLocation={false}
-                  showsMyLocationButton={false}
-                  showsCompass={false}
-                  pitchEnabled={false}
-                  rotateEnabled={false}
                 >
-                  <Polygon
-                    coordinates={headingSectorCoordinates(
-                      { latitude, longitude },
-                      deviceHeading
-                    )}
-                    fillColor="rgba(30, 135, 255, 0.28)"
-                    strokeColor="rgba(30, 135, 255, 0.5)"
-                    strokeWidth={1}
+                  <SideEventPaper
+                    event={activeSideEvent}
+                    onFound={() => openCamera('side')}
+                    onCompleted={acknowledgeActiveSideEvent}
+                    photoConfirmed={sideEventPhotoConfirmed}
+                    onReplace={replaceActiveSideEvent}
                   />
-                  <Circle
-                    center={{ latitude, longitude }}
-                    radius={8}
-                    strokeColor="#FFFFFF"
-                    strokeWidth={2}
-                    fillColor="#1683FF"
-                  />
-                  <Polyline coordinates={nextBeatSegment} strokeColor={SIGNAL} strokeWidth={5} lineCap="round" />
-                  <Circle center={currentNavigationBeat.point} radius={10} strokeColor={BONE} strokeWidth={1} fillColor={SIGNAL} />
-                </MapView>
                 </View>
-              ) : (
-                <View style={styles.v35JourneyMapPlaceholder} />
               )}
 
-              <Text style={styles.v35JourneyInstruction}>
+              <Text
+                style={[
+                  styles.v35JourneyInstruction,
+                  {
+                    marginTop: 4,
+                    marginBottom: 10,
+                    fontSize: 18,
+                    lineHeight: 24,
+                  },
+                ]}
+              >
                 {navigationInstructionLabel(currentNavigationBeat.turn)}
               </Text>
 
-                {selectedMood !== 'color' && activeSideEvent && (
-                  <View
-                    style={{
-                      width: '100%',
-                      marginTop: 24,
-                      alignItems: 'center',
+              {latitude !== null && longitude !== null ? (
+                <View
+                  style={[
+                    styles.v35JourneyMapWrap,
+                    { height: 150, marginBottom: 0, borderRadius: 16 },
+                  ]}
+                >
+                  <MapView
+                    style={styles.v35JourneyMap}
+                    mapType="standard"
+                    initialRegion={{
+                      latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
+                      longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
+                      latitudeDelta: 0.0022,
+                      longitudeDelta: 0.0022,
                     }}
+                    showsUserLocation={false}
+                    showsMyLocationButton={false}
+                    showsCompass={false}
+                    pitchEnabled={false}
+                    rotateEnabled={false}
                   >
-                    <SideEventPaper
-                      event={activeSideEvent}
-                      onFound={() => openCamera('side')}
-                      onCompleted={acknowledgeActiveSideEvent}
-                      photoConfirmed={sideEventPhotoConfirmed}
-                      onReplace={replaceActiveSideEvent}
+                    <Polygon
+                      coordinates={headingSectorCoordinates(
+                        { latitude, longitude },
+                        deviceHeading
+                      )}
+                      fillColor="rgba(30, 135, 255, 0.28)"
+                      strokeColor="rgba(30, 135, 255, 0.5)"
+                      strokeWidth={1}
                     />
-                  </View>
-                )}
+                    <Circle
+                      center={{ latitude, longitude }}
+                      radius={8}
+                      strokeColor="#FFFFFF"
+                      strokeWidth={2}
+                      fillColor="#1683FF"
+                    />
+                    <Polyline
+                      coordinates={nextBeatSegment}
+                      strokeColor={SIGNAL}
+                      strokeWidth={5}
+                      lineCap="round"
+                    />
+                    <Circle
+                      center={currentNavigationBeat.point}
+                      radius={10}
+                      strokeColor={BONE}
+                      strokeWidth={1}
+                      fillColor={SIGNAL}
+                    />
+                  </MapView>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.v35JourneyMapPlaceholder,
+                    { height: 150, marginBottom: 0, borderRadius: 16 },
+                  ]}
+                />
+              )}
 
                 {selectedMood === 'color' && selectedColor && (
                   <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
