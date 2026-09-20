@@ -666,7 +666,7 @@ export function DetourHomeView({
         )}
 
         {(stage === 'preparing' || stage === 'ready') && (
-          {directStartActive ? (
+          directStartActive ? (
             <View style={styles.v45PrintingScreen}>
               <View style={styles.v48PrintingTopBar}>
                 <View style={{ width: 36 }} />
@@ -836,7 +836,7 @@ export function DetourHomeView({
               </View>
             </Modal>
           </View>
-          )}
+          )
         )}
 
         {stage === 'journey' && plan && navigationRoute && currentNavigationBeat && (
