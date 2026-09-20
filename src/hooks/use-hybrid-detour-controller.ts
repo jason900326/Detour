@@ -40,12 +40,37 @@ function errorMessage(error: unknown) {
   return '這次沒有取得附近的步行路線，請稍後再試。';
 }
 
+function directionCopy(direction: HybridDirection) {
+  if (direction === 'left') {
+    return {
+      label: '往左邊岔一下',
+      instruction: '這次，往左邊岔。',
+      hint: '不用找終點，只跟著這個選擇走一小段。',
+    };
+  }
+
+  if (direction === 'right') {
+    return {
+      label: '往右邊岔一下',
+      instruction: '這次，往右邊岔。',
+      hint: '不用找終點，只跟著這個選擇走一小段。',
+    };
+  }
+
+  return {
+    label: '先往前走',
+    instruction: '這次，先往前走。',
+    hint: '不用找終點，只跟著這個選擇走一小段。',
+  };
+}
+
 export function useHybridDetourController() {
   const [phase, setPhase] = useState<HybridDetourPhase>('home');
   const [instruction, setInstruction] = useState('先走第一小段。');
   const [hint, setHint] = useState('只看眼前這個方向。');
   const [error, setError] = useState<string | null>(null);
   const [lightLabel, setLightLabel] = useState<string | null>(null);
+  const [decisionLabel, setDecisionLabel] = useState<string | null>(null);
   const [segmentNumber, setSegmentNumber] = useState(0);
   const [trace, setTrace] = useState<GeoPoint[]>([]);
   const [distanceTraveled, setDistanceTraveled] = useState(0);
@@ -79,6 +104,7 @@ export function useHybridDetourController() {
     setSegmentNumber(0);
     setError(null);
     setLightLabel(null);
+    setDecisionLabel(null);
     setInstruction('先走第一小段。');
     setHint('只看眼前這個方向。');
     setPhase('home');
@@ -124,6 +150,14 @@ export function useHybridDetourController() {
           recentDirections: recentDirectionsRef.current,
           step: segmentsRef.current,
         });
+        const decisionMessage = directionCopy(decision.direction);
+
+        setDecisionLabel(decisionMessage.label);
+        if (segmentsRef.current > 0) {
+          setInstruction(decisionMessage.instruction);
+          setHint(decisionMessage.hint);
+        }
+
         const destination = offsetPoint(
           startPoint,
           SEGMENT_TARGET_METERS,
@@ -321,6 +355,7 @@ export function useHybridDetourController() {
     setDistanceTraveled(0);
     setSegmentNumber(0);
     setError(null);
+    setDecisionLabel(null);
     setInstruction('先往前走。');
     setHint('先沿著眼前安全的方向走，不用等 DETOUR 告訴你去哪裡。');
     setPhase('walking');
@@ -393,6 +428,7 @@ export function useHybridDetourController() {
     hint,
     error,
     lightLabel,
+    decisionLabel,
     segmentNumber,
     trace,
     distanceTraveled,

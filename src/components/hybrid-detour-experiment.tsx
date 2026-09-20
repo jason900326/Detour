@@ -80,6 +80,14 @@ export function HybridDetourExperiment() {
         <View style={styles.walkContent}>
           <View>
             <Text style={styles.eyebrow}>現在</Text>
+            {controller.decisionLabel && (
+              <View style={styles.decisionRow}>
+                <Text style={styles.decisionEyebrow}>HYBRID 選擇</Text>
+                <Text style={styles.decisionLabel}>
+                  {controller.decisionLabel}
+                </Text>
+              </View>
+            )}
             <Text style={styles.instruction}>{controller.instruction}</Text>
             <Text style={styles.hint}>{controller.hint}</Text>
           </View>
@@ -236,6 +244,23 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 28,
     marginTop: 18,
+  },
+  decisionRow: {
+    alignItems: 'flex-start',
+    marginBottom: 22,
+  },
+  decisionEyebrow: {
+    color: '#A9A29A',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.6,
+    marginBottom: 6,
+  },
+  decisionLabel: {
+    color: '#D9A85D',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
   },
   instruction: {
     color: '#F5F0E8',
