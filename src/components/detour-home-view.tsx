@@ -157,6 +157,7 @@ export function DetourHomeView({
   const [completionIrisActive, setCompletionIrisActive] = useState(false);
   const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] = useState(false);
   const [liveAlbumVisible, setLiveAlbumVisible] = useState(false);
+  const [journeyMapVisible, setJourneyMapVisible] = useState(false);
   const arrivalPhotoStartCountRef = useRef(0);
 
   const printingLayout = useMemo(() => {
@@ -884,67 +885,18 @@ export function DetourHomeView({
                 {navigationInstructionLabel(currentNavigationBeat.turn)}
               </Text>
 
-              {latitude !== null && longitude !== null ? (
-                <View
-                  style={[
-                    styles.v35JourneyMapWrap,
-                    { height: 150, marginBottom: 0, borderRadius: 16 },
-                  ]}
-                >
-                  <MapView
-                    style={styles.v35JourneyMap}
-                    mapType="standard"
-                    initialRegion={{
-                      latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
-                      longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
-                      latitudeDelta: 0.0022,
-                      longitudeDelta: 0.0022,
-                    }}
-                    showsUserLocation={false}
-                    showsMyLocationButton={false}
-                    showsCompass={false}
-                    pitchEnabled={false}
-                    rotateEnabled={false}
-                  >
-                    <Polygon
-                      coordinates={headingSectorCoordinates(
-                        { latitude, longitude },
-                        deviceHeading
-                      )}
-                      fillColor="rgba(30, 135, 255, 0.28)"
-                      strokeColor="rgba(30, 135, 255, 0.5)"
-                      strokeWidth={1}
-                    />
-                    <Circle
-                      center={{ latitude, longitude }}
-                      radius={8}
-                      strokeColor="#FFFFFF"
-                      strokeWidth={2}
-                      fillColor="#1683FF"
-                    />
-                    <Polyline
-                      coordinates={nextBeatSegment}
-                      strokeColor={SIGNAL}
-                      strokeWidth={5}
-                      lineCap="round"
-                    />
-                    <Circle
-                      center={currentNavigationBeat.point}
-                      radius={10}
-                      strokeColor={BONE}
-                      strokeWidth={1}
-                      fillColor={SIGNAL}
-                    />
-                  </MapView>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.v35JourneyMapPlaceholder,
-                    { height: 150, marginBottom: 0, borderRadius: 16 },
-                  ]}
-                />
-              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="查看路線"
+                onPress={() => setJourneyMapVisible(true)}
+                style={({ pressed }) => [
+                  styles.nextBeatMapButton,
+                  pressed && styles.nextBeatMapButtonPressed,
+                ]}
+              >
+                <Text style={styles.nextBeatMapButtonText}>需要方向？查看路線</Text>
+                <Text style={[styles.nextBeatMapButtonText, { fontSize: 18 }]}>↗</Text>
+              </Pressable>
 
                 {selectedMood === 'color' && selectedColor && (
                   <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
@@ -1053,6 +1005,104 @@ export function DetourHomeView({
                       <View key={`empty-${index}`} style={styles.v35JourneyAlbumGridEmpty} />
                     ))}
                   </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
+
+            <Modal
+              visible={journeyMapVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setJourneyMapVisible(false)}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉路線地圖"
+                onPress={() => setJourneyMapVisible(false)}
+                style={styles.v35JourneyAlbumOverlay}
+              >
+                <Pressable
+                  onPress={(event) => event.stopPropagation()}
+                  style={styles.v35JourneyAlbumCard}
+                >
+                  <View style={styles.v35JourneyAlbumHeader}>
+                    <View>
+                      <Text style={styles.v35JourneyAlbumTitle}>這一段路線</Text>
+                      <Text style={styles.v35JourneyAlbumMeta}>
+                        {navigationInstructionLabel(currentNavigationBeat.turn)}
+                      </Text>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="關閉路線地圖"
+                      onPress={() => setJourneyMapVisible(false)}
+                      style={styles.v35JourneyAlbumClose}
+                    >
+                      <Text style={styles.v35JourneyAlbumCloseText}>×</Text>
+                    </Pressable>
+                  </View>
+
+                  {latitude !== null && longitude !== null ? (
+                    <View
+                      style={[
+                        styles.v35JourneyMapWrap,
+                        { height: 360, marginBottom: 0, borderRadius: 16 },
+                      ]}
+                    >
+                      <MapView
+                        style={styles.v35JourneyMap}
+                        mapType="standard"
+                        initialRegion={{
+                          latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
+                          longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
+                          latitudeDelta: 0.0022,
+                          longitudeDelta: 0.0022,
+                        }}
+                        showsUserLocation={false}
+                        showsMyLocationButton={false}
+                        showsCompass={false}
+                        pitchEnabled={false}
+                        rotateEnabled={false}
+                      >
+                        <Polygon
+                          coordinates={headingSectorCoordinates(
+                            { latitude, longitude },
+                            deviceHeading
+                          )}
+                          fillColor="rgba(30, 135, 255, 0.28)"
+                          strokeColor="rgba(30, 135, 255, 0.5)"
+                          strokeWidth={1}
+                        />
+                        <Circle
+                          center={{ latitude, longitude }}
+                          radius={8}
+                          strokeColor="#FFFFFF"
+                          strokeWidth={2}
+                          fillColor="#1683FF"
+                        />
+                        <Polyline
+                          coordinates={nextBeatSegment}
+                          strokeColor={SIGNAL}
+                          strokeWidth={5}
+                          lineCap="round"
+                        />
+                        <Circle
+                          center={currentNavigationBeat.point}
+                          radius={10}
+                          strokeColor={BONE}
+                          strokeWidth={1}
+                          fillColor={SIGNAL}
+                        />
+                      </MapView>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.v35JourneyMapPlaceholder,
+                        { height: 360, marginBottom: 0, borderRadius: 16 },
+                      ]}
+                    />
+                  )}
                 </Pressable>
               </Pressable>
             </Modal>
