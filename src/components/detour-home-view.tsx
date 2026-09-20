@@ -79,6 +79,7 @@ export function DetourHomeView({
     onboardingFromSettings,
     ticketBuildError,
     setTicketBuildError,
+    directStartActive,
     selectedTime,
     sliderDisplayMinutes,
     selectedMood,
@@ -134,7 +135,7 @@ export function DetourHomeView({
     sharePlaytestData,
     clearPlaytestData,
     timeSliderResponder,
-    continueFromTime,
+    startDirectDetour,
     chooseMood,
     continueFromMood,
     prepareDetourTicket,
@@ -582,119 +583,15 @@ export function DetourHomeView({
               />
             </Animated.View>
 
-            <Text style={styles.v35HomeQuestion}>今天有多少時間，{`\n`}可以拿來偏離一下？</Text>
+            <Text style={styles.v35HomeQuestion}>現在有一段空檔嗎？{`\n`}直接走一段。</Text>
             <DetourAccentStroke width={126} style={styles.v35Underline} />
-            <Animated.View
-              style={[
-                styles.v35MinuteReadout,
-                {
-                  paddingHorizontal: 18,
-                  overflow: 'visible',
-                  transform: [{ scale: minutePulse }],
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.v35MinuteNumber,
-                  { letterSpacing: 0, paddingHorizontal: 5, overflow: 'visible' },
-                ]}
-              >
-                {sliderDisplayMinutes}
-              </Text>
-              <Text style={styles.v35MinuteUnit}>分</Text>
-            </Animated.View>
+            <View style={{ flex: 1 }} />
 
-            <View
-              style={[
-                styles.v35SliderWrap,
-                { height: 58, marginHorizontal: 20 },
-              ]}
-              onLayout={(event) => {
-                timeSliderWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
-              }}
-              {...timeSliderResponder.panHandlers}
-            >
-              <View
-                style={[
-                  styles.v35SliderRail,
-                  { top: 15, height: 4, borderRadius: 2 },
-                ]}
-              />
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.v35SliderFill,
-                  {
-                    top: 15,
-                    height: 4,
-                    borderRadius: 2,
-                    width: timeSliderProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-              <Text
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: -2,
-                  top: 32,
-                  fontSize: 12,
-                  fontWeight: '800',
-                  color: MUTED,
-                }}
-              >
-                10
-              </Text>
-              <Text
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  right: -2,
-                  top: 32,
-                  fontSize: 12,
-                  fontWeight: '800',
-                  color: MUTED,
-                }}
-              >
-                60
-              </Text>
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.v35SliderThumb,
-                  {
-                    top: 0,
-                    width: 34,
-                    height: 34,
-                    marginLeft: -17,
-                    borderRadius: 17,
-                    borderWidth: 1,
-                    shadowOpacity: 0.12,
-                    left: timeSliderProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.v35SliderThumbCore,
-                    { width: 22, height: 22, borderRadius: 11 },
-                  ]}
-                />
-              </Animated.View>
-            </View>
-
-            <Pressable onPress={continueFromTime} style={styles.v35TicketButton}>
+            <Pressable onPress={startDirectDetour} style={styles.v35TicketButton}>
               <View style={styles.v35TicketNotchLeft} />
               <View style={styles.v35TicketNotchRight} />
               <Text style={styles.v35TicketArrow}>→</Text>
-              <Text style={styles.v35TicketText}>開始 {sliderDisplayMinutes} 分鐘的旅程</Text>
+              <Text style={styles.v35TicketText}>開始走一段</Text>
               <View style={styles.v35TicketDivider} />
               <Text style={styles.v35TicketMark}>▰</Text>
             </Pressable>
@@ -769,6 +666,40 @@ export function DetourHomeView({
         )}
 
         {(stage === 'preparing' || stage === 'ready') && (
+          {directStartActive ? (
+            <View style={styles.v45PrintingScreen}>
+              <View style={styles.v48PrintingTopBar}>
+                <View style={{ width: 36 }} />
+                <Text style={styles.v45PrintingBrand}>DETOUR</Text>
+              </View>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
+                <Text style={styles.v45PrintingTitle}>正在找一條可以走的路⋯</Text>
+                <Text style={[styles.v48RetryBody, { textAlign: 'center', marginTop: 16 }]}>
+                  不用選擇，找到後直接出發。
+                </Text>
+              </View>
+              <Modal visible={Boolean(ticketBuildError)} transparent animationType="fade" onRequestClose={goBack}>
+                <View style={styles.v48RetryOverlay}>
+                  <View style={styles.v48RetryCard}>
+                    <Text style={styles.v48RetryEyebrow}>找路失敗</Text>
+                    <Text style={styles.v48RetryTitle}>這趟還沒準備好。</Text>
+                    <Text style={styles.v48RetryBody}>{ticketBuildError}</Text>
+                    <Pressable
+                      onPress={() => {
+                        routeProgress.setValue(0);
+                        setTicketBuildError(null);
+                        void prepareDetourTicket();
+                      }}
+                      style={styles.v48RetryPrimary}
+                    >
+                      <Text style={styles.v48RetryPrimaryText}>再試一次</Text>
+                      <Text style={styles.v48RetryPrimaryArrow}>→</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </Modal>
+            </View>
+          ) : (
           <View
             style={[
               styles.v45PrintingScreen,
@@ -905,6 +836,7 @@ export function DetourHomeView({
               </View>
             </Modal>
           </View>
+          )}
         )}
 
         {stage === 'journey' && plan && navigationRoute && currentNavigationBeat && (
