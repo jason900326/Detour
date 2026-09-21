@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildShortRouteDestinations } from './v2-routing.ts';
+import {
+  buildShortRouteDestinations,
+  closingStopPriority,
+} from './v2-routing.ts';
 import {
   bearingBetween,
   distanceBetween,
@@ -47,4 +50,11 @@ test('V2 routing stays locally exploratory while still returning four short-rout
     assert.ok(distance >= 145);
     assert.ok(distance <= 235);
   }
+});
+
+
+test('V2 closing prefers places that are naturally easy to stop at', () => {
+  assert.ok(closingStopPriority('green-space') < closingStopPriority('viewpoint'));
+  assert.ok(closingStopPriority('square') < closingStopPriority('footbridge'));
+  assert.ok(closingStopPriority('pedestrian') < closingStopPriority('unknown-kind'));
 });
