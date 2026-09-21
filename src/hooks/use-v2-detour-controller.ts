@@ -32,6 +32,7 @@ import {
   shouldEnterV2Closing,
   shouldForceV2Finish,
   shouldOfferV2ClosingTarget,
+  shouldKeepV2TargetIntoClosing,
   targetDifficultyForNext,
   replacementDifficultyForV2,
   resolveV2CompletionPlace,
@@ -411,18 +412,34 @@ export function useV2DetourController() {
       setRouteSafe(null);
       setPhaseSafe('closing');
       if (shouldOfferV2ClosingTarget(discoveriesRef.current)) {
-        const closingTarget = chooseV2Target({
-          difficulty: 'easy',
-          excludedIds: previousTargetIdsRef.current,
-          excludedEmojis: emojiTrailRef.current,
-          environmentKinds: environmentKindsRef.current,
-          seed: Date.now() + 911,
-        });
-        previousTargetIdsRef.current = [
-          ...previousTargetIdsRef.current,
-          closingTarget.id,
-        ].slice(-8);
-        setTargetSafe(closingTarget);
+        const existingTarget = activeTargetRef.current;
+        const existingTargetAgeSeconds = targetStartedAtRef.current
+          ? Math.max(
+              1,
+              Math.round((Date.now() - targetStartedAtRef.current) / 1000)
+            )
+          : null;
+        const keepExistingTarget =
+          existingTarget &&
+          shouldKeepV2TargetIntoClosing({
+            difficulty: existingTarget.difficulty,
+            targetAgeSeconds: existingTargetAgeSeconds,
+          });
+
+        if (!keepExistingTarget) {
+          const closingTarget = chooseV2Target({
+            difficulty: 'easy',
+            excludedIds: previousTargetIdsRef.current,
+            excludedEmojis: emojiTrailRef.current,
+            environmentKinds: environmentKindsRef.current,
+            seed: Date.now() + 911,
+          });
+          previousTargetIdsRef.current = [
+            ...previousTargetIdsRef.current,
+            closingTarget.id,
+          ].slice(-8);
+          setTargetSafe(closingTarget);
+        }
       } else {
         setTargetSafe(null);
       }
