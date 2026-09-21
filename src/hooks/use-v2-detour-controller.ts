@@ -796,6 +796,12 @@ export function useV2DetourController() {
 
     chooseNextTarget(targetSeconds, target.difficulty);
     if (point) {
+      // Finding something is the authoritative moment for the next segment.
+      // Cancel any older reroute that may still be resolving and form the next
+      // short route from the player's position at the moment they tapped.
+      routeRequestRef.current += 1;
+      routePlanningRef.current = false;
+      setIsPlanning(false);
       void refreshEnvironmentHints(point);
       void planShortRoute(point, 'exploration');
     }
