@@ -49,3 +49,7 @@ export function isSpatiallyConsistentOffRouteSample(args: {
     (args.maxSeparationMeters ?? 55)
   );
 }
+
+export function isUsableV2StartAccuracy(accuracyMeters: number | null | undefined) {
+  return (accuracyMeters ?? Number.POSITIVE_INFINITY) <= 70;
+}
