@@ -666,6 +666,7 @@ export const legacyStyles = StyleSheet.create({
   v35JourneyAlbumCount: { position: 'absolute', right: 4, bottom: 4, minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,9,9,0.78)' },
   v35JourneyAlbumCountText: { fontSize: 11, lineHeight: 14, fontWeight: '900', color: BONE },
   v35JourneyAlbumOverlay: { flex: 1, paddingHorizontal: 20, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center' },
+  v35JourneyModalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   v35JourneyAlbumCard: { width: '100%', maxWidth: 420, padding: 18, borderRadius: 24, backgroundColor: '#1B1B1A', borderWidth: 1, borderColor: '#3A3936' },
   v35JourneyAlbumHeader: { marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   v35JourneyAlbumTitle: { fontSize: 22, fontWeight: '900', color: BONE },
