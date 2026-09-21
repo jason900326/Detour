@@ -145,9 +145,11 @@ function V2Ticket({
 function JourneyMap({
   point,
   coordinates,
+  caption = '只看下一小段',
 }: {
   point: { latitude: number; longitude: number } | null;
   coordinates: { latitude: number; longitude: number }[];
+  caption?: string;
 }) {
   const region = useMemo(() => routeRegion(point), [point]);
   if (!point || !region) return null;
@@ -183,7 +185,7 @@ function JourneyMap({
         />
       </MapView>
       <View pointerEvents="none" style={styles.mapCaption}>
-        <Text style={styles.mapCaptionText}>只看下一小段</Text>
+        <Text style={styles.mapCaptionText}>{caption}</Text>
       </View>
     </View>
   );
@@ -435,6 +437,10 @@ function IndoorPlaytestControls({
 function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const closing = controller.phase === 'closing';
   const beat = controller.currentNavigationBeat;
+  const closingMinutes =
+    closing && controller.routeState?.walkingRoute.durationSeconds
+      ? Math.max(1, Math.ceil(controller.routeState.walkingRoute.durationSeconds / 60))
+      : null;
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
@@ -446,7 +452,11 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
         <Text style={styles.elapsed}>{elapsedLabel(controller.elapsedSeconds)}</Text>
       </View>
 
-      <JourneyMap point={controller.currentPoint} coordinates={controller.routeCoordinates} />
+      <JourneyMap
+        point={controller.currentPoint}
+        coordinates={controller.routeCoordinates}
+        caption={closing ? '最後一段' : '只看下一小段'}
+      />
 
       <View style={styles.journeyContent}>
         <View style={styles.navigationHint}>
@@ -468,7 +478,9 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             <Text style={styles.closingTitle}>最後一段。</Text>
             <Text style={styles.closingCopy}>不會再出新題。再走一小段，到了才揭曉這趟停在哪裡。</Text>
             <View style={styles.closingPromise}>
-              <Text style={styles.closingPromiseText}>快到了 · 不用趕</Text>
+              <Text style={styles.closingPromiseText}>
+                {closingMinutes ? `約 ${closingMinutes} 分鐘 · 不用趕` : '快到了 · 不用趕'}
+              </Text>
             </View>
           </View>
         ) : controller.activeTarget ? (
