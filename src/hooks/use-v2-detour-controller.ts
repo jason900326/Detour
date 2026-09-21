@@ -405,7 +405,22 @@ export function useV2DetourController() {
       routeRequestRef.current = closingRequestId;
       setRouteSafe(null);
       setPhaseSafe('closing');
-      setTargetSafe(null);
+      if (discoveriesRef.current < 4) {
+        const closingTarget = chooseV2Target({
+          difficulty: 'easy',
+          excludedIds: previousTargetIdsRef.current,
+          excludedEmojis: emojiTrailRef.current,
+          environmentKinds: environmentKindsRef.current,
+          seed: Date.now() + 911,
+        });
+        previousTargetIdsRef.current = [
+          ...previousTargetIdsRef.current,
+          closingTarget.id,
+        ].slice(-8);
+        setTargetSafe(closingTarget);
+      } else {
+        setTargetSafe(null);
+      }
       setStatusMessage('差不多了，再往這邊走一小段。');
 
       if (playtestModeRef.current === 'indoor') {
@@ -845,7 +860,13 @@ export function useV2DetourController() {
 
   const markFound = useCallback(async () => {
     const target = activeTargetRef.current;
-    if (!target || phaseRef.current !== 'exploration') return;
+    const currentPhase = phaseRef.current;
+    if (
+      !target ||
+      (currentPhase !== 'exploration' && currentPhase !== 'closing')
+    ) {
+      return;
+    }
 
     const targetSeconds = targetStartedAtRef.current
       ? Math.max(1, Math.round((Date.now() - targetStartedAtRef.current) / 1000))
@@ -856,9 +877,14 @@ export function useV2DetourController() {
     discoveriesRef.current += 1;
     setDiscoveries(discoveriesRef.current);
     setTargetSafe(null);
-    setStatusMessage('留在票上了。下一段正在形成。');
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    if (currentPhase === 'closing') {
+      setStatusMessage('最後一個也留在票上了。繼續最後一段。');
+      return;
+    }
+
+    setStatusMessage('留在票上了。下一段正在形成.');
     const point = currentPointRef.current;
     const elapsed = startedAtRef.current ? (Date.now() - startedAtRef.current) / 1000 : 0;
     if (point && enterClosingIfNeeded(point, elapsed)) return;
@@ -877,8 +903,16 @@ export function useV2DetourController() {
   }, [chooseNextTarget, enterClosingIfNeeded, planShortRoute, refreshEnvironmentHints, setTargetSafe]);
 
   const replaceTarget = useCallback(() => {
-    if (phaseRef.current !== 'exploration' || !activeTargetRef.current) return;
-    const difficulty = replacementDifficultyForV2(activeTargetRef.current.difficulty);
+    if (
+      (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') ||
+      !activeTargetRef.current
+    ) {
+      return;
+    }
+    const difficulty =
+      phaseRef.current === 'closing'
+        ? 'easy'
+        : replacementDifficultyForV2(activeTargetRef.current.difficulty);
     const target = chooseV2Target({
       difficulty,
       excludedIds: previousTargetIdsRef.current,
