@@ -16,6 +16,12 @@ import type { PassportEntry } from '../lib/app-model';
 import type { NavigationTurn } from '../lib/navigation-engine';
 import type { V2Phase } from '../hooks/use-v2-detour-controller';
 import { useV2DetourController } from '../hooks/use-v2-detour-controller';
+import {
+  V2ClosingConverge,
+  V2DiscoveryBurst,
+  V2FinishMark,
+  V2RouteFormingMotion,
+} from './v2-skia-motion';
 
 const COLORS = {
   ink: '#16130F',
@@ -284,6 +290,7 @@ function StartingPanel({ controller }: { controller: ReturnType<typeof useV2Deto
       </View>
       <View style={styles.startingContent}>
         <V2Ticket serial={controller.ticketSerial} emojiTrail={controller.emojiTrail} />
+        <V2RouteFormingMotion />
         <Text style={styles.startingTitle}>這趟路正在形成。</Text>
         <Text style={styles.startingCopy}>{controller.statusMessage || '正在找一條適合先走的小段。'}</Text>
         {controller.isPlanning && <View style={styles.loadingDot} />}
@@ -467,6 +474,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
       />
 
       <View style={styles.journeyContent}>
+        <V2DiscoveryBurst trigger={controller.discoveries} />
         <View style={styles.navigationHint}>
           {(closing || isDirectionDecision(beat?.turn)) && (
             <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
@@ -482,6 +490,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
 
         {closing ? (
           <View style={styles.closingCard}>
+            <V2ClosingConverge />
             <Text style={styles.closingEyebrow}>FINAL STRETCH</Text>
             <Text style={styles.closingTitle}>最後一段。</Text>
             <Text style={styles.closingCopy}>不會再出新的主要題目。再走一小段，到了才揭曉這趟停在哪裡。</Text>
@@ -566,6 +575,7 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.finishScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.finishHeader}>
+          <V2FinishMark />
           <Text style={styles.smallLabel}>DETOUR COMPLETE</Text>
           <Text style={styles.finishTitle}>這趟停在</Text>
           <Text style={styles.finishPlace}>{controller.endPlaceLabel ?? '附近的停留點'}</Text>
