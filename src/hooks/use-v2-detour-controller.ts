@@ -49,7 +49,7 @@ import {
   pointAlongPolyline,
 } from '../lib/v2-indoor-playtest';
 
-export type V2Phase = 'home' | 'starting' | 'exploration' | 'closing' | 'finish' | 'history';
+export type V2Phase = 'home' | 'starting' | 'exploration' | 'closing' | 'finish' | 'history' | 'share';
 export type V2PlaytestMode = 'live' | 'indoor';
 
 export type V2RouteState = {
@@ -109,6 +109,7 @@ export function useV2DetourController() {
   const [endPlaceLabel, setEndPlaceLabel] = useState<string | null>(null);
   const [ticketSerial, setTicketSerial] = useState(makeTicketSerial);
   const [historyDetail, setHistoryDetail] = useState<PassportEntry | null>(null);
+  const [shareEntry, setShareEntry] = useState<PassportEntry | null>(null);
 
   const phaseRef = useRef<V2Phase>('home');
   const playtestModeRef = useRef<V2PlaytestMode>('live');
@@ -134,6 +135,7 @@ export function useV2DetourController() {
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const indoorRouteProgressRef = useRef(0);
   const environmentKindsRef = useRef<string[]>([]);
+  const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
 
   const {
     passport,
@@ -472,6 +474,7 @@ export function useV2DetourController() {
       };
 
       await savePassport([entry, ...passportRef.current]);
+      setShareEntry(entry);
       setElapsedSeconds(durationSeconds);
       setStatusMessage('這趟路留在票上了。');
       setPhaseSafe('finish');
@@ -919,20 +922,33 @@ export function useV2DetourController() {
     setHistoryDetail(entry);
   }, []);
 
-  const shareCurrentJourney = useCallback(async () => {
-    await Share.share({
-      title: '我的 Detour',
-      message: `DETOUR · ${emojiTrailRef.current.join(' ') || '還在路上'}\n約 10 分鐘，走一段平常不會走的路。`,
-    });
-  }, []);
+  const openCurrentShare = useCallback(() => {
+    if (!shareEntry) return;
+    shareReturnPhaseRef.current = 'finish';
+    setPhaseSafe('share');
+  }, [setPhaseSafe, shareEntry]);
 
-  const shareHistoryEntry = useCallback(async (entry: PassportEntry) => {
-    const emojis = entry.emojiTrail?.join(' ') || '—';
+  const openHistoryShare = useCallback((entry: PassportEntry) => {
+    setShareEntry(entry);
+    shareReturnPhaseRef.current = 'history';
+    setPhaseSafe('share');
+  }, [setPhaseSafe]);
+
+  const closeShare = useCallback(() => {
+    setPhaseSafe(shareReturnPhaseRef.current);
+  }, [setPhaseSafe]);
+
+  const performShare = useCallback(async () => {
+    if (!shareEntry) return;
+    const emojis = shareEntry.emojiTrail?.join(' ') || '—';
+    const place = shareEntry.sceneName ?? shareEntry.city;
+    const photo = shareEntry.photos?.[0];
     await Share.share({
       title: '我的 Detour',
-      message: `DETOUR · ${emojis}\n${entry.city}\n${entry.discoveries} 個發現`,
+      message: `DETOUR · ${emojis}\n${place}\n${shareEntry.discoveries} 個發現`,
+      ...(photo?.uri ? { url: photo.uri } : {}),
     });
-  }, []);
+  }, [shareEntry]);
 
   const goHome = useCallback(() => {
     stopWatchers();
@@ -1010,6 +1026,7 @@ export function useV2DetourController() {
     endPlaceLabel,
     ticketSerial,
     historyDetail,
+    shareEntry,
     startJourney,
     startIndoorJourney,
     startOver,
@@ -1024,8 +1041,10 @@ export function useV2DetourController() {
     openCamera,
     openHistory,
     showHistoryEntry,
-    shareCurrentJourney,
-    shareHistoryEntry,
+    openCurrentShare,
+    openHistoryShare,
+    closeShare,
+    performShare,
     goHome,
     finishJourney,
   };
