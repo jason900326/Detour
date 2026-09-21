@@ -170,6 +170,7 @@ export function useV2DetourController() {
     savePassport,
   } = usePassportStore();
   const passportRef = useRef(passport);
+  const passportLoadedRef = useRef(passportLoaded);
 
   const setPhaseSafe = useCallback((next: V2Phase) => {
     phaseRef.current = next;
@@ -546,7 +547,12 @@ export function useV2DetourController() {
         ticketSerial: ticketSerialRef.current,
       };
 
-      await savePassport([entry, ...passportRef.current]);
+      const existingPassport = passportLoadedRef.current
+        ? passportRef.current
+        : await loadPassport();
+      passportLoadedRef.current = true;
+      passportRef.current = existingPassport;
+      await savePassport([entry, ...existingPassport]);
       setShareEntry(entry);
       setElapsedSeconds(durationSeconds);
       setStatusMessage(
@@ -558,7 +564,7 @@ export function useV2DetourController() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finishInFlightRef.current = false;
     },
-    [savePassport, setPhaseSafe, setRouteSafe, setTargetSafe, stopWatchers]
+    [loadPassport, savePassport, setPhaseSafe, setRouteSafe, setTargetSafe, stopWatchers]
   );
 
   const enterClosingIfNeeded = useCallback(
@@ -1121,6 +1127,10 @@ export function useV2DetourController() {
   useEffect(() => {
     passportRef.current = passport;
   }, [passport]);
+
+  useEffect(() => {
+    passportLoadedRef.current = passportLoaded;
+  }, [passportLoaded]);
 
   useEffect(() => {
     if (!passportLoaded) void loadPassport();
