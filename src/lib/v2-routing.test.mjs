@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   closingRouteTargetDistanceMeters,
   closingStopPriority,
+  isSpatiallyConsistentOffRouteSample,
   isTrustedV2GpsAccuracy,
   rubberBandCorrectionDegrees,
 } from './v2-routing-policy.ts';
@@ -40,4 +41,37 @@ test('V2 route progress only trusts sufficiently precise GPS samples', () => {
   assert.equal(isTrustedV2GpsAccuracy(60), true);
   assert.equal(isTrustedV2GpsAccuracy(61), false);
   assert.equal(isTrustedV2GpsAccuracy(null), false);
+});
+
+
+test('V2 reroute evidence must come from spatially consistent off-route samples', () => {
+  const distanceMeters = (a, b) => Math.abs(a.latitude - b.latitude) * 111000;
+  const first = { latitude: 25, longitude: 121 };
+  const closeSecond = { latitude: 25.0003, longitude: 121 };
+  const wildJump = { latitude: 25.002, longitude: 121 };
+
+  assert.equal(
+    isSpatiallyConsistentOffRouteSample({
+      previous: null,
+      current: first,
+      distanceMeters,
+    }),
+    false
+  );
+  assert.equal(
+    isSpatiallyConsistentOffRouteSample({
+      previous: first,
+      current: closeSecond,
+      distanceMeters,
+    }),
+    true
+  );
+  assert.equal(
+    isSpatiallyConsistentOffRouteSample({
+      previous: first,
+      current: wildJump,
+      distanceMeters,
+    }),
+    false
+  );
 });
