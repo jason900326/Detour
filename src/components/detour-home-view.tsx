@@ -854,13 +854,7 @@ export function DetourHomeView({
 
             <View style={styles.v35JourneyHero}>
               {selectedMood !== 'color' && activeSideEvent && (
-                <View
-                  style={{
-                    width: '100%',
-                    marginBottom: 14,
-                    alignItems: 'center',
-                  }}
-                >
+                <View style={styles.v35JourneySideEventWrap}>
                   <SideEventPaper
                     event={activeSideEvent}
                     onFound={() => openCamera('side')}
@@ -871,19 +865,15 @@ export function DetourHomeView({
                 </View>
               )}
 
-              <Text
-                style={[
-                  styles.v35JourneyInstruction,
-                  {
-                    marginTop: 4,
-                    marginBottom: 10,
-                    fontSize: 18,
-                    lineHeight: 24,
-                  },
-                ]}
-              >
-                {navigationInstructionLabel(currentNavigationBeat.turn)}
-              </Text>
+              <View style={styles.v35JourneyInstructionBlock}>
+                <View style={styles.v35JourneyInstructionRule} />
+                <View style={styles.v35JourneyInstructionCopy}>
+                  <Text style={styles.v35JourneyInstructionEyebrow}>接下來</Text>
+                  <Text style={styles.v35JourneyInstruction}>
+                    {navigationInstructionLabel(currentNavigationBeat.turn)}
+                  </Text>
+                </View>
+              </View>
 
               <Pressable
                 accessibilityRole="button"
@@ -894,18 +884,26 @@ export function DetourHomeView({
                   pressed && styles.nextBeatMapButtonPressed,
                 ]}
               >
-                <Text style={styles.nextBeatMapButtonText}>需要方向？查看路線</Text>
-                <Text style={[styles.nextBeatMapButtonText, { fontSize: 18 }]}>↗</Text>
+                <View style={styles.nextBeatMapButtonCopy}>
+                  <Text style={styles.nextBeatMapButtonEyebrow}>需要方向？</Text>
+                  <Text style={styles.nextBeatMapButtonText}>查看路線</Text>
+                </View>
+                <Text style={styles.nextBeatMapButtonArrow}>↗</Text>
               </Pressable>
 
-                {selectedMood === 'color' && selectedColor && (
-                  <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
-                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedColor.hex }} />
-                    <Text style={{ color: BONE, fontSize: 15, fontWeight: '800' }}>
-                      今天找{selectedColor.label} · 看到就拍
-                    </Text>
-                  </View>
-                )}
+              {selectedMood === 'color' && selectedColor && (
+                <View style={styles.v35JourneyColorHint}>
+                  <View
+                    style={[
+                      styles.v35JourneyColorDot,
+                      { backgroundColor: selectedColor.hex },
+                    ]}
+                  />
+                  <Text style={styles.v35JourneyColorText}>
+                    今天找{selectedColor.label} · 看到就拍
+                  </Text>
+                </View>
+              )}
                 {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
             </View>
 
