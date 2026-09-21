@@ -114,6 +114,7 @@ export function useV2DetourController() {
   const phaseRef = useRef<V2Phase>('home');
   const playtestModeRef = useRef<V2PlaytestMode>('live');
   const currentPointRef = useRef<GeoPoint | null>(null);
+  const journeyAnchorRef = useRef<GeoPoint | null>(null);
   const routeStateRef = useRef<V2RouteState | null>(null);
   const activeTargetRef = useRef<V2Target | null>(null);
   const emojiTrailRef = useRef<string[]>([]);
@@ -277,7 +278,8 @@ export function useV2DetourController() {
           : buildShortRouteDestinations(
               origin,
               Date.now() + discoveriesRef.current * 17 + previousRouteCoordinatesRef.current.length,
-              previousBearingRef.current
+              previousBearingRef.current,
+              journeyAnchorRef.current
             );
 
         const results = await Promise.allSettled(
@@ -649,6 +651,7 @@ export function useV2DetourController() {
     previousRouteCoordinatesRef.current = [];
     previousBearingRef.current = null;
     environmentKindsRef.current = [];
+    journeyAnchorRef.current = null;
     endPlaceLabelRef.current = null;
     setEndPlaceLabel(null);
     finishInFlightRef.current = false;
@@ -661,6 +664,7 @@ export function useV2DetourController() {
     if (mode === 'indoor') {
       const point = INDOOR_START_POINT;
       currentPointRef.current = point;
+      journeyAnchorRef.current = point;
       lastPointRef.current = point;
       traceRef.current = [point];
       setCurrentPoint(point);
@@ -697,6 +701,7 @@ export function useV2DetourController() {
         longitude: location.coords.longitude,
       };
       currentPointRef.current = point;
+      journeyAnchorRef.current = point;
       lastPointRef.current = point;
       traceRef.current = [point];
       setCurrentPoint(point);
