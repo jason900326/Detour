@@ -30,6 +30,7 @@ import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 import { CollectionStages } from './home/collection-stages';
 import { V45MoodIcon, V45Skyline } from './mood-visuals';
 import { SideEventPaper } from './side-event-paper';
+import { JourneyRoutePulse } from './journey-route-pulse';
 import {
   DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_WIDTH,
@@ -898,6 +899,15 @@ export function DetourHomeView({
                     )}
                   </Text>
                 </View>
+                <JourneyRoutePulse
+                  progress={
+                    currentNavigationBeat.segmentDistanceMeters > 0
+                      ? 1 -
+                        beatRemainingMeters /
+                          currentNavigationBeat.segmentDistanceMeters
+                      : 0
+                  }
+                />
               </View>
 
               <Pressable
