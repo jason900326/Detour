@@ -167,6 +167,7 @@ export function shouldEnterV2Closing(args: {
   discoveries: number;
 }) {
   return (
+    args.discoveries >= 4 ||
     (args.elapsedSeconds >= 8 * 60 && args.discoveries >= 3) ||
     args.elapsedSeconds >= 10 * 60
   );
