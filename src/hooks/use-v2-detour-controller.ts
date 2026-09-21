@@ -1433,6 +1433,19 @@ export function useV2DetourController() {
     [routeState]
   );
 
+  const currentRouteRemainingSeconds = useMemo(() => {
+    if (!routeState || !currentPoint) return null;
+
+    const remainingMeters = remainingDistanceOnPolyline(
+      currentPoint,
+      routeState.navigationRoute.coordinates
+    );
+    const totalMeters = Math.max(1, routeState.walkingRoute.distanceMeters);
+    const totalSeconds = Math.max(1, routeState.walkingRoute.durationSeconds);
+    const ratio = Math.max(0, Math.min(1, remainingMeters / totalMeters));
+    return Math.max(0, Math.round(totalSeconds * ratio));
+  }, [currentPoint, routeState]);
+
   const walkedDistanceMeters = useMemo(
     () => Math.round(getRouteDistance(trace)),
     [trace]
@@ -1490,6 +1503,7 @@ export function useV2DetourController() {
     routeState,
     routeCoordinates,
     currentNavigationBeat,
+    currentRouteRemainingSeconds,
     walkedDistanceMeters,
     indoorDiagnostics,
     activeTarget,
