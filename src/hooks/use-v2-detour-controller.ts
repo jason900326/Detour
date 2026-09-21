@@ -47,6 +47,7 @@ import {
 } from '../lib/v2-routing';
 import {
   closingRouteTargetDistanceMeters,
+  isPlausibleV2MovementSample,
   isSpatiallyConsistentOffRouteSample,
   isTrustedV2GpsAccuracy,
   isUsableV2StartAccuracy,
@@ -187,6 +188,7 @@ export function useV2DetourController() {
   const previousBearingRef = useRef<number | null>(null);
   const lastPointRef = useRef<GeoPoint | null>(null);
   const lastTrustedTracePointRef = useRef<GeoPoint | null>(null);
+  const lastTrustedTraceTimestampRef = useRef<number | null>(null);
   const endPlaceLabelRef = useRef<string | null>(null);
   const routeRequestRef = useRef(0);
   const routePlanningRef = useRef(false);
@@ -728,8 +730,22 @@ export function useV2DetourController() {
       const accuracy = location.coords.accuracy;
       const trustedGps = isTrustedV2GpsAccuracy(accuracy);
       const trustedPrevious = lastTrustedTracePointRef.current;
+      const previousTrustedTimestamp = lastTrustedTraceTimestampRef.current;
+      const trustedSegmentDistance = trustedPrevious
+        ? distanceBetween(trustedPrevious, point)
+        : 0;
+      const trustedSegmentSeconds = previousTrustedTimestamp
+        ? Math.max(0.25, (location.timestamp - previousTrustedTimestamp) / 1000)
+        : 999;
+      const plausibleMovement = isPlausibleV2MovementSample({
+        distanceMeters: trustedSegmentDistance,
+        elapsedSeconds: trustedSegmentSeconds,
+        indoor: playtestModeRef.current === 'indoor',
+      });
+      const trustedForJourney = trustedGps && plausibleMovement;
+
       if (
-        trustedGps &&
+        trustedForJourney &&
         (!trustedPrevious ||
           getDistanceInMeters(
             trustedPrevious.latitude,
@@ -740,10 +756,11 @@ export function useV2DetourController() {
       ) {
         traceRef.current = [...traceRef.current, point].slice(-800);
         setTrace(traceRef.current);
-        if (trustedPrevious && distanceBetween(trustedPrevious, point) >= 8) {
+        if (trustedPrevious && trustedSegmentDistance >= 8) {
           previousBearingRef.current = bearingBetween(trustedPrevious, point);
         }
         lastTrustedTracePointRef.current = point;
+        lastTrustedTraceTimestampRef.current = location.timestamp;
       }
 
       if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
@@ -759,7 +776,7 @@ export function useV2DetourController() {
 
       // Low-quality samples may move the visible dot, but they must never
       // advance a beat, trigger a reroute, or finish the Journey.
-      if (!trustedGps) {
+      if (!trustedForJourney) {
         offRouteSamplesRef.current = 0;
         offRouteCandidateRef.current = null;
         return;
@@ -936,6 +953,7 @@ export function useV2DetourController() {
     offRouteSamplesRef.current = 0;
     offRouteCandidateRef.current = null;
     lastTrustedTracePointRef.current = null;
+    lastTrustedTraceTimestampRef.current = null;
     stopWatchers();
     routeRequestRef.current += 1;
     routePlanningRef.current = false;
@@ -947,6 +965,7 @@ export function useV2DetourController() {
       journeyAnchorRef.current = point;
       lastPointRef.current = point;
       lastTrustedTracePointRef.current = point;
+      lastTrustedTraceTimestampRef.current = Date.now();
       traceRef.current = [point];
       setCurrentPoint(point);
       setTrace([point]);
@@ -989,6 +1008,7 @@ export function useV2DetourController() {
       journeyAnchorRef.current = point;
       lastPointRef.current = point;
       lastTrustedTracePointRef.current = point;
+      lastTrustedTraceTimestampRef.current = location.timestamp;
       traceRef.current = [point];
       setCurrentPoint(point);
       setTrace([point]);
