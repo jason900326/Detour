@@ -70,6 +70,7 @@ type V2RoutePurpose = 'exploration' | 'closing';
 const V2_MINUTES = 10;
 const CLOSING_START_SECONDS = 8 * 60;
 const MAX_JOURNEY_SECONDS = 15 * 60;
+const OFF_ROUTE_CONFIRMATIONS = 2;
 
 function isCameraRouteResult(value: unknown): value is CameraRouteResult {
   if (!value || typeof value !== 'object') return false;
@@ -160,6 +161,7 @@ export function useV2DetourController() {
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const watcherGenerationRef = useRef(0);
   const indoorRouteProgressRef = useRef(0);
+  const offRouteSamplesRef = useRef(0);
   const environmentKindsRef = useRef<string[]>([]);
   const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
 
@@ -617,6 +619,10 @@ export function useV2DetourController() {
       const accuracy = location.coords.accuracy ?? 999;
 
       if (offRouteDistance > 75 && accuracy <= 70) {
+        offRouteSamplesRef.current += 1;
+        if (offRouteSamplesRef.current < OFF_ROUTE_CONFIRMATIONS) return;
+
+        offRouteSamplesRef.current = 0;
         const closingDestination = route.purpose === 'closing'
           ? {
               point: route.destination,
@@ -627,6 +633,7 @@ export function useV2DetourController() {
         return;
       }
 
+      offRouteSamplesRef.current = 0;
       if (remaining > 14) return;
 
       const isLastBeat = route.beatIndex >= route.navigationRoute.beats.length - 1;
@@ -739,6 +746,7 @@ export function useV2DetourController() {
     setEndPlaceLabel(null);
     finishInFlightRef.current = false;
     indoorRouteProgressRef.current = 0;
+    offRouteSamplesRef.current = 0;
     stopWatchers();
     routeRequestRef.current += 1;
     routePlanningRef.current = false;
@@ -961,7 +969,7 @@ export function useV2DetourController() {
     const bearing =
       route.navigationRoute.beats[route.beatIndex]?.bearingDegrees ?? heading;
     const deviated = indoorDeviationPoint(point, bearing, distanceMeters);
-    handleLocationUpdate({
+    const simulatedLocation: Location.LocationObject = {
       coords: {
         latitude: deviated.latitude,
         longitude: deviated.longitude,
@@ -972,6 +980,11 @@ export function useV2DetourController() {
         speed: 1.25,
       },
       timestamp: Date.now(),
+    };
+    handleLocationUpdate(simulatedLocation);
+    handleLocationUpdate({
+      ...simulatedLocation,
+      timestamp: simulatedLocation.timestamp + 250,
     });
     setStatusMessage(
       distanceMeters > 420
