@@ -181,6 +181,7 @@ export function useV2DetourController() {
   const previousRouteCoordinatesRef = useRef<GeoPoint[][]>([]);
   const previousBearingRef = useRef<number | null>(null);
   const lastPointRef = useRef<GeoPoint | null>(null);
+  const lastTrustedTracePointRef = useRef<GeoPoint | null>(null);
   const endPlaceLabelRef = useRef<string | null>(null);
   const routeRequestRef = useRef(0);
   const routePlanningRef = useRef(false);
@@ -691,18 +692,29 @@ export function useV2DetourController() {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       };
-      const previous = lastPointRef.current;
       lastPointRef.current = point;
       currentPointRef.current = point;
       setCurrentPoint(point);
       setLightContext(getLightContext(point));
 
-      if (!previous || getDistanceInMeters(previous.latitude, previous.longitude, point.latitude, point.longitude) >= 2) {
+      const accuracy = location.coords.accuracy ?? 999;
+      const trustedPrevious = lastTrustedTracePointRef.current;
+      if (
+        accuracy <= 60 &&
+        (!trustedPrevious ||
+          getDistanceInMeters(
+            trustedPrevious.latitude,
+            trustedPrevious.longitude,
+            point.latitude,
+            point.longitude
+          ) >= 2)
+      ) {
         traceRef.current = [...traceRef.current, point].slice(-800);
         setTrace(traceRef.current);
-        if (previous && distanceBetween(previous, point) >= 8) {
-          previousBearingRef.current = bearingBetween(previous, point);
+        if (trustedPrevious && distanceBetween(trustedPrevious, point) >= 8) {
+          previousBearingRef.current = bearingBetween(trustedPrevious, point);
         }
+        lastTrustedTracePointRef.current = point;
       }
 
       if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
@@ -715,7 +727,6 @@ export function useV2DetourController() {
 
       const remaining = remainingDistanceOnPolyline(point, beat.segmentCoordinates);
       const offRouteDistance = distanceToPolyline(point, route.navigationRoute.coordinates);
-      const accuracy = location.coords.accuracy ?? 999;
 
       if (offRouteDistance > 75 && accuracy <= 70) {
         offRouteSamplesRef.current += 1;
@@ -859,6 +870,7 @@ export function useV2DetourController() {
     finishInFlightRef.current = false;
     indoorRouteProgressRef.current = 0;
     offRouteSamplesRef.current = 0;
+    lastTrustedTracePointRef.current = null;
     stopWatchers();
     routeRequestRef.current += 1;
     routePlanningRef.current = false;
@@ -869,6 +881,7 @@ export function useV2DetourController() {
       currentPointRef.current = point;
       journeyAnchorRef.current = point;
       lastPointRef.current = point;
+      lastTrustedTracePointRef.current = point;
       traceRef.current = [point];
       setCurrentPoint(point);
       setTrace([point]);
@@ -910,6 +923,7 @@ export function useV2DetourController() {
       currentPointRef.current = point;
       journeyAnchorRef.current = point;
       lastPointRef.current = point;
+      lastTrustedTracePointRef.current = point;
       traceRef.current = [point];
       setCurrentPoint(point);
       setTrace([point]);
