@@ -125,6 +125,12 @@ function environmentBoost(target: V2Target, kinds: readonly V2EnvironmentKind[])
   return Math.min(1, boost);
 }
 
+export function replacementDifficultyForV2(
+  current: V2TargetDifficulty
+): V2TargetDifficulty {
+  return current === 'hard' ? 'medium' : current;
+}
+
 export function chooseV2Target(args: {
   difficulty: V2TargetDifficulty;
   excludedIds?: readonly string[];
