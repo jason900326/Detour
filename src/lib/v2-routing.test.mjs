@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   closingRouteTargetDistanceMeters,
   closingStopPriority,
+  isTrustedV2GpsAccuracy,
   rubberBandCorrectionDegrees,
 } from './v2-routing-policy.ts';
 
@@ -31,4 +32,12 @@ test('V2 early closing keeps enough route to taper toward the normal journey len
   assert.ok(closingRouteTargetDistanceMeters(5 * 60) > 300);
   assert.ok(closingRouteTargetDistanceMeters(2 * 60) >= 450);
   assert.equal(closingRouteTargetDistanceMeters(10 * 60), 190);
+});
+
+
+test('V2 route progress only trusts sufficiently precise GPS samples', () => {
+  assert.equal(isTrustedV2GpsAccuracy(5), true);
+  assert.equal(isTrustedV2GpsAccuracy(60), true);
+  assert.equal(isTrustedV2GpsAccuracy(61), false);
+  assert.equal(isTrustedV2GpsAccuracy(null), false);
 });
