@@ -8,6 +8,18 @@ import {
 import { offsetPoint } from './geo-utils';
 import type { WalkingRoute } from './routing-engine';
 
+export function closingStopPriority(kind: string) {
+  const priority: Record<string, number> = {
+    'green-space': 0,
+    square: 1,
+    pedestrian: 2,
+    fountain: 3,
+    viewpoint: 4,
+    footbridge: 5,
+  };
+  return priority[kind] ?? 99;
+}
+
 export type V2RouteOption = {
   origin: GeoPoint;
   destination: GeoPoint;
