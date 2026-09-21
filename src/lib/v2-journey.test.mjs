@@ -6,6 +6,7 @@ import {
   shouldEnterV2Closing,
   shouldForceV2Finish,
   shouldOfferV2ClosingTarget,
+  shouldKeepV2TargetIntoClosing,
   targetDifficultyForNext,
   replacementDifficultyForV2,
   resolveV2CompletionPlace,
@@ -93,5 +94,37 @@ test('V2 forced finish never claims a destination the player did not reach', () 
       indoor: false,
     }),
     '小公園'
+  );
+});
+
+
+test('V2 closing keeps a reasonable active target instead of swapping it abruptly', () => {
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'easy',
+      targetAgeSeconds: 40,
+    }),
+    true
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'medium',
+      targetAgeSeconds: 90,
+    }),
+    true
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'hard',
+      targetAgeSeconds: 20,
+    }),
+    false
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'medium',
+      targetAgeSeconds: 130,
+    }),
+    false
   );
 });
