@@ -239,6 +239,7 @@ export function useV2DetourController() {
         label: option.label,
       };
       setRouteSafe(next);
+      offRouteSamplesRef.current = 0;
       previousRouteCoordinatesRef.current = [
         option.walkingRoute.coordinates,
         ...previousRouteCoordinatesRef.current,
@@ -674,6 +675,8 @@ export function useV2DetourController() {
     } catch {
       // A route still works without a compass heading.
     }
+
+    if (generation !== watcherGenerationRef.current) return;
 
     const locationWatcher = await Location.watchPositionAsync(
       {
