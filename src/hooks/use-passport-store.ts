@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { Directory, Paths } from 'expo-file-system';
@@ -40,7 +40,7 @@ export function usePassportStore() {
   const [passportPhotoIndex, setPassportPhotoIndex] =
     useState(0);
 
-  async function loadPassport() {
+  const loadPassport = useCallback(async () => {
     try {
       const parsed = await readStored(PASSPORT_KEY, isPassport);
       if (parsed) setPassport(parsed);
@@ -49,9 +49,9 @@ export function usePassportStore() {
     } finally {
       setPassportLoaded(true);
     }
-  }
+  }, []);
 
-  async function savePassport(nextPassport: PassportEntry[]) {
+  const savePassport = useCallback(async (nextPassport: PassportEntry[]) => {
     setPassport(nextPassport);
 
     try {
@@ -62,7 +62,7 @@ export function usePassportStore() {
         '這次 DETOUR 可以完成，但紀錄可能不會保留。'
       );
     }
-  }
+  }, []);
 
   function clearPassport() {
     Alert.alert(
