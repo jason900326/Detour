@@ -798,28 +798,38 @@ export function useV2DetourController() {
       });
       if (generation !== watcherGenerationRef.current) {
         headingWatcher.remove();
-        return;
+        return false;
       }
       headingWatcherRef.current = headingWatcher;
     } catch {
       // A route still works without a compass heading.
     }
 
-    if (generation !== watcherGenerationRef.current) return;
+    if (generation !== watcherGenerationRef.current) return false;
 
-    const locationWatcher = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 5,
-        timeInterval: 3000,
-      },
-      handleLocationUpdate
-    );
-    if (generation !== watcherGenerationRef.current) {
-      locationWatcher.remove();
-      return;
+    try {
+      const locationWatcher = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 5,
+          timeInterval: 3000,
+        },
+        handleLocationUpdate
+      );
+      if (generation !== watcherGenerationRef.current) {
+        locationWatcher.remove();
+        return false;
+      }
+      locationWatcherRef.current = locationWatcher;
+      setErrorMessage(null);
+      return true;
+    } catch {
+      if (generation === watcherGenerationRef.current) {
+        stopWatchers();
+        setErrorMessage('定位追蹤暫時中斷。回到 App 後會再嘗試連線。');
+      }
+      return false;
     }
-    locationWatcherRef.current = locationWatcher;
   }, [handleLocationUpdate, stopWatchers]);
 
   const chooseNextTarget = useCallback(
@@ -943,7 +953,11 @@ export function useV2DetourController() {
       setPhaseSafe('exploration');
       chooseNextTarget(null);
       void refreshEnvironmentHints(point);
-      await startWatchers();
+      const watchersStarted = await startWatchers();
+      if (!watchersStarted) {
+        setPhaseSafe('home');
+        return;
+      }
       const routed = await planShortRoute(point, 'exploration');
       if (!routed) {
         stopWatchers();
