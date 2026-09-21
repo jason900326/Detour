@@ -581,6 +581,7 @@ export function useV2DetourController() {
       ) {
         return false;
       }
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       void planClosingRoute(point);
       return true;
     },
@@ -642,6 +643,15 @@ export function useV2DetourController() {
         const next = { ...route, beatIndex: route.beatIndex + 1 };
         routeStateRef.current = next;
         setRouteState(next);
+        const nextTurn = next.navigationRoute.beats[next.beatIndex]?.turn;
+        if (
+          nextTurn === 'left' ||
+          nextTurn === 'right' ||
+          nextTurn === 'slight-left' ||
+          nextTurn === 'slight-right'
+        ) {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }
         return;
       }
 
@@ -879,7 +889,7 @@ export function useV2DetourController() {
     previousTargetIdsRef.current = [...previousTargetIdsRef.current, target.id].slice(-8);
     setTargetSafe(target);
     setStatusMessage('換一個，繼續走。');
-    void Haptics.selectionAsync();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [setTargetSafe]);
 
   const retryCurrentRoute = useCallback(async () => {
