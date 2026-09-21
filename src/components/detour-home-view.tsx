@@ -931,15 +931,26 @@ export function DetourHomeView({
             )}
 
             <View style={styles.v35JourneyBottom}>
-              <Pressable onPress={() => openCamera('free')} style={styles.v35JourneyCamera}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="拍照記錄沿途發現"
+                onPress={() => openCamera('free')}
+                style={({ pressed }) => [
+                  styles.v35JourneyCamera,
+                  pressed && styles.v35JourneyPressed,
+                ]}
+              >
                 <Text style={styles.v35JourneyCameraIcon}>📷</Text>
-                <Text style={styles.v35JourneyCameraText}>拍照</Text>
+                <View style={styles.v35JourneyCameraCopy}>
+                  <Text style={styles.v35JourneyCameraEyebrow}>沿途發現</Text>
+                  <Text style={styles.v35JourneyCameraText}>拍照</Text>
+                </View>
                 <Text style={styles.v35JourneyCameraArrow}>→</Text>
               </Pressable>
               {photos.length > 0 && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="開啟即時相簿"
+                  accessibilityLabel={`開啟即時相簿，共 ${photos.length} 張照片`}
                   onPress={() => setLiveAlbumVisible(true)}
                   style={({ pressed }) => [
                     styles.v35JourneyAlbum,
@@ -950,6 +961,9 @@ export function DetourHomeView({
                     source={{ uri: photos[photos.length - 1].uri }}
                     style={styles.v35JourneyAlbumImage}
                   />
+                  <View style={styles.v35JourneyAlbumLabel}>
+                    <Text style={styles.v35JourneyAlbumLabelText}>相簿</Text>
+                  </View>
                   {photos.length > 1 && (
                     <View style={styles.v35JourneyAlbumCount}>
                       <Text style={styles.v35JourneyAlbumCountText}>{photos.length}</Text>
@@ -962,14 +976,19 @@ export function DetourHomeView({
             {devMode && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="室內模式，走一段路"
+                accessibilityLabel="室內測試，走到下一個路口"
+                accessibilityHint="模擬走一段路並更新路線提示"
                 onPress={() => void simulateNextBeat()}
                 style={({ pressed }) => [
                   styles.v35DevAdvance,
                   pressed && styles.v35JourneyPressed,
                 ]}
               >
-                <Text style={styles.v35DevAdvanceText}>室內測試：走到下一個路口</Text>
+                <View style={styles.v35DevAdvanceCopy}>
+                  <Text style={styles.v35DevAdvanceEyebrow}>室內測試</Text>
+                  <Text style={styles.v35DevAdvanceText}>走到下一個路口</Text>
+                </View>
+                <Text style={styles.v35DevAdvanceArrow}>→</Text>
               </Pressable>
             )}
 
