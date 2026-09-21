@@ -53,3 +53,14 @@ export function isSpatiallyConsistentOffRouteSample(args: {
 export function isUsableV2StartAccuracy(accuracyMeters: number | null | undefined) {
   return (accuracyMeters ?? Number.POSITIVE_INFINITY) <= 70;
 }
+
+export function isPlausibleV2MovementSample(args: {
+  distanceMeters: number;
+  elapsedSeconds: number;
+  indoor?: boolean;
+}) {
+  if (args.indoor) return true;
+  const elapsedSeconds = Math.max(0.25, args.elapsedSeconds);
+  const generousWalkingLimit = 25 + elapsedSeconds * 8;
+  return args.distanceMeters <= generousWalkingLimit;
+}
