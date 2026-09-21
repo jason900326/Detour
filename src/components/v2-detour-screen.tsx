@@ -325,15 +325,27 @@ function IndoorPlaytestControls({
         >
           <Text style={styles.indoorButtonText}>走到這段結尾</Text>
         </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
-          onPress={controller.simulateIndoorDeviation}
+          onPress={() => controller.simulateIndoorDeviation(100)}
           style={({ pressed }) => [
             styles.indoorButton,
             (pressed || controller.isPlanning) && styles.buttonPressed,
           ]}
         >
-          <Text style={styles.indoorButtonText}>模擬偏離</Text>
+          <Text style={styles.indoorButtonText}>偏離 100m</Text>
+        </Pressable>
+        <Pressable
+          disabled={controller.isPlanning}
+          onPress={() => controller.simulateIndoorDeviation(500)}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || controller.isPlanning) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>遠偏離 500m</Text>
         </Pressable>
       </View>
       <View style={styles.indoorButtonRow}>
