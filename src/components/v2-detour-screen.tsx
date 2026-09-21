@@ -303,6 +303,9 @@ function IndoorPlaytestControls({
       <Text style={styles.indoorStateLine}>
         {controller.phase === 'closing' ? 'Closing' : 'Exploration'} · {controller.discoveries} 個發現 · {elapsedLabel(controller.elapsedSeconds)}
       </Text>
+      <Text style={styles.indoorTargetLine}>
+        題目難度：{controller.activeTarget?.difficulty ?? '—'}
+      </Text>
       <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
@@ -369,6 +372,16 @@ function IndoorPlaytestControls({
         </Pressable>
       </View>
       <View style={styles.indoorButtonRow}>
+        <Pressable
+          disabled={!controller.activeTarget}
+          onPress={() => controller.simulateIndoorTargetAge(120)}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || !controller.activeTarget) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>這題已找 2 分鐘</Text>
+        </Pressable>
         <Pressable
           onPress={controller.simulateIndoorFinish}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
@@ -775,6 +788,7 @@ const styles = StyleSheet.create({
   indoorControlsTitle: { color: COLORS.ink, fontSize: 11, fontWeight: '900' },
   indoorControlsCopy: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
   indoorStateLine: { marginTop: 6, color: COLORS.signal, fontSize: 10, fontWeight: '900' },
+  indoorTargetLine: { marginTop: 3, color: COLORS.muted, fontSize: 9, fontWeight: '800' },
   indoorButtonRow: { marginTop: 8, flexDirection: 'row', gap: 7 },
   indoorButton: { flex: 1, minHeight: 32, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   indoorButtonPrimary: { backgroundColor: COLORS.signal, borderColor: COLORS.signal },
