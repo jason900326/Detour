@@ -575,12 +575,12 @@ export function useV2DetourController() {
       const point = currentPointRef.current;
       const areaLabel = await resolveAreaLabel(point, playtestModeRef.current);
       const resolvedEndPlace =
-        endPlaceLabelRef.current ??
-        (reason === 'time-limit'
+        reason === 'time-limit'
           ? '現在這裡'
-          : playtestModeRef.current === 'indoor'
-            ? '室內測試完成點'
-            : '附近的停留點');
+          : endPlaceLabelRef.current ??
+            (playtestModeRef.current === 'indoor'
+              ? '室內測試完成點'
+              : '附近的停留點');
       endPlaceLabelRef.current = resolvedEndPlace;
       setEndPlaceLabel(resolvedEndPlace);
 
