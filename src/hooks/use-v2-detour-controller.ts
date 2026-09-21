@@ -45,7 +45,10 @@ import {
   closingStopPriority,
   type V2RouteOption,
 } from '../lib/v2-routing';
-import { closingRouteTargetDistanceMeters } from '../lib/v2-routing-policy';
+import {
+  closingRouteTargetDistanceMeters,
+  isTrustedV2GpsAccuracy,
+} from '../lib/v2-routing-policy';
 import { usePassportStore } from './use-passport-store';
 import {
   createIndoorWalkingRoute,
@@ -697,10 +700,11 @@ export function useV2DetourController() {
       setCurrentPoint(point);
       setLightContext(getLightContext(point));
 
-      const accuracy = location.coords.accuracy ?? 999;
+      const accuracy = location.coords.accuracy;
+      const trustedGps = isTrustedV2GpsAccuracy(accuracy);
       const trustedPrevious = lastTrustedTracePointRef.current;
       if (
-        accuracy <= 60 &&
+        trustedGps &&
         (!trustedPrevious ||
           getDistanceInMeters(
             trustedPrevious.latitude,
@@ -730,7 +734,7 @@ export function useV2DetourController() {
 
       // Low-quality samples may move the visible dot, but they must never
       // advance a beat, trigger a reroute, or finish the Journey.
-      if (accuracy > 60) {
+      if (!trustedGps) {
         offRouteSamplesRef.current = 0;
         return;
       }
