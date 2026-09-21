@@ -86,9 +86,31 @@ function makeTicketSerial() {
   return `DTR-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
-function formatArea(point: GeoPoint | null) {
-  if (!point) return '目前位置';
-  return `${point.latitude.toFixed(3)}°N · ${point.longitude.toFixed(3)}°E`;
+async function resolveAreaLabel(
+  point: GeoPoint | null,
+  mode: V2PlaytestMode
+) {
+  if (mode === 'indoor') return '室內測試';
+  if (!point) return '這一帶';
+
+  try {
+    const [address] = await Location.reverseGeocodeAsync(point);
+    if (!address) return '這一帶';
+
+    const primary = address.district ?? address.city ?? address.subregion;
+    const secondary =
+      address.city && address.city !== primary
+        ? address.city
+        : address.region && address.region !== primary
+          ? address.region
+          : null;
+
+    return [primary, secondary].filter(Boolean).join(' · ') || '這一帶';
+  } catch {
+    // A friendly rough area is useful for History, but geocoding must never
+    // block completion or turn coordinates into a visible fallback.
+    return '這一帶';
+  }
 }
 
 export function useV2DetourController() {
@@ -492,6 +514,7 @@ export function useV2DetourController() {
       const startedAt = startedAtRef.current ?? finishedAt;
       const durationSeconds = Math.max(1, Math.round((finishedAt - startedAt) / 1000));
       const point = currentPointRef.current;
+      const areaLabel = await resolveAreaLabel(point, playtestModeRef.current);
       const resolvedEndPlace =
         endPlaceLabelRef.current ??
         (reason === 'time-limit' ? '現在這裡' : '附近的停留點');
@@ -501,7 +524,7 @@ export function useV2DetourController() {
       const entry: PassportEntry = {
         id: `v2-${finishedAt}-${Math.random().toString(36).slice(2, 7)}`,
         completedAt: new Date(finishedAt).toISOString(),
-        city: formatArea(point),
+        city: areaLabel,
         minutes: V2_MINUTES,
         moodId: 'v2',
         moodLabel: '自由探索',
