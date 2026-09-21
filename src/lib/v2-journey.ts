@@ -176,3 +176,7 @@ export function shouldEnterV2Closing(args: {
 export function shouldForceV2Finish(elapsedSeconds: number) {
   return elapsedSeconds >= 15 * 60;
 }
+
+export function shouldOfferV2ClosingTarget(discoveries: number) {
+  return discoveries < 4;
+}
