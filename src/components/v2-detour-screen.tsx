@@ -34,6 +34,11 @@ function elapsedLabel(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function distanceLabel(meters: number) {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.max(0, Math.round(meters))} m`;
+}
+
 function dateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '剛剛';
@@ -315,6 +320,25 @@ function IndoorPlaytestControls({
       <Text style={styles.indoorTargetLine}>
         題目難度：{controller.activeTarget?.difficulty ?? '—'}
       </Text>
+      {controller.indoorDiagnostics && (
+        <>
+          <Text style={styles.indoorDiagnosticLine}>
+            距起點 {controller.indoorDiagnostics.distanceFromAnchorMeters}m · 本段 {controller.indoorDiagnostics.routeDistanceMeters}m
+          </Text>
+          {controller.indoorDiagnostics.rubberBandActive && (
+            <Text
+              style={[
+                styles.indoorRubberBandLine,
+                controller.indoorDiagnostics.rubberBandReturning
+                  ? styles.indoorRubberBandPass
+                  : styles.indoorRubberBandWarning,
+              ]}
+            >
+              橡皮筋：{controller.indoorDiagnostics.rubberBandReturning ? '正在往探索區收回 ✓' : '這段沒有往回收，需要檢查'}
+            </Text>
+          )}
+        </>
+      )}
       <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
@@ -430,7 +454,9 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
           )}
           {controller.isPlanning ? (
-            <Text style={styles.navigationSubHint}>下一小段正在形成</Text>
+            <Text style={styles.navigationSubHint}>
+              {closing ? '正在找一個適合停下來的位置' : '下一小段正在形成'}
+            </Text>
           ) : !closing && !isDirectionDecision(beat?.turn) ? (
             <Text style={styles.navigationSubHint}>先看四周，不用一直盯地圖</Text>
           ) : null}
@@ -438,9 +464,12 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
 
         {closing ? (
           <View style={styles.closingCard}>
-            <Text style={styles.closingEyebrow}>CLOSING</Text>
-            <Text style={styles.closingTitle}>差不多了。</Text>
-            <Text style={styles.closingCopy}>再往這邊走一小段，抵達之後才知道這趟停在哪裡。</Text>
+            <Text style={styles.closingEyebrow}>FINAL STRETCH</Text>
+            <Text style={styles.closingTitle}>最後一段。</Text>
+            <Text style={styles.closingCopy}>不會再出新題。再走一小段，到了才揭曉這趟停在哪裡。</Text>
+            <View style={styles.closingPromise}>
+              <Text style={styles.closingPromiseText}>快到了 · 不用趕</Text>
+            </View>
           </View>
         ) : controller.activeTarget ? (
           <View style={styles.targetCard}>
@@ -507,10 +536,21 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
 
         <V2Ticket serial={controller.ticketSerial} emojiTrail={controller.emojiTrail} />
 
-        <View style={styles.finishMeta}>
-          <Text style={styles.finishMetaText}>約 {elapsedLabel(controller.elapsedSeconds)} · {controller.discoveries} 個發現</Text>
-          <Text style={styles.finishMetaText}>{controller.photos.length} 張照片</Text>
+        <View style={styles.finishStats}>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{elapsedLabel(controller.elapsedSeconds)}</Text>
+            <Text style={styles.finishStatLabel}>時間</Text>
+          </View>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{controller.discoveries}</Text>
+            <Text style={styles.finishStatLabel}>發現</Text>
+          </View>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{distanceLabel(controller.walkedDistanceMeters)}</Text>
+            <Text style={styles.finishStatLabel}>走過</Text>
+          </View>
         </View>
+        <Text style={styles.finishPhotoMeta}>{controller.photos.length} 張照片留在這趟</Text>
 
         {controller.photos.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
@@ -801,6 +841,8 @@ const styles = StyleSheet.create({
   closingEyebrow: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   closingTitle: { marginTop: 12, color: COLORS.paper, fontSize: 28, fontWeight: '900' },
   closingCopy: { marginTop: 8, color: '#D4CDC1', fontSize: 14, lineHeight: 21 },
+  closingPromise: { marginTop: 18, alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: 'rgba(255,255,255,0.1)' },
+  closingPromiseText: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   waitingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
   waitingTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
   waitingCopy: { marginTop: 7, color: COLORS.muted, fontSize: 13 },
@@ -810,6 +852,10 @@ const styles = StyleSheet.create({
   indoorControlsCopy: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
   indoorStateLine: { marginTop: 6, color: COLORS.signal, fontSize: 10, fontWeight: '900' },
   indoorTargetLine: { marginTop: 3, color: COLORS.muted, fontSize: 9, fontWeight: '800' },
+  indoorDiagnosticLine: { marginTop: 3, color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  indoorRubberBandLine: { marginTop: 3, fontSize: 9, fontWeight: '900' },
+  indoorRubberBandPass: { color: '#4E7657' },
+  indoorRubberBandWarning: { color: '#B13D2C' },
   indoorButtonRow: { marginTop: 8, flexDirection: 'row', gap: 7 },
   indoorButton: { flex: 1, minHeight: 32, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   indoorButtonPrimary: { backgroundColor: COLORS.signal, borderColor: COLORS.signal },
@@ -829,8 +875,11 @@ const styles = StyleSheet.create({
   finishTitle: { marginTop: 12, color: COLORS.ink, fontSize: 25, fontWeight: '900' },
   finishPlace: { marginTop: 4, color: COLORS.signal, fontSize: 20, fontWeight: '900', textAlign: 'center' },
   finishCopy: { marginTop: 10, color: COLORS.muted, fontSize: 13, textAlign: 'center' },
-  finishMeta: { marginTop: 14, flexDirection: 'row', justifyContent: 'space-between' },
-  finishMetaText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  finishStats: { marginTop: 16, paddingVertical: 15, paddingHorizontal: 8, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
+  finishStat: { minWidth: 72, alignItems: 'center' },
+  finishStatValue: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
+  finishStatLabel: { marginTop: 4, color: COLORS.muted, fontSize: 10, fontWeight: '800' },
+  finishPhotoMeta: { marginTop: 9, color: COLORS.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   photoRow: { gap: 10, paddingTop: 18, paddingBottom: 4 },
   finishPhoto: { width: 118, height: 118, borderRadius: 14, backgroundColor: COLORS.line },
   routePreviewWrap: { marginTop: 20 },
