@@ -6,6 +6,7 @@ import {
   shouldEnterV2Closing,
   shouldForceV2Finish,
   targetDifficultyForNext,
+  replacementDifficultyForV2,
 } from './v2-journey.ts';
 
 test('V2 starts with an easy target and escalates only after the first finding', () => {
@@ -20,6 +21,12 @@ test('V2 starts with an easy target and escalates only after the first finding',
     }),
     'medium'
   );
+});
+
+test('V2 replacement never punishes the player with a harder target', () => {
+  assert.equal(replacementDifficultyForV2('easy'), 'easy');
+  assert.equal(replacementDifficultyForV2('medium'), 'medium');
+  assert.equal(replacementDifficultyForV2('hard'), 'medium');
 });
 
 test('V2 target selection never repeats an excluded id or emoji when alternatives exist', () => {
