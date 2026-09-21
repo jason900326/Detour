@@ -27,13 +27,43 @@ concurrency:
   group: detour-ios-preview-build
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Check native changes
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - name: Checkout repository for push events
+        if: github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@v5
+
+      - name: Detect native changes
+        if: github.event_name != 'workflow_dispatch'
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            native:
+              - "package.json"
+              - "package-lock.json"
+              - "app.json"
+              - "ios/**"
+              - "modules/**"
+
   build:
     name: EAS iOS internal distribution
+    needs: changes
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.native == 'true'
     permissions:
       contents: read
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Check Expo token
@@ -42,9 +72,9 @@ jobs:
         run: |
           if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
             echo "EXPO_TOKEN is not configured yet; skipping iOS Preview build."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
           else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
           fi
 
       - name: Checkout repository
