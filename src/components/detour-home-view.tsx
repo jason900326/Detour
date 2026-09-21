@@ -16,7 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
 import { isAIEngineConfigured } from '../lib/ai-engine';
-import type { SceneIssueReason, WalkingPace } from '../lib/app-model';
+import type {
+  SceneIssueReason,
+  SessionPhoto,
+  WalkingPace,
+} from '../lib/app-model';
 import { MOODS } from '../lib/app-model';
 import { ticketSerial } from '../lib/detour-formatters';
 import { offsetPoint } from '../lib/navigation-engine';
@@ -166,7 +170,13 @@ export function DetourHomeView({
   const [completionIrisActive, setCompletionIrisActive] = useState(false);
   const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] = useState(false);
   const [liveAlbumVisible, setLiveAlbumVisible] = useState(false);
+  const [albumPreviewPhoto, setAlbumPreviewPhoto] = useState<SessionPhoto | null>(null);
   const [journeyMapVisible, setJourneyMapVisible] = useState(false);
+
+  const closeLiveAlbum = () => {
+    setAlbumPreviewPhoto(null);
+    setLiveAlbumVisible(false);
+  };
   const arrivalPhotoStartCountRef = useRef(0);
 
   const printingLayout = useMemo(() => {
@@ -1002,7 +1012,7 @@ export function DetourHomeView({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="關閉即時相簿"
-                onPress={() => setLiveAlbumVisible(false)}
+                onPress={closeLiveAlbum}
                 style={styles.v35JourneyAlbumOverlay}
               >
                 <Pressable
@@ -1028,16 +1038,22 @@ export function DetourHomeView({
                       .slice(-6)
                       .reverse()
                       .map((photo) => (
-                        <View
+                        <Pressable
                           key={photo.id}
-                          style={styles.v35JourneyAlbumGridCell}
+                          accessibilityRole="button"
+                          accessibilityLabel={`檢視照片：${photo.missionTitle || '沿途發現'}`}
+                          onPress={() => setAlbumPreviewPhoto(photo)}
+                          style={({ pressed }) => [
+                            styles.v35JourneyAlbumGridCell,
+                            pressed && styles.v35JourneyAlbumGridPressed,
+                          ]}
                         >
                           <Image
                             source={{ uri: photo.uri }}
                             resizeMode="cover"
                             style={styles.v35JourneyAlbumGridImage}
                           />
-                        </View>
+                        </Pressable>
                       ))}
                     {Array.from({ length: Math.max(0, 6 - photos.length) }).map((_, index) => (
                       <View
@@ -1049,6 +1065,51 @@ export function DetourHomeView({
                       />
                     ))}
                   </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
+
+            <Modal
+              visible={albumPreviewPhoto !== null}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setAlbumPreviewPhoto(null)}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉照片預覽"
+                onPress={() => setAlbumPreviewPhoto(null)}
+                style={styles.v35JourneyPhotoPreviewOverlay}
+              >
+                <Pressable
+                  onPress={(event) => event.stopPropagation()}
+                  style={styles.v35JourneyPhotoPreviewCard}
+                >
+                  {albumPreviewPhoto && (
+                    <>
+                      <Image
+                        source={{ uri: albumPreviewPhoto.uri }}
+                        resizeMode="contain"
+                        style={styles.v35JourneyPhotoPreviewImage}
+                      />
+                      <View style={styles.v35JourneyPhotoPreviewFooter}>
+                        <Text style={styles.v35JourneyPhotoPreviewTitle}>
+                          {albumPreviewPhoto.missionTitle || '沿途發現'}
+                        </Text>
+                        <Text style={styles.v35JourneyPhotoPreviewMeta}>
+                          點一下背景關閉照片
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="關閉照片預覽"
+                    onPress={() => setAlbumPreviewPhoto(null)}
+                    style={styles.v35JourneyPhotoPreviewClose}
+                  >
+                    <Text style={styles.v35JourneyPhotoPreviewCloseText}>×</Text>
+                  </Pressable>
                 </Pressable>
               </Pressable>
             </Modal>
