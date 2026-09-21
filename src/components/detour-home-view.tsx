@@ -1007,18 +1007,16 @@ export function DetourHomeView({
               visible={liveAlbumVisible}
               transparent
               animationType="fade"
-              onRequestClose={() => setLiveAlbumVisible(false)}
+              onRequestClose={closeLiveAlbum}
             >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="關閉即時相簿"
-                onPress={closeLiveAlbum}
-                style={styles.v35JourneyAlbumOverlay}
-              >
+              <View style={styles.v35JourneyAlbumOverlay}>
                 <Pressable
-                  onPress={(event) => event.stopPropagation()}
-                  style={styles.v35JourneyAlbumCard}
-                >
+                  accessibilityRole="button"
+                  accessibilityLabel="關閉即時相簿"
+                  onPress={closeLiveAlbum}
+                  style={styles.v35JourneyModalBackdrop}
+                />
+                <View style={styles.v35JourneyAlbumCard}>
                   <View style={styles.v35JourneyAlbumHeader}>
                     <View>
                       <Text style={styles.v35JourneyAlbumTitle}>即時相簿</Text>
@@ -1027,7 +1025,7 @@ export function DetourHomeView({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="關閉"
-                      onPress={() => setLiveAlbumVisible(false)}
+                      onPress={closeLiveAlbum}
                       style={styles.v35JourneyAlbumClose}
                     >
                       <Text style={styles.v35JourneyAlbumCloseText}>×</Text>
@@ -1065,8 +1063,8 @@ export function DetourHomeView({
                       />
                     ))}
                   </View>
-                </Pressable>
-              </Pressable>
+                </View>
+              </View>
             </Modal>
 
             <Modal
@@ -1075,16 +1073,14 @@ export function DetourHomeView({
               animationType="fade"
               onRequestClose={() => setAlbumPreviewPhoto(null)}
             >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="關閉照片預覽"
-                onPress={() => setAlbumPreviewPhoto(null)}
-                style={styles.v35JourneyPhotoPreviewOverlay}
-              >
+              <View style={styles.v35JourneyPhotoPreviewOverlay}>
                 <Pressable
-                  onPress={(event) => event.stopPropagation()}
-                  style={styles.v35JourneyPhotoPreviewCard}
-                >
+                  accessibilityRole="button"
+                  accessibilityLabel="關閉照片預覽"
+                  onPress={() => setAlbumPreviewPhoto(null)}
+                  style={styles.v35JourneyModalBackdrop}
+                />
+                <View style={styles.v35JourneyPhotoPreviewCard}>
                   {albumPreviewPhoto && (
                     <>
                       <Image
@@ -1110,8 +1106,8 @@ export function DetourHomeView({
                   >
                     <Text style={styles.v35JourneyPhotoPreviewCloseText}>×</Text>
                   </Pressable>
-                </Pressable>
-              </Pressable>
+                </View>
+              </View>
             </Modal>
 
             <Modal
