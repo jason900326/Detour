@@ -241,6 +241,9 @@ function IndoorPlaytestControls({
         <Text style={styles.indoorControlsTitle}>室內測試控制</Text>
         <Text style={styles.indoorControlsCopy}>不讀 GPS、不呼叫路線服務</Text>
       </View>
+      <Text style={styles.indoorStateLine}>
+        {controller.phase === 'closing' ? 'Closing' : 'Exploration'} · {controller.discoveries} 個發現 · {elapsedLabel(controller.elapsedSeconds)}
+      </Text>
       <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
@@ -276,16 +279,30 @@ function IndoorPlaytestControls({
       </View>
       <View style={styles.indoorButtonRow}>
         <Pressable
+          onPress={() => controller.simulateIndoorFastForward(8 * 60 + 30)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 8:30</Text>
+        </Pressable>
+        <Pressable
           onPress={() => controller.simulateIndoorFastForward(10 * 60)}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.indoorButtonText}>快轉到 Closing</Text>
+          <Text style={styles.indoorButtonText}>快轉 10:00</Text>
         </Pressable>
+        <Pressable
+          onPress={() => controller.simulateIndoorFastForward(15 * 60)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 15:00</Text>
+        </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
         <Pressable
           onPress={controller.simulateIndoorFinish}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.indoorButtonText}>直接完成</Text>
+          <Text style={styles.indoorButtonText}>直接完成 UI</Text>
         </Pressable>
       </View>
     </View>
@@ -580,6 +597,7 @@ const styles = StyleSheet.create({
   indoorControlsHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   indoorControlsTitle: { color: COLORS.ink, fontSize: 11, fontWeight: '900' },
   indoorControlsCopy: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  indoorStateLine: { marginTop: 6, color: COLORS.signal, fontSize: 10, fontWeight: '900' },
   indoorButtonRow: { marginTop: 8, flexDirection: 'row', gap: 7 },
   indoorButton: { flex: 1, minHeight: 32, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   indoorButtonPrimary: { backgroundColor: COLORS.signal, borderColor: COLORS.signal },
