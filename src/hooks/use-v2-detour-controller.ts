@@ -1082,6 +1082,14 @@ export function useV2DetourController() {
       return false;
     }
 
+    if (
+      playtestModeRef.current === 'live' &&
+      AppState.currentState === 'active'
+    ) {
+      const watchersReady = await startWatchers();
+      if (!watchersReady) return false;
+    }
+
     const currentRoute = routeStateRef.current;
     const closingDestination = currentPhase === 'closing' && currentRoute
       ? {
@@ -1091,7 +1099,7 @@ export function useV2DetourController() {
       : undefined;
 
     return planShortRoute(point, currentPhase, closingDestination);
-  }, [planShortRoute]);
+  }, [planShortRoute, startWatchers]);
 
   const simulateIndoorStep = useCallback(
     (distanceMeters = 35) => {
