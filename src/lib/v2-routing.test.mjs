@@ -6,6 +6,7 @@ import {
   closingStopPriority,
   isSpatiallyConsistentOffRouteSample,
   isTrustedV2GpsAccuracy,
+  isUsableV2StartAccuracy,
   rubberBandCorrectionDegrees,
 } from './v2-routing-policy.ts';
 
@@ -74,4 +75,12 @@ test('V2 reroute evidence must come from spatially consistent off-route samples'
     }),
     false
   );
+});
+
+
+test('V2 start rejects a GPS fix that is too imprecise to seed the first route', () => {
+  assert.equal(isUsableV2StartAccuracy(8), true);
+  assert.equal(isUsableV2StartAccuracy(70), true);
+  assert.equal(isUsableV2StartAccuracy(71), false);
+  assert.equal(isUsableV2StartAccuracy(undefined), false);
 });
