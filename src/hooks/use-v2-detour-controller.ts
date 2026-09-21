@@ -1068,12 +1068,12 @@ export function useV2DetourController() {
       setElapsedSeconds(nextElapsed);
 
       const point = currentPointRef.current;
-      if (phaseRef.current === 'exploration' && point) {
-        enterClosingIfNeeded(point, nextElapsed);
-      }
       if (shouldForceV2Finish(nextElapsed)) {
         void finishJourney('time-limit');
-      } else if (nextElapsed >= CLOSING_START_SECONDS && phaseRef.current === 'exploration' && discoveriesRef.current >= 3 && point) {
+        return;
+      }
+
+      if (phaseRef.current === 'exploration' && point) {
         enterClosingIfNeeded(point, nextElapsed);
       }
     }, 1000);
