@@ -41,8 +41,16 @@ import {
   type V2RouteOption,
 } from '../lib/v2-routing';
 import { usePassportStore } from './use-passport-store';
+import {
+  createIndoorWalkingRoute,
+  indoorClosingDestination,
+  indoorDeviationPoint,
+  INDOOR_START_POINT,
+  pointAlongPolyline,
+} from '../lib/v2-indoor-playtest';
 
 export type V2Phase = 'home' | 'starting' | 'exploration' | 'closing' | 'finish' | 'history';
+export type V2PlaytestMode = 'live' | 'indoor';
 
 export type V2RouteState = {
   id: string;
@@ -84,6 +92,7 @@ function formatArea(point: GeoPoint | null) {
 export function useV2DetourController() {
   const router = useRouter();
   const [phase, setPhase] = useState<V2Phase>('home');
+  const [playtestMode, setPlaytestMode] = useState<V2PlaytestMode>('live');
   const [currentPoint, setCurrentPoint] = useState<GeoPoint | null>(null);
   const [heading, setHeading] = useState(0);
   const [lightContext, setLightContext] = useState<LightContext>('day');
@@ -102,6 +111,7 @@ export function useV2DetourController() {
   const [historyDetail, setHistoryDetail] = useState<PassportEntry | null>(null);
 
   const phaseRef = useRef<V2Phase>('home');
+  const playtestModeRef = useRef<V2PlaytestMode>('live');
   const currentPointRef = useRef<GeoPoint | null>(null);
   const routeStateRef = useRef<V2RouteState | null>(null);
   const activeTargetRef = useRef<V2Target | null>(null);
@@ -122,6 +132,7 @@ export function useV2DetourController() {
   const ticketSerialRef = useRef(ticketSerial);
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
+  const indoorRouteProgressRef = useRef(0);
 
   const {
     passport,
@@ -134,6 +145,11 @@ export function useV2DetourController() {
   const setPhaseSafe = useCallback((next: V2Phase) => {
     phaseRef.current = next;
     setPhase(next);
+  }, []);
+
+  const setPlaytestModeSafe = useCallback((next: V2PlaytestMode) => {
+    playtestModeRef.current = next;
+    setPlaytestMode(next);
   }, []);
 
   const setRouteSafe = useCallback((next: V2RouteState | null) => {
@@ -156,6 +172,9 @@ export function useV2DetourController() {
 
   const registerRoute = useCallback(
     (option: V2RouteOption) => {
+      if (playtestModeRef.current === 'indoor') {
+        indoorRouteProgressRef.current = 0;
+      }
       const next: V2RouteState = {
         id: `${option.purpose}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         origin: option.origin,
@@ -196,6 +215,37 @@ export function useV2DetourController() {
       setErrorMessage(null);
 
       try {
+        if (playtestModeRef.current === 'indoor') {
+          const walkingRoute = createIndoorWalkingRoute(
+            origin,
+            purpose,
+            Date.now() + discoveriesRef.current * 17,
+            fixedDestination?.point
+          );
+          const destination =
+            walkingRoute.coordinates[walkingRoute.coordinates.length - 1] ?? origin;
+          const indoorOption: V2RouteOption = {
+            origin,
+            destination,
+            walkingRoute,
+            navigationRoute: buildNavigationRouteFromPolyline({
+              coordinates: walkingRoute.coordinates,
+              totalDistanceMeters: walkingRoute.distanceMeters,
+              durationSeconds: walkingRoute.durationSeconds,
+            }),
+            purpose,
+            label: fixedDestination?.label,
+          };
+
+          if (requestId !== routeRequestRef.current) return false;
+          registerRoute(indoorOption);
+          if (purpose === 'closing') {
+            endPlaceLabelRef.current = fixedDestination?.label ?? '室內測試收尾點';
+            setEndPlaceLabel(endPlaceLabelRef.current);
+          }
+          return true;
+        }
+
         const context = getLightContext(origin);
         setLightContext(context);
 
@@ -274,12 +324,20 @@ export function useV2DetourController() {
     async (origin: GeoPoint) => {
       const closingRequestId = routeRequestRef.current + 1;
       routeRequestRef.current = closingRequestId;
-      routePlanningRef.current = true;
-      setIsPlanning(true);
       setRouteSafe(null);
       setPhaseSafe('closing');
       setTargetSafe(null);
       setStatusMessage('差不多了，再往這邊走一小段。');
+
+      if (playtestModeRef.current === 'indoor') {
+        return planShortRoute(origin, 'closing', {
+          point: indoorClosingDestination(origin, Date.now()),
+          label: '室內測試收尾點',
+        });
+      }
+
+      routePlanningRef.current = true;
+      setIsPlanning(true);
 
       let bestOption: V2RouteOption | null = null;
       try {
@@ -527,11 +585,16 @@ export function useV2DetourController() {
     [setTargetSafe]
   );
 
-  const startJourney = useCallback(async () => {
+  const startJourney = useCallback(async (mode: V2PlaytestMode = 'live') => {
     if (phaseRef.current !== 'home' && phaseRef.current !== 'finish') return;
+    setPlaytestModeSafe(mode);
     setPhaseSafe('starting');
     setErrorMessage(null);
-    setStatusMessage('正在找一條適合先走的小段。');
+    setStatusMessage(
+      mode === 'indoor'
+        ? '室內測試：按下模擬走路，推進這趟旅程。'
+        : '正在找一條適合先走的小段。'
+    );
     const nextTicketSerial = makeTicketSerial();
     ticketSerialRef.current = nextTicketSerial;
     setTicketSerial(nextTicketSerial);
@@ -550,6 +613,30 @@ export function useV2DetourController() {
     endPlaceLabelRef.current = null;
     setEndPlaceLabel(null);
     finishInFlightRef.current = false;
+    indoorRouteProgressRef.current = 0;
+
+    if (mode === 'indoor') {
+      const point = INDOOR_START_POINT;
+      currentPointRef.current = point;
+      lastPointRef.current = point;
+      traceRef.current = [point];
+      setCurrentPoint(point);
+      setTrace([point]);
+      setLightContext(getLightContext(point));
+      startedAtRef.current = Date.now();
+      setPhaseSafe('exploration');
+      chooseNextTarget(null);
+
+      const routed = await planShortRoute(point, 'exploration');
+      if (!routed) {
+        setPhaseSafe('home');
+        return;
+      }
+
+      setStatusMessage('室內測試：按下「走 35m」推進。');
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      return;
+    }
 
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== 'granted') {
@@ -572,8 +659,7 @@ export function useV2DetourController() {
       setCurrentPoint(point);
       setTrace([point]);
       setLightContext(getLightContext(point));
-      const startedAt = Date.now();
-      startedAtRef.current = startedAt;
+      startedAtRef.current = Date.now();
       setPhaseSafe('exploration');
       chooseNextTarget(null);
       await startWatchers();
@@ -590,7 +676,18 @@ export function useV2DetourController() {
       setErrorMessage(error instanceof Error ? error.message : '目前位置讀取失敗。');
       setPhaseSafe('home');
     }
-  }, [chooseNextTarget, planShortRoute, setPhaseSafe, startWatchers, stopWatchers]);
+  }, [
+    chooseNextTarget,
+    planShortRoute,
+    setPhaseSafe,
+    setPlaytestModeSafe,
+    startWatchers,
+    stopWatchers,
+  ]);
+
+  const startIndoorJourney = useCallback(() => {
+    void startJourney('indoor');
+  }, [startJourney]);
 
   const markFound = useCallback(async () => {
     const target = activeTargetRef.current;
@@ -640,6 +737,90 @@ export function useV2DetourController() {
 
     return planShortRoute(point, currentPhase, closingDestination);
   }, [planShortRoute]);
+
+  const simulateIndoorStep = useCallback(
+    (distanceMeters = 35) => {
+      if (playtestModeRef.current !== 'indoor') return;
+      if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
+
+      const route = routeStateRef.current;
+      if (!route) return;
+
+      const nextProgress = indoorRouteProgressRef.current + distanceMeters;
+      const point = pointAlongPolyline(
+        route.navigationRoute.coordinates,
+        nextProgress
+      );
+      if (!point) return;
+
+      indoorRouteProgressRef.current = nextProgress;
+      handleLocationUpdate({
+        coords: {
+          latitude: point.latitude,
+          longitude: point.longitude,
+          altitude: 0,
+          accuracy: 5,
+          altitudeAccuracy: 5,
+          heading: heading,
+          speed: 1.25,
+        },
+        timestamp: Date.now(),
+      });
+    },
+    [handleLocationUpdate, heading]
+  );
+
+  const simulateIndoorStepToEnd = useCallback(() => {
+    simulateIndoorStep(2000);
+  }, [simulateIndoorStep]);
+
+  const simulateIndoorDeviation = useCallback(() => {
+    if (playtestModeRef.current !== 'indoor') return;
+    if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
+
+    const point = currentPointRef.current;
+    const route = routeStateRef.current;
+    if (!point || !route) return;
+
+    const bearing =
+      route.navigationRoute.beats[route.beatIndex]?.bearingDegrees ?? heading;
+    const deviated = indoorDeviationPoint(point, bearing);
+    handleLocationUpdate({
+      coords: {
+        latitude: deviated.latitude,
+        longitude: deviated.longitude,
+        altitude: 0,
+        accuracy: 5,
+        altitudeAccuracy: 5,
+        heading: bearing,
+        speed: 1.25,
+      },
+      timestamp: Date.now(),
+    });
+    setStatusMessage('室內測試：已模擬偏離，觀察是否從目前位置重新安排。');
+  }, [handleLocationUpdate, heading]);
+
+  const simulateIndoorFastForward = useCallback(
+    (seconds: number) => {
+      if (playtestModeRef.current !== 'indoor') return;
+      const nextElapsed = Math.max(0, seconds);
+      startedAtRef.current = Date.now() - nextElapsed * 1000;
+      setElapsedSeconds(nextElapsed);
+
+      const point = currentPointRef.current;
+      if (nextElapsed >= MAX_JOURNEY_SECONDS) {
+        void finishJourney('time-limit');
+      } else if (point && phaseRef.current === 'exploration') {
+        enterClosingIfNeeded(point, nextElapsed);
+      }
+    },
+    [enterClosingIfNeeded, finishJourney]
+  );
+
+  const simulateIndoorFinish = useCallback(() => {
+    if (playtestModeRef.current !== 'indoor') return;
+    void finishJourney('manual');
+  }, [finishJourney]);
 
   const openCamera = useCallback(() => {
     const requestId = `v2-free-${Date.now()}`;
@@ -698,8 +879,9 @@ export function useV2DetourController() {
     routeRequestRef.current += 1;
     setRouteSafe(null);
     setHistoryDetail(null);
+    setPlaytestModeSafe('live');
     setPhaseSafe('home');
-  }, [setPhaseSafe, setRouteSafe, stopWatchers]);
+  }, [setPhaseSafe, setPlaytestModeSafe, setRouteSafe, stopWatchers]);
 
   useEffect(() => {
     passportRef.current = passport;
@@ -744,6 +926,8 @@ export function useV2DetourController() {
 
   return {
     phase,
+    playtestMode,
+    isIndoorMode: playtestMode === 'indoor',
     passport,
     currentPoint,
     heading,
@@ -764,7 +948,13 @@ export function useV2DetourController() {
     ticketSerial,
     historyDetail,
     startJourney,
+    startIndoorJourney,
     startOver,
+    simulateIndoorStep,
+    simulateIndoorStepToEnd,
+    simulateIndoorDeviation,
+    simulateIndoorFastForward,
+    simulateIndoorFinish,
     markFound,
     replaceTarget,
     retryCurrentRoute,
