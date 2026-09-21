@@ -452,6 +452,12 @@ export function useV2DetourController() {
       const startedAt = startedAtRef.current ?? finishedAt;
       const durationSeconds = Math.max(1, Math.round((finishedAt - startedAt) / 1000));
       const point = currentPointRef.current;
+      const resolvedEndPlace =
+        endPlaceLabelRef.current ??
+        (reason === 'time-limit' ? '現在這裡' : '附近的停留點');
+      endPlaceLabelRef.current = resolvedEndPlace;
+      setEndPlaceLabel(resolvedEndPlace);
+
       const entry: PassportEntry = {
         id: `v2-${finishedAt}-${Math.random().toString(36).slice(2, 7)}`,
         completedAt: new Date(finishedAt).toISOString(),
@@ -467,7 +473,7 @@ export function useV2DetourController() {
         photos: photosRef.current,
         startedAt: new Date(startedAt).toISOString(),
         actualDurationMinutes: durationSeconds / 60,
-        sceneName: endPlaceLabelRef.current ?? '附近的停留點',
+        sceneName: resolvedEndPlace,
         threadLabel: reason,
         emojiTrail: emojiTrailRef.current,
         ticketSerial: ticketSerialRef.current,
@@ -476,7 +482,11 @@ export function useV2DetourController() {
       await savePassport([entry, ...passportRef.current]);
       setShareEntry(entry);
       setElapsedSeconds(durationSeconds);
-      setStatusMessage('這趟路留在票上了。');
+      setStatusMessage(
+        reason === 'time-limit'
+          ? '15 分鐘到了。不是失敗，這趟就停在這裡。'
+          : '這趟路留在票上了。'
+      );
       setPhaseSafe('finish');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finishInFlightRef.current = false;
@@ -629,6 +639,7 @@ export function useV2DetourController() {
     emojiTrailRef.current = [];
     setPhotos([]);
     photosRef.current = [];
+    setShareEntry(null);
     setTrace([]);
     traceRef.current = [];
     setDiscoveries(0);
@@ -808,8 +819,33 @@ export function useV2DetourController() {
   );
 
   const simulateIndoorStepToEnd = useCallback(() => {
-    simulateIndoorStep(2000);
-  }, [simulateIndoorStep]);
+    if (playtestModeRef.current !== 'indoor') return;
+    if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
+
+    const route = routeStateRef.current;
+    if (!route) return;
+
+    const remainingBeats = route.navigationRoute.beats.slice(route.beatIndex);
+    for (const beat of remainingBeats) {
+      const point =
+        beat.segmentCoordinates[beat.segmentCoordinates.length - 1] ??
+        route.destination;
+      handleLocationUpdate({
+        coords: {
+          latitude: point.latitude,
+          longitude: point.longitude,
+          altitude: 0,
+          accuracy: 5,
+          altitudeAccuracy: 5,
+          heading: beat.bearingDegrees,
+          speed: 1.25,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    indoorRouteProgressRef.current = route.walkingRoute.distanceMeters;
+  }, [handleLocationUpdate]);
 
   const simulateIndoorDeviation = useCallback(() => {
     if (playtestModeRef.current !== 'indoor') return;
@@ -956,6 +992,7 @@ export function useV2DetourController() {
     routePlanningRef.current = false;
     setRouteSafe(null);
     setHistoryDetail(null);
+    setShareEntry(null);
     setErrorMessage(null);
     setStatusMessage('');
     setPlaytestModeSafe('live');
