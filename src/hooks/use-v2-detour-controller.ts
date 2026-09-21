@@ -1095,6 +1095,13 @@ export function useV2DetourController() {
     }
 
     const currentRoute = routeStateRef.current;
+    if (currentPhase === 'closing' && !currentRoute) {
+      const currentElapsedSeconds = startedAtRef.current
+        ? Math.max(0, (Date.now() - startedAtRef.current) / 1000)
+        : CLOSING_START_SECONDS;
+      return planClosingRoute(point, currentElapsedSeconds);
+    }
+
     const closingDestination = currentPhase === 'closing' && currentRoute
       ? {
           point: currentRoute.destination,
@@ -1103,7 +1110,7 @@ export function useV2DetourController() {
       : undefined;
 
     return planShortRoute(point, currentPhase, closingDestination);
-  }, [planShortRoute, startWatchers]);
+  }, [planClosingRoute, planShortRoute, startWatchers]);
 
   const simulateIndoorStep = useCallback(
     (distanceMeters = 35) => {
