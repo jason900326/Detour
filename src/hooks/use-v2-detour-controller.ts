@@ -195,6 +195,7 @@ export function useV2DetourController() {
   const watcherGenerationRef = useRef(0);
   const indoorRouteProgressRef = useRef(0);
   const offRouteSamplesRef = useRef(0);
+  const offRouteCandidateRef = useRef<GeoPoint | null>(null);
   const environmentKindsRef = useRef<string[]>([]);
   const cameraRequestIdRef = useRef<string | null>(null);
   const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
@@ -274,6 +275,7 @@ export function useV2DetourController() {
       };
       setRouteSafe(next);
       offRouteSamplesRef.current = 0;
+      offRouteCandidateRef.current = null;
       previousRouteCoordinatesRef.current = [
         option.walkingRoute.coordinates,
         ...previousRouteCoordinatesRef.current,
@@ -736,14 +738,28 @@ export function useV2DetourController() {
       // advance a beat, trigger a reroute, or finish the Journey.
       if (!trustedGps) {
         offRouteSamplesRef.current = 0;
+        offRouteCandidateRef.current = null;
         return;
       }
 
       if (offRouteDistance > 75) {
+        const previousOffRouteCandidate = offRouteCandidateRef.current;
+        const spatiallyConsistent =
+          previousOffRouteCandidate !== null &&
+          distanceBetween(previousOffRouteCandidate, point) <= 55;
+
+        if (!spatiallyConsistent) {
+          offRouteCandidateRef.current = point;
+          offRouteSamplesRef.current = 1;
+          return;
+        }
+
+        offRouteCandidateRef.current = point;
         offRouteSamplesRef.current += 1;
         if (offRouteSamplesRef.current < OFF_ROUTE_CONFIRMATIONS) return;
 
         offRouteSamplesRef.current = 0;
+        offRouteCandidateRef.current = null;
         const closingDestination = route.purpose === 'closing'
           ? {
               point: route.destination,
@@ -755,6 +771,7 @@ export function useV2DetourController() {
       }
 
       offRouteSamplesRef.current = 0;
+      offRouteCandidateRef.current = null;
       if (remaining > 14) return;
 
       const isLastBeat = route.beatIndex >= route.navigationRoute.beats.length - 1;
@@ -891,6 +908,7 @@ export function useV2DetourController() {
     finishInFlightRef.current = false;
     indoorRouteProgressRef.current = 0;
     offRouteSamplesRef.current = 0;
+    offRouteCandidateRef.current = null;
     lastTrustedTracePointRef.current = null;
     stopWatchers();
     routeRequestRef.current += 1;
