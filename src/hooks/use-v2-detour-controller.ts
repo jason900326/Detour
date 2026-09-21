@@ -191,6 +191,7 @@ export function useV2DetourController() {
   const routeRequestRef = useRef(0);
   const routePlanningRef = useRef(false);
   const finishInFlightRef = useRef(false);
+  const finishRequestRef = useRef(0);
   const ticketSerialRef = useRef(ticketSerial);
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
@@ -620,6 +621,8 @@ export function useV2DetourController() {
   const finishJourney = useCallback(
     async (reason: 'arrived' | 'time-limit' | 'manual') => {
       if (finishInFlightRef.current || phaseRef.current === 'finish') return;
+      const finishRequestId = finishRequestRef.current + 1;
+      finishRequestRef.current = finishRequestId;
       finishInFlightRef.current = true;
       stopWatchers();
       routeRequestRef.current += 1;
@@ -631,6 +634,8 @@ export function useV2DetourController() {
       const durationSeconds = Math.max(1, Math.round((finishedAt - startedAt) / 1000));
       const point = currentPointRef.current;
       const areaLabel = await resolveAreaLabel(point, playtestModeRef.current);
+      if (finishRequestId !== finishRequestRef.current) return;
+
       const resolvedEndPlace = resolveV2CompletionPlace({
         reason,
         selectedEndPlace: endPlaceLabelRef.current,
@@ -663,10 +668,14 @@ export function useV2DetourController() {
       const existingPassport = passportLoadedRef.current
         ? passportRef.current
         : await loadPassport();
+      if (finishRequestId !== finishRequestRef.current) return;
+
       passportLoadedRef.current = true;
       const nextPassport = [entry, ...existingPassport];
       passportRef.current = nextPassport;
       await savePassport(nextPassport);
+      if (finishRequestId !== finishRequestRef.current) return;
+
       setShareEntry(entry);
       setElapsedSeconds(durationSeconds);
       setStatusMessage(
@@ -676,7 +685,9 @@ export function useV2DetourController() {
       );
       setPhaseSafe('finish');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      finishInFlightRef.current = false;
+      if (finishRequestId === finishRequestRef.current) {
+        finishInFlightRef.current = false;
+      }
     },
     [loadPassport, savePassport, setPhaseSafe, setRouteSafe, setTargetSafe, stopWatchers]
   );
@@ -919,6 +930,7 @@ export function useV2DetourController() {
     journeyAnchorRef.current = null;
     endPlaceLabelRef.current = null;
     setEndPlaceLabel(null);
+    finishRequestRef.current += 1;
     finishInFlightRef.current = false;
     indoorRouteProgressRef.current = 0;
     offRouteSamplesRef.current = 0;
@@ -1364,6 +1376,8 @@ export function useV2DetourController() {
     setHistoryDetail(null);
     setShareEntry(null);
     cameraRequestIdRef.current = null;
+    finishRequestRef.current += 1;
+    finishInFlightRef.current = false;
     environmentRequestRef.current += 1;
     environmentKindsRef.current = [];
     setErrorMessage(null);
