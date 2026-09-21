@@ -31,6 +31,7 @@ import {
   chooseV2Target,
   shouldEnterV2Closing,
   shouldForceV2Finish,
+  shouldOfferV2ClosingTarget,
   targetDifficultyForNext,
   replacementDifficultyForV2,
   type V2TargetDifficulty,
@@ -405,7 +406,7 @@ export function useV2DetourController() {
       routeRequestRef.current = closingRequestId;
       setRouteSafe(null);
       setPhaseSafe('closing');
-      if (discoveriesRef.current < 4) {
+      if (shouldOfferV2ClosingTarget(discoveriesRef.current)) {
         const closingTarget = chooseV2Target({
           difficulty: 'easy',
           excludedIds: previousTargetIdsRef.current,
@@ -884,7 +885,7 @@ export function useV2DetourController() {
       return;
     }
 
-    setStatusMessage('留在票上了。下一段正在形成.');
+    setStatusMessage('留在票上了。下一段正在形成。');
     const point = currentPointRef.current;
     const elapsed = startedAtRef.current ? (Date.now() - startedAtRef.current) / 1000 : 0;
     if (point && enterClosingIfNeeded(point, elapsed)) return;
