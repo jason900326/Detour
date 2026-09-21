@@ -931,7 +931,19 @@ export function useV2DetourController() {
   useFocusEffect(
     useCallback(() => {
       void consumeCameraResult();
-    }, [consumeCameraResult])
+
+      if (
+        playtestModeRef.current === 'live' &&
+        (phaseRef.current === 'exploration' || phaseRef.current === 'closing') &&
+        AppState.currentState === 'active'
+      ) {
+        void startWatchers();
+      }
+
+      return () => {
+        stopWatchers();
+      };
+    }, [consumeCameraResult, startWatchers, stopWatchers])
   );
 
   useEffect(() => {
