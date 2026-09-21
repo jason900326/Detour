@@ -1384,17 +1384,23 @@ export function useV2DetourController() {
     setPhaseSafe(shareReturnPhaseRef.current);
   }, [setPhaseSafe]);
 
-  const performShare = useCallback(async () => {
-    if (!shareEntry) return;
-    const emojis = shareEntry.emojiTrail?.join(' ') || '—';
-    const place = shareEntry.sceneName ?? shareEntry.city;
-    const photo = shareEntry.photos?.[0];
-    await Share.share({
-      title: '我的 Detour',
-      message: `DETOUR · ${emojis}\n${place}\n${shareEntry.discoveries} 個發現`,
-      ...(photo?.uri ? { url: photo.uri } : {}),
-    });
-  }, [shareEntry]);
+  const performShare = useCallback(
+    async (shareImageUri?: string) => {
+      if (!shareEntry) return;
+      const emojis = shareEntry.emojiTrail?.join(' ') || '—';
+      const place = shareEntry.sceneName ?? shareEntry.city;
+      const fallbackPhoto = shareEntry.photos?.[0]?.uri;
+
+      await Share.share({
+        title: '我的 Detour',
+        message: `DETOUR · ${emojis}\n${place}\n${shareEntry.discoveries} 個發現`,
+        ...((shareImageUri ?? fallbackPhoto)
+          ? { url: shareImageUri ?? fallbackPhoto }
+          : {}),
+      });
+    },
+    [shareEntry]
+  );
 
   const goHome = useCallback(() => {
     stopWatchers();
