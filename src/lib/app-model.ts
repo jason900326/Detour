@@ -108,6 +108,9 @@ export type PassportEntry = {
   actualDurationMinutes?: number;
   rerouteCount?: number;
   sceneFailures?: SessionSceneFailure[];
+  /** V2 Playtest Build: only records discoveries that have already happened. */
+  emojiTrail?: string[];
+  ticketSerial?: string;
 };
 
 export const CAMERA_RESULT_KEY = '@detour/camera/result/v1';

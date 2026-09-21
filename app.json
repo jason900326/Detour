@@ -19,7 +19,8 @@
       "bundleIdentifier": "com.jasonbuildslab.detour",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "讓你在 DETOUR 旅程中拍下沿途發現。"
+        "NSCameraUsageDescription": "讓你在 DETOUR 旅程中拍下沿途發現。",
+        "NSLocationWhenInUseUsageDescription": "讓 DETOUR 在你行走時記錄路線，並從目前位置安排下一小段探索。"
       }
     },
     "android": {
