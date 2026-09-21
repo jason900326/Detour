@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { Directory, Paths } from 'expo-file-system';
@@ -39,19 +39,28 @@ export function usePassportStore() {
     useState<string | null>(null);
   const [passportPhotoIndex, setPassportPhotoIndex] =
     useState(0);
+  const passportWriteGenerationRef = useRef(0);
 
-  async function loadPassport() {
+  const loadPassport = useCallback(async (): Promise<PassportEntry[]> => {
+    const generationAtStart = passportWriteGenerationRef.current;
     try {
       const parsed = await readStored(PASSPORT_KEY, isPassport);
-      if (parsed) setPassport(parsed);
+      if (parsed) {
+        if (generationAtStart === passportWriteGenerationRef.current) {
+          setPassport(parsed);
+        }
+        return parsed;
+      }
     } catch {
       // Local history must never block the app.
     } finally {
       setPassportLoaded(true);
     }
-  }
+    return [];
+  }, []);
 
-  async function savePassport(nextPassport: PassportEntry[]) {
+  const savePassport = useCallback(async (nextPassport: PassportEntry[]) => {
+    passportWriteGenerationRef.current += 1;
     setPassport(nextPassport);
 
     try {
@@ -62,7 +71,7 @@ export function usePassportStore() {
         '這次 DETOUR 可以完成，但紀錄可能不會保留。'
       );
     }
-  }
+  }, []);
 
   function clearPassport() {
     Alert.alert(
@@ -74,6 +83,7 @@ export function usePassportStore() {
           text: '清除',
           style: 'destructive',
           onPress: async () => {
+            passportWriteGenerationRef.current += 1;
             await removeStored(PASSPORT_KEY);
 
             try {

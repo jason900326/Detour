@@ -5,7 +5,11 @@ import {
   chooseV2Target,
   shouldEnterV2Closing,
   shouldForceV2Finish,
+  shouldOfferV2ClosingTarget,
+  shouldKeepV2TargetIntoClosing,
   targetDifficultyForNext,
+  replacementDifficultyForV2,
+  resolveV2CompletionPlace,
 } from './v2-journey.ts';
 
 test('V2 starts with an easy target and escalates only after the first finding', () => {
@@ -22,6 +26,12 @@ test('V2 starts with an easy target and escalates only after the first finding',
   );
 });
 
+test('V2 replacement never punishes the player with a harder target', () => {
+  assert.equal(replacementDifficultyForV2('easy'), 'easy');
+  assert.equal(replacementDifficultyForV2('medium'), 'medium');
+  assert.equal(replacementDifficultyForV2('hard'), 'medium');
+});
+
 test('V2 target selection never repeats an excluded id or emoji when alternatives exist', () => {
   const first = chooseV2Target({ difficulty: 'easy', seed: 0 });
   const next = chooseV2Target({
@@ -35,8 +45,21 @@ test('V2 target selection never repeats an excluded id or emoji when alternative
   assert.notEqual(next.emoji, first.emoji);
 });
 
+test('V2 environment data only weakly biases the eligible target pool', () => {
+  const generic = chooseV2Target({ difficulty: 'easy', seed: 12 });
+  const greenWeighted = chooseV2Target({
+    difficulty: 'easy',
+    environmentKinds: ['green-space'],
+    seed: 12,
+  });
+
+  assert.equal(generic.id, 'cloud');
+  assert.ok(['tree', 'flower', 'cloud', 'chair', 'shadow', 'plant'].includes(greenWeighted.id));
+});
+
 test('V2 enters closing after enough discoveries or at the ten-minute boundary', () => {
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 7 * 60, discoveries: 3 }), false);
+  assert.equal(shouldEnterV2Closing({ elapsedSeconds: 2 * 60, discoveries: 4 }), true);
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 8 * 60, discoveries: 3 }), true);
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 10 * 60, discoveries: 1 }), true);
 });
@@ -44,4 +67,64 @@ test('V2 enters closing after enough discoveries or at the ten-minute boundary',
 test('V2 forced finish is a time limit, not a failure state', () => {
   assert.equal(shouldForceV2Finish(14 * 60 + 59), false);
   assert.equal(shouldForceV2Finish(15 * 60), true);
+});
+
+
+test('V2 closing offers at most one lightweight target before four discoveries', () => {
+  assert.equal(shouldOfferV2ClosingTarget(0), true);
+  assert.equal(shouldOfferV2ClosingTarget(3), true);
+  assert.equal(shouldOfferV2ClosingTarget(4), false);
+  assert.equal(shouldOfferV2ClosingTarget(7), false);
+});
+
+
+test('V2 forced finish never claims a destination the player did not reach', () => {
+  assert.equal(
+    resolveV2CompletionPlace({
+      reason: 'time-limit',
+      selectedEndPlace: '某個還沒走到的公園',
+      indoor: false,
+    }),
+    '現在這裡'
+  );
+  assert.equal(
+    resolveV2CompletionPlace({
+      reason: 'arrived',
+      selectedEndPlace: '小公園',
+      indoor: false,
+    }),
+    '小公園'
+  );
+});
+
+
+test('V2 closing keeps a reasonable active target instead of swapping it abruptly', () => {
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'easy',
+      targetAgeSeconds: 40,
+    }),
+    true
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'medium',
+      targetAgeSeconds: 90,
+    }),
+    true
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'hard',
+      targetAgeSeconds: 20,
+    }),
+    false
+  );
+  assert.equal(
+    shouldKeepV2TargetIntoClosing({
+      difficulty: 'medium',
+      targetAgeSeconds: 130,
+    }),
+    false
+  );
 });

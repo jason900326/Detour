@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Image,
@@ -11,11 +11,19 @@ import {
 } from 'react-native';
 import MapView, { Circle, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg';
+import { captureRef } from 'react-native-view-shot';
 
 import type { PassportEntry } from '../lib/app-model';
 import type { NavigationTurn } from '../lib/navigation-engine';
 import type { V2Phase } from '../hooks/use-v2-detour-controller';
 import { useV2DetourController } from '../hooks/use-v2-detour-controller';
+import {
+  V2ClosingConverge,
+  V2DiscoveryBurst,
+  V2FinishMark,
+  V2RouteFormingMotion,
+} from './v2-skia-motion';
 
 const COLORS = {
   ink: '#16130F',
@@ -34,6 +42,11 @@ function elapsedLabel(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function distanceLabel(meters: number) {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.max(0, Math.round(meters))} m`;
+}
+
 function dateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '剛剛';
@@ -45,8 +58,17 @@ function navigationCopy(turn: NavigationTurn | undefined, closing: boolean) {
   if (turn === 'right') return '下一個路口右轉';
   if (turn === 'slight-left') return '往左前方續走';
   if (turn === 'slight-right') return '往右前方續走';
-  if (turn === 'arrive') return closing ? '最後一小段。' : '沿這段路找找看。';
-  return closing ? '往這邊走一小段。' : '沿這段路找找看。';
+  if (turn === 'arrive') return closing ? '最後一小段。' : '';
+  return closing ? '往這邊走一小段。' : '';
+}
+
+function isDirectionDecision(turn: NavigationTurn | undefined) {
+  return (
+    turn === 'left' ||
+    turn === 'right' ||
+    turn === 'slight-left' ||
+    turn === 'slight-right'
+  );
 }
 
 function routeRegion(point: { latitude: number; longitude: number } | null) {
@@ -57,6 +79,111 @@ function routeRegion(point: { latitude: number; longitude: number } | null) {
     latitudeDelta: 0.0028,
     longitudeDelta: 0.0028,
   };
+}
+
+function routePreviewRegion(
+  coordinates: { latitude: number; longitude: number }[]
+) {
+  if (coordinates.length === 0) return null;
+  const latitudes = coordinates.map((point) => point.latitude);
+  const longitudes = coordinates.map((point) => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+    latitudeDelta: Math.max(0.002, (maxLatitude - minLatitude) * 1.45),
+    longitudeDelta: Math.max(0.002, (maxLongitude - minLongitude) * 1.45),
+  };
+}
+
+function buildShareRoutePath(
+  coordinates: { latitude: number; longitude: number }[],
+  width = 300,
+  height = 92,
+  padding = 12
+) {
+  if (coordinates.length < 2) return null;
+
+  const latitudes = coordinates.map((point) => point.latitude);
+  const longitudes = coordinates.map((point) => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+  const latitudeRange = Math.max(0.000001, maxLatitude - minLatitude);
+  const longitudeRange = Math.max(0.000001, maxLongitude - minLongitude);
+
+  const points = coordinates.map((point) => ({
+    x:
+      padding +
+      ((point.longitude - minLongitude) / longitudeRange) *
+        (width - padding * 2),
+    y:
+      padding +
+      ((maxLatitude - point.latitude) / latitudeRange) *
+        (height - padding * 2),
+  }));
+
+  const path = points
+    .map((point, index) =>
+      `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+    )
+    .join(' ');
+
+  return {
+    path,
+    start: points[0],
+    end: points[points.length - 1],
+  };
+}
+
+function ShareRouteGraphic({
+  coordinates,
+}: {
+  coordinates: { latitude: number; longitude: number }[];
+}) {
+  const route = useMemo(() => buildShareRoutePath(coordinates), [coordinates]);
+
+  return (
+    <View style={styles.shareCardRoute}>
+      <Text style={styles.shareCardRouteLabel}>THIS DETOUR</Text>
+      <View style={styles.shareCardRouteGraphic}>
+        {route ? (
+          <Svg width="100%" height="100%" viewBox="0 0 300 92">
+            <SvgPath
+              d={route.path}
+              stroke={COLORS.signal}
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            <SvgCircle
+              cx={route.start.x}
+              cy={route.start.y}
+              r={5}
+              fill={COLORS.ink}
+            />
+            <SvgCircle
+              cx={route.end.x}
+              cy={route.end.y}
+              r={7}
+              fill={COLORS.signal}
+            />
+          </Svg>
+        ) : (
+          <View style={styles.shareCardRouteEmpty}>
+            <View style={styles.shareCardRouteDash} />
+            <View style={styles.shareCardRouteDot} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
 }
 
 function V2Ticket({
@@ -112,9 +239,11 @@ function V2Ticket({
 function JourneyMap({
   point,
   coordinates,
+  caption = '只看下一小段',
 }: {
   point: { latitude: number; longitude: number } | null;
   coordinates: { latitude: number; longitude: number }[];
+  caption?: string;
 }) {
   const region = useMemo(() => routeRegion(point), [point]);
   if (!point || !region) return null;
@@ -150,7 +279,47 @@ function JourneyMap({
         />
       </MapView>
       <View pointerEvents="none" style={styles.mapCaption}>
-        <Text style={styles.mapCaptionText}>只看下一小段</Text>
+        <Text style={styles.mapCaptionText}>{caption}</Text>
+      </View>
+    </View>
+  );
+}
+
+function RoutePreview({
+  coordinates,
+  label = '這趟走過的路',
+}: {
+  coordinates: { latitude: number; longitude: number }[];
+  label?: string;
+}) {
+  const region = useMemo(() => routePreviewRegion(coordinates), [coordinates]);
+  if (!region || coordinates.length < 2) return null;
+
+  return (
+    <View style={styles.routePreviewWrap}>
+      <Text style={styles.routePreviewLabel}>{label}</Text>
+      <View style={styles.routePreviewFrame}>
+        <MapView
+          provider={PROVIDER_DEFAULT}
+          style={StyleSheet.absoluteFill}
+          region={region}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          toolbarEnabled={false}
+          showsCompass={false}
+          showsPointsOfInterests={false}
+          showsBuildings={false}
+        >
+          <Polyline
+            coordinates={coordinates}
+            strokeColor={COLORS.signal}
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
+          />
+        </MapView>
       </View>
     </View>
   );
@@ -209,6 +378,7 @@ function StartingPanel({ controller }: { controller: ReturnType<typeof useV2Deto
       </View>
       <View style={styles.startingContent}>
         <V2Ticket serial={controller.ticketSerial} emojiTrail={controller.emojiTrail} />
+        <V2RouteFormingMotion />
         <Text style={styles.startingTitle}>這趟路正在形成。</Text>
         <Text style={styles.startingCopy}>{controller.statusMessage || '正在找一條適合先走的小段。'}</Text>
         {controller.isPlanning && <View style={styles.loadingDot} />}
@@ -241,6 +411,31 @@ function IndoorPlaytestControls({
         <Text style={styles.indoorControlsTitle}>室內測試控制</Text>
         <Text style={styles.indoorControlsCopy}>不讀 GPS、不呼叫路線服務</Text>
       </View>
+      <Text style={styles.indoorStateLine}>
+        {controller.phase === 'closing' ? 'Closing' : 'Exploration'} · {controller.discoveries} 個發現 · {elapsedLabel(controller.elapsedSeconds)}
+      </Text>
+      <Text style={styles.indoorTargetLine}>
+        題目難度：{controller.activeTarget?.difficulty ?? '—'}
+      </Text>
+      {controller.indoorDiagnostics && (
+        <>
+          <Text style={styles.indoorDiagnosticLine}>
+            距起點 {controller.indoorDiagnostics.distanceFromAnchorMeters}m · 本段 {controller.indoorDiagnostics.routeDistanceMeters}m
+          </Text>
+          {controller.indoorDiagnostics.rubberBandActive && (
+            <Text
+              style={[
+                styles.indoorRubberBandLine,
+                controller.indoorDiagnostics.rubberBandReturning
+                  ? styles.indoorRubberBandPass
+                  : styles.indoorRubberBandWarning,
+              ]}
+            >
+              橡皮筋：{controller.indoorDiagnostics.rubberBandReturning ? '正在往探索區收回 ✓' : '這段沒有往回收，需要檢查'}
+            </Text>
+          )}
+        </>
+      )}
       <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
@@ -263,15 +458,41 @@ function IndoorPlaytestControls({
         >
           <Text style={styles.indoorButtonText}>走到這段結尾</Text>
         </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
         <Pressable
           disabled={controller.isPlanning}
-          onPress={controller.simulateIndoorDeviation}
+          onPress={() => controller.simulateIndoorDeviation(100)}
           style={({ pressed }) => [
             styles.indoorButton,
             (pressed || controller.isPlanning) && styles.buttonPressed,
           ]}
         >
-          <Text style={styles.indoorButtonText}>模擬偏離</Text>
+          <Text style={styles.indoorButtonText}>偏離 100m</Text>
+        </Pressable>
+        <Pressable
+          disabled={controller.isPlanning}
+          onPress={() => controller.simulateIndoorDeviation(500)}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || controller.isPlanning) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>遠偏離 500m</Text>
+        </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
+        <Pressable
+          onPress={() => controller.simulateIndoorFastForward(5 * 60)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 5:00</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => controller.simulateIndoorFastForward(8 * 60 + 30)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 8:30</Text>
         </Pressable>
       </View>
       <View style={styles.indoorButtonRow}>
@@ -279,13 +500,37 @@ function IndoorPlaytestControls({
           onPress={() => controller.simulateIndoorFastForward(10 * 60)}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.indoorButtonText}>快轉到 Closing</Text>
+          <Text style={styles.indoorButtonText}>快轉 10:00</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => controller.simulateIndoorFastForward(15 * 60)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 15:00</Text>
+        </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
+        <Pressable
+          disabled={!controller.activeTarget}
+          onPress={() => controller.simulateIndoorTargetAge(120)}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || !controller.activeTarget) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>這題已找 2 分鐘</Text>
         </Pressable>
         <Pressable
           onPress={controller.simulateIndoorFinish}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.indoorButtonText}>直接完成</Text>
+          <Text style={styles.indoorButtonText}>直接完成 UI</Text>
+        </Pressable>
+        <Pressable
+          onPress={controller.goHome}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>結束測試</Text>
         </Pressable>
       </View>
     </View>
@@ -295,6 +540,10 @@ function IndoorPlaytestControls({
 function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const closing = controller.phase === 'closing';
   const beat = controller.currentNavigationBeat;
+  const closingMinutes =
+    closing && controller.currentRouteRemainingSeconds != null
+      ? Math.max(1, Math.ceil(controller.currentRouteRemainingSeconds / 60))
+      : null;
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
@@ -306,29 +555,62 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
         <Text style={styles.elapsed}>{elapsedLabel(controller.elapsedSeconds)}</Text>
       </View>
 
-      <JourneyMap point={controller.currentPoint} coordinates={controller.routeCoordinates} />
+      <JourneyMap
+        point={controller.currentPoint}
+        coordinates={controller.routeCoordinates}
+        caption={closing ? '最後一段' : '只看下一小段'}
+      />
 
       <View style={styles.journeyContent}>
+        <V2DiscoveryBurst trigger={controller.discoveries} />
         <View style={styles.navigationHint}>
-          <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-          {controller.isPlanning && <Text style={styles.navigationSubHint}>下一小段正在形成</Text>}
-          {!controller.isPlanning && beat?.turn === 'continue' && !closing && (
-            <Text style={styles.navigationSubHint}>不用看地圖，先找眼前的東西</Text>
+          {(closing || isDirectionDecision(beat?.turn)) && (
+            <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
           )}
+          {controller.isPlanning ? (
+            <Text style={styles.navigationSubHint}>
+              {closing ? '正在找一個適合停下來的位置' : '下一小段正在形成'}
+            </Text>
+          ) : !closing && !isDirectionDecision(beat?.turn) ? (
+            <Text style={styles.navigationSubHint}>先看四周，不用一直盯地圖</Text>
+          ) : null}
         </View>
 
         {closing ? (
           <View style={styles.closingCard}>
-            <Text style={styles.closingEyebrow}>CLOSING</Text>
-            <Text style={styles.closingTitle}>差不多了。</Text>
-            <Text style={styles.closingCopy}>再往這邊走一小段，抵達之後才知道這趟停在哪裡。</Text>
+            <V2ClosingConverge />
+            <Text style={styles.closingEyebrow}>FINAL STRETCH</Text>
+            <Text style={styles.closingTitle}>最後一段。</Text>
+            <Text style={styles.closingCopy}>不會再出新的主要題目。再走一小段，到了才揭曉這趟停在哪裡。</Text>
+            {controller.activeTarget && (
+              <View style={styles.closingTarget}>
+                <View style={styles.closingTargetCopy}>
+                  <Text style={styles.closingTargetKicker}>最後順便找找看</Text>
+                  <Text style={styles.closingTargetTitle}>
+                    {controller.activeTarget.emoji}  {controller.activeTarget.title}
+                  </Text>
+                </View>
+                <View style={styles.closingTargetActions}>
+                  <Pressable onPress={controller.replaceTarget} style={styles.closingReplaceButton}>
+                    <Text style={styles.closingReplaceText}>換一個</Text>
+                  </Pressable>
+                  <Pressable onPress={() => void controller.markFound()} style={styles.closingFoundButton}>
+                    <Text style={styles.closingFoundText}>找到了</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+            <View style={styles.closingPromise}>
+              <Text style={styles.closingPromiseText}>
+                {closingMinutes ? `約 ${closingMinutes} 分鐘 · 不用趕` : '快到了 · 不用趕'}
+              </Text>
+            </View>
           </View>
         ) : controller.activeTarget ? (
           <View style={styles.targetCard}>
             <View style={styles.targetEmojiBubble}>
               <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
             </View>
-            <Text style={styles.targetEyebrow}>沿路找找看</Text>
             <Text style={styles.targetTitle}>{controller.activeTarget.title}</Text>
             <View style={styles.targetActions}>
               <Pressable onPress={controller.replaceTarget} style={styles.replaceButton}>
@@ -381,6 +663,7 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.finishScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.finishHeader}>
+          <V2FinishMark />
           <Text style={styles.smallLabel}>DETOUR COMPLETE</Text>
           <Text style={styles.finishTitle}>這趟停在</Text>
           <Text style={styles.finishPlace}>{controller.endPlaceLabel ?? '附近的停留點'}</Text>
@@ -389,10 +672,21 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
 
         <V2Ticket serial={controller.ticketSerial} emojiTrail={controller.emojiTrail} />
 
-        <View style={styles.finishMeta}>
-          <Text style={styles.finishMetaText}>約 {elapsedLabel(controller.elapsedSeconds)} · {controller.discoveries} 個發現</Text>
-          <Text style={styles.finishMetaText}>{controller.photos.length} 張照片</Text>
+        <View style={styles.finishStats}>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{elapsedLabel(controller.elapsedSeconds)}</Text>
+            <Text style={styles.finishStatLabel}>時間</Text>
+          </View>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{controller.discoveries}</Text>
+            <Text style={styles.finishStatLabel}>發現</Text>
+          </View>
+          <View style={styles.finishStat}>
+            <Text style={styles.finishStatValue}>{distanceLabel(controller.walkedDistanceMeters)}</Text>
+            <Text style={styles.finishStatLabel}>走過</Text>
+          </View>
         </View>
+        <Text style={styles.finishPhotoMeta}>{controller.photos.length} 張照片留在這趟</Text>
 
         {controller.photos.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
@@ -402,12 +696,14 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
           </ScrollView>
         )}
 
+        <RoutePreview coordinates={controller.trace} />
+
         <View style={styles.finishActions}>
-          <Pressable onPress={() => void controller.shareCurrentJourney()} style={styles.shareButton}>
+          <Pressable onPress={controller.openCurrentShare} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
           <Pressable onPress={() => void controller.startOver()} style={styles.startAgainButton}>
-            <Text style={styles.startAgainText}>再繞一下</Text>
+            <Text style={styles.startAgainText}>{controller.isIndoorMode ? '再測一次' : '再繞一下'}</Text>
           </Pressable>
           <Pressable onPress={controller.openHistory} style={styles.historyLinkButton}>
             <Text style={styles.historyLinkText}>看紀錄</Text>
@@ -441,24 +737,69 @@ function HistoryEntryCard({
 function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   if (controller.historyDetail) {
     const entry = controller.historyDetail;
+    const coverPhoto = entry.photos?.[0];
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.finishScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.historyDetailScroll} showsVerticalScrollIndicator={false}>
           <Pressable onPress={() => controller.showHistoryEntry(null)} style={styles.backLink}>
             <Text style={styles.backLinkText}>← 所有紀錄</Text>
           </Pressable>
-          <Text style={styles.smallLabel}>JOURNEY HISTORY</Text>
-          <Text style={styles.finishTitle}>{dateLabel(entry.completedAt)}</Text>
-          <Text style={styles.finishPlace}>{entry.city}</Text>
-          <V2Ticket serial={entry.ticketSerial} emojiTrail={entry.emojiTrail ?? []} />
-          {entry.photos && entry.photos.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
-              {entry.photos.map((photo) => <Image key={photo.id} source={{ uri: photo.uri }} style={styles.finishPhoto} />)}
+
+          <View style={styles.historyDetailHeading}>
+            <View>
+              <Text style={styles.smallLabel}>JOURNEY HISTORY</Text>
+              <Text style={styles.historyDetailDate}>{dateLabel(entry.completedAt)}</Text>
+            </View>
+            <Text style={styles.historyDetailArea}>{entry.city}</Text>
+          </View>
+
+          {coverPhoto ? (
+            <Image source={{ uri: coverPhoto.uri }} style={styles.historyDetailHero} />
+          ) : (
+            <View style={styles.historyDetailNoPhoto}>
+              <Text style={styles.historyDetailNoPhotoEmoji}>{entry.emojiTrail?.join(' ') || '—'}</Text>
+            </View>
+          )}
+
+          <View style={styles.historyArchiveCard}>
+            <Text style={styles.historyArchiveLabel}>這趟留下的票</Text>
+            <V2Ticket serial={entry.ticketSerial} emojiTrail={entry.emojiTrail ?? []} compact />
+          </View>
+
+          {entry.photos && entry.photos.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.historyPhotoStrip}>
+              {entry.photos.slice(1).map((photo) => (
+                <Image key={photo.id} source={{ uri: photo.uri }} style={styles.historyDetailThumb} />
+              ))}
             </ScrollView>
           )}
-          <Text style={styles.historyDetailMeta}>{entry.discoveries} 個發現 · {entry.photoCount ?? 0} 張照片</Text>
-          <Pressable onPress={() => void controller.shareHistoryEntry(entry)} style={styles.shareButton}>
+
+          <RoutePreview coordinates={entry.route ?? []} label="當時走過的路" />
+
+          <View style={styles.historyEndCard}>
+            <Text style={styles.historyArchiveLabel}>這趟停在</Text>
+            <Text style={styles.historyEndPlace}>{entry.sceneName ?? '這一帶'}</Text>
+          </View>
+
+          <View style={styles.historyStatsCard}>
+            <View>
+              <Text style={styles.historyStatsValue}>{entry.discoveries}</Text>
+              <Text style={styles.historyStatsLabel}>發現</Text>
+            </View>
+            <View>
+              <Text style={styles.historyStatsValue}>{entry.photoCount ?? 0}</Text>
+              <Text style={styles.historyStatsLabel}>照片</Text>
+            </View>
+            <View>
+              <Text style={styles.historyStatsValue}>
+                {Math.max(1, Math.round(entry.actualDurationMinutes ?? entry.minutes))}
+              </Text>
+              <Text style={styles.historyStatsLabel}>分鐘</Text>
+            </View>
+          </View>
+
+          <Pressable onPress={() => controller.openHistoryShare(entry)} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
         </ScrollView>
@@ -493,6 +834,135 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
   );
 }
 
+function SharePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
+  const entry = controller.shareEntry;
+  const shareCardRef = useRef<View>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  if (!entry) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.shareEmpty}>
+          <Text style={styles.finishTitle}>這趟還沒有可分享的內容。</Text>
+          <Pressable onPress={controller.closeShare} style={styles.historyLinkButton}>
+            <Text style={styles.historyLinkText}>返回</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const photo = entry.photos?.[0];
+  const emojis = entry.emojiTrail ?? [];
+  const place = entry.sceneName ?? entry.city;
+  const durationMinutes = Math.max(
+    1,
+    Math.round(entry.actualDurationMinutes ?? entry.minutes)
+  );
+
+  const shareRenderedCard = async () => {
+    if (isExporting || !shareCardRef.current) return;
+    setIsExporting(true);
+    setShareError(null);
+
+    try {
+      const imageUri = await captureRef(shareCardRef, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+      });
+      await controller.performShare(imageUri);
+    } catch {
+      try {
+        await controller.performShare();
+        setShareError('分享卡產生失敗，已改用一般分享。');
+      } catch {
+        setShareError('目前無法分享，請再試一次。');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.shareSafe}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.shareHeader}>
+        <Pressable onPress={controller.closeShare} style={styles.shareBackButton}>
+          <Text style={styles.shareBackText}>← 返回</Text>
+        </Pressable>
+        <Text style={styles.shareHeaderLabel}>SHARE DETOUR</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.shareScroll} showsVerticalScrollIndicator={false}>
+        <View
+          ref={shareCardRef}
+          collapsable={false}
+          style={[
+            styles.shareCaptureCard,
+            photo ? styles.shareCaptureCardPhoto : styles.shareCaptureCardTicket,
+          ]}
+        >
+          <View style={styles.shareCardTop}>
+            <Text style={styles.shareCardBrand}>DETOUR</Text>
+            <Text style={styles.shareCardSerial}>
+              {entry.ticketSerial ?? 'DETOUR'}
+            </Text>
+          </View>
+
+          {photo ? (
+            <>
+              <Image source={{ uri: photo.uri }} style={styles.shareCardHeroPhoto} />
+              <View style={styles.shareCardIdentity}>
+                <Text style={styles.shareCardEmoji}>{emojis.join(' ') || '—'}</Text>
+                <Text style={styles.shareCardPlace}>{place}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.shareCardTicketMain}>
+              <Text style={styles.shareCardTicketKicker}>這趟留下的東西</Text>
+              <Text style={styles.shareCardTicketEmoji}>
+                {emojis.join(' ') || '—'}
+              </Text>
+              <View style={styles.shareCardTicketRule} />
+              <Text style={styles.shareCardTicketPlace}>{place}</Text>
+            </View>
+          )}
+
+          <ShareRouteGraphic coordinates={entry.route ?? []} />
+
+          <View style={styles.shareCardBottom}>
+            <Text style={styles.shareCardMeta}>{entry.discoveries} 個發現</Text>
+            <Text style={styles.shareCardMeta}>{durationMinutes} 分鐘</Text>
+            <Text style={styles.shareCardMeta}>{entry.city}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.sharePreviewHint}>
+          你現在看到的這張卡，就是實際分享出去的圖片。
+        </Text>
+
+        {shareError && <Text style={styles.shareError}>{shareError}</Text>}
+
+        <Pressable
+          disabled={isExporting}
+          onPress={() => void shareRenderedCard()}
+          style={({ pressed }) => [
+            styles.sharePrimaryButton,
+            (pressed || isExporting) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.sharePrimaryText}>
+            {isExporting ? '正在產生分享圖…' : '分享這張 Detour'}
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 export function V2DetourScreen() {
   const controller = useV2DetourController();
   const panelByPhase: Record<V2Phase, ReactNode> = {
@@ -502,6 +972,7 @@ export function V2DetourScreen() {
     closing: <JourneyPanel controller={controller} />,
     finish: <FinishPanel controller={controller} />,
     history: <HistoryPanel controller={controller} />,
+    share: <SharePanel controller={controller} />,
   };
   return panelByPhase[controller.phase];
 }
@@ -552,18 +1023,17 @@ const styles = StyleSheet.create({
   journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   journeyState: { marginTop: 3, color: COLORS.muted, fontSize: 11, fontWeight: '700' },
   elapsed: { color: COLORS.ink, fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  mapFrame: { height: 215, marginHorizontal: 14, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
+  mapFrame: { height: 170, marginHorizontal: 14, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
   mapCaption: { position: 'absolute', left: 12, top: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.88)' },
   mapCaptionText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
   journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
-  navigationHint: { minHeight: 40, alignItems: 'center' },
+  navigationHint: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
   navigationHintText: { color: COLORS.ink, fontSize: 16, fontWeight: '900' },
   navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 11, fontWeight: '600' },
   targetCard: { marginTop: 12, padding: 18, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center' },
   targetEmojiBubble: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
   targetEmoji: { fontSize: 34 },
-  targetEyebrow: { marginTop: 12, color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  targetTitle: { marginTop: 7, color: COLORS.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  targetTitle: { marginTop: 12, color: COLORS.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
   targetActions: { width: '100%', marginTop: 18, flexDirection: 'row', gap: 10 },
   replaceButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   replaceButtonText: { color: COLORS.muted, fontSize: 14, fontWeight: '800' },
@@ -573,6 +1043,17 @@ const styles = StyleSheet.create({
   closingEyebrow: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   closingTitle: { marginTop: 12, color: COLORS.paper, fontSize: 28, fontWeight: '900' },
   closingCopy: { marginTop: 8, color: '#D4CDC1', fontSize: 14, lineHeight: 21 },
+  closingTarget: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)' },
+  closingTargetCopy: { gap: 4 },
+  closingTargetKicker: { color: '#FFB29E', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  closingTargetTitle: { color: COLORS.paper, fontSize: 16, fontWeight: '900', lineHeight: 22 },
+  closingTargetActions: { marginTop: 10, flexDirection: 'row', gap: 8 },
+  closingReplaceButton: { flex: 1, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 9, alignItems: 'center' },
+  closingReplaceText: { color: '#D4CDC1', fontSize: 10, fontWeight: '900' },
+  closingFoundButton: { flex: 1.3, borderRadius: 12, backgroundColor: COLORS.signal, paddingVertical: 9, alignItems: 'center' },
+  closingFoundText: { color: COLORS.paper, fontSize: 10, fontWeight: '900' },
+  closingPromise: { marginTop: 18, alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: 'rgba(255,255,255,0.1)' },
+  closingPromiseText: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   waitingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
   waitingTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
   waitingCopy: { marginTop: 7, color: COLORS.muted, fontSize: 13 },
@@ -580,6 +1061,12 @@ const styles = StyleSheet.create({
   indoorControlsHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   indoorControlsTitle: { color: COLORS.ink, fontSize: 11, fontWeight: '900' },
   indoorControlsCopy: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  indoorStateLine: { marginTop: 6, color: COLORS.signal, fontSize: 10, fontWeight: '900' },
+  indoorTargetLine: { marginTop: 3, color: COLORS.muted, fontSize: 9, fontWeight: '800' },
+  indoorDiagnosticLine: { marginTop: 3, color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  indoorRubberBandLine: { marginTop: 3, fontSize: 9, fontWeight: '900' },
+  indoorRubberBandPass: { color: '#4E7657' },
+  indoorRubberBandWarning: { color: '#B13D2C' },
   indoorButtonRow: { marginTop: 8, flexDirection: 'row', gap: 7 },
   indoorButton: { flex: 1, minHeight: 32, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   indoorButtonPrimary: { backgroundColor: COLORS.signal, borderColor: COLORS.signal },
@@ -599,10 +1086,16 @@ const styles = StyleSheet.create({
   finishTitle: { marginTop: 12, color: COLORS.ink, fontSize: 25, fontWeight: '900' },
   finishPlace: { marginTop: 4, color: COLORS.signal, fontSize: 20, fontWeight: '900', textAlign: 'center' },
   finishCopy: { marginTop: 10, color: COLORS.muted, fontSize: 13, textAlign: 'center' },
-  finishMeta: { marginTop: 14, flexDirection: 'row', justifyContent: 'space-between' },
-  finishMetaText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  finishStats: { marginTop: 16, paddingVertical: 15, paddingHorizontal: 8, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
+  finishStat: { minWidth: 72, alignItems: 'center' },
+  finishStatValue: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
+  finishStatLabel: { marginTop: 4, color: COLORS.muted, fontSize: 10, fontWeight: '800' },
+  finishPhotoMeta: { marginTop: 9, color: COLORS.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   photoRow: { gap: 10, paddingTop: 18, paddingBottom: 4 },
   finishPhoto: { width: 118, height: 118, borderRadius: 14, backgroundColor: COLORS.line },
+  routePreviewWrap: { marginTop: 20 },
+  routePreviewLabel: { marginBottom: 8, color: COLORS.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  routePreviewFrame: { height: 150, overflow: 'hidden', borderRadius: 18, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.map },
   finishActions: { marginTop: 24, gap: 10 },
   shareButton: { borderRadius: 16, paddingVertical: 15, alignItems: 'center', backgroundColor: COLORS.ink },
   shareButtonText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
@@ -627,4 +1120,54 @@ const styles = StyleSheet.create({
   emptyHistoryTitle: { marginTop: 18, color: COLORS.ink, fontSize: 22, fontWeight: '900' },
   emptyHistoryCopy: { marginTop: 8, color: COLORS.muted, fontSize: 13, textAlign: 'center', lineHeight: 20 },
   historyDetailMeta: { marginTop: 18, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  historyDetailScroll: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 34 },
+  historyDetailHeading: { marginTop: 8, marginBottom: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 },
+  historyDetailDate: { marginTop: 6, color: COLORS.ink, fontSize: 30, fontWeight: '900' },
+  historyDetailArea: { flexShrink: 1, color: COLORS.signal, fontSize: 12, fontWeight: '900', textAlign: 'right' },
+  historyDetailHero: { width: '100%', aspectRatio: 1.35, borderRadius: 22, backgroundColor: COLORS.line },
+  historyDetailNoPhoto: { minHeight: 150, borderRadius: 22, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
+  historyDetailNoPhotoEmoji: { color: COLORS.ink, fontSize: 34, letterSpacing: 4 },
+  historyArchiveCard: { marginTop: 16, padding: 14, borderRadius: 20, backgroundColor: '#EDE7DC', borderWidth: 1, borderColor: COLORS.line },
+  historyArchiveLabel: { marginBottom: 10, color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  historyPhotoStrip: { gap: 9, paddingTop: 14 },
+  historyDetailThumb: { width: 82, height: 82, borderRadius: 12, backgroundColor: COLORS.line },
+  historyEndCard: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
+  historyEndPlace: { marginTop: 5, color: COLORS.signal, fontSize: 18, fontWeight: '900' },
+  historyStatsCard: { marginTop: 12, marginBottom: 16, paddingVertical: 16, paddingHorizontal: 20, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
+  historyStatsValue: { color: COLORS.ink, fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  historyStatsLabel: { marginTop: 3, color: COLORS.muted, fontSize: 10, fontWeight: '800', textAlign: 'center' },
+  shareSafe: { flex: 1, backgroundColor: COLORS.ink },
+  shareHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  shareBackButton: { paddingVertical: 8, paddingRight: 12 },
+  shareBackText: { color: COLORS.paper, fontSize: 13, fontWeight: '900' },
+  shareHeaderLabel: { color: '#BDB5A8', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  shareScroll: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34 },
+  shareCaptureCard: { width: '100%', aspectRatio: 0.8, borderRadius: 24, overflow: 'hidden', padding: 18 },
+  shareCaptureCardPhoto: { backgroundColor: COLORS.ink },
+  shareCaptureCardTicket: { backgroundColor: COLORS.paper },
+  shareCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  shareCardBrand: { color: COLORS.signal, fontSize: 13, fontWeight: '900', letterSpacing: 2.6 },
+  shareCardSerial: { color: '#8E8579', fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+  shareCardHeroPhoto: { width: '100%', flex: 1, minHeight: 190, borderRadius: 18, backgroundColor: '#2D2924' },
+  shareCardIdentity: { paddingTop: 13 },
+  shareCardEmoji: { color: COLORS.paper, fontSize: 27, lineHeight: 36, letterSpacing: 3 },
+  shareCardPlace: { marginTop: 3, color: '#C7BFB3', fontSize: 12, fontWeight: '700' },
+  shareCardTicketMain: { flex: 1, minHeight: 220, justifyContent: 'center', paddingHorizontal: 8 },
+  shareCardTicketKicker: { color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  shareCardTicketEmoji: { marginTop: 18, color: COLORS.ink, fontSize: 38, lineHeight: 52, letterSpacing: 5 },
+  shareCardTicketRule: { height: 1, marginTop: 22, backgroundColor: COLORS.line },
+  shareCardTicketPlace: { marginTop: 14, color: COLORS.signal, fontSize: 16, fontWeight: '900' },
+  shareCardRoute: { marginTop: 12 },
+  shareCardRouteLabel: { color: '#8E8579', fontSize: 8, fontWeight: '900', letterSpacing: 1.3 },
+  shareCardRouteGraphic: { height: 72, marginTop: 4, borderRadius: 14, overflow: 'hidden', backgroundColor: 'rgba(129,121,111,0.10)' },
+  shareCardRouteEmpty: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
+  shareCardRouteDash: { flex: 1, height: 4, borderRadius: 99, backgroundColor: COLORS.signal, opacity: 0.55 },
+  shareCardRouteDot: { width: 12, height: 12, marginLeft: -6, borderRadius: 6, backgroundColor: COLORS.signal },
+  shareCardBottom: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(142,133,121,0.24)', flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  shareCardMeta: { flexShrink: 1, color: '#8E8579', fontSize: 9, fontWeight: '800' },
+  sharePreviewHint: { marginTop: 13, color: '#BDB5A8', fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  shareError: { marginTop: 10, color: '#FFB29E', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  sharePrimaryButton: { marginTop: 18, borderRadius: 18, paddingVertical: 16, alignItems: 'center', backgroundColor: COLORS.signal },
+  sharePrimaryText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
+  shareEmpty: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'center' },
 });

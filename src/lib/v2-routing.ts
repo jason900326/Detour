@@ -5,8 +5,14 @@ import {
   signedAngle,
   type NavigationRoute,
 } from './navigation-engine';
+import {
+  closingStopPriority,
+  rubberBandCorrectionDegrees,
+} from './v2-routing-policy';
 import { offsetPoint } from './geo-utils';
 import type { WalkingRoute } from './routing-engine';
+
+export { closingStopPriority } from './v2-routing-policy';
 
 export type V2RouteOption = {
   origin: GeoPoint;
@@ -20,11 +26,31 @@ export type V2RouteOption = {
 export function buildShortRouteDestinations(
   start: GeoPoint,
   seed: number,
-  previousBearing: number | null
+  previousBearing: number | null,
+  journeyAnchor?: GeoPoint | null,
+  distanceScale = 1
 ) {
-  const base = previousBearing ?? ((seed * 73) % 360);
-  const offsets = previousBearing === null ? [0, 90, 180, 270] : [-60, 12, 72, 138];
-  const distances = [150, 175, 205, 230];
+  let base = previousBearing ?? ((seed * 73) % 360);
+  let offsets = previousBearing === null ? [0, 90, 180, 270] : [-60, 12, 72, 138];
+
+  if (journeyAnchor && distanceBetween(start, journeyAnchor) > 420) {
+    const anchorBearing = bearingBetween(start, journeyAnchor);
+    if (previousBearing === null) {
+      base = anchorBearing;
+      offsets = [-45, 0, 45, 90];
+    } else {
+      // Never snap back toward the anchor. Bend at most 75° per short segment
+      // so deviation feels accepted while the journey gradually stays bounded.
+      base =
+        previousBearing +
+        rubberBandCorrectionDegrees(previousBearing, anchorBearing);
+      offsets = [-34, 0, 34, 68];
+    }
+  }
+
+  const distances = [150, 175, 205, 230].map((distance) =>
+    Math.round(distance * Math.max(0.6, distanceScale))
+  );
 
   return offsets.map((offset, index) =>
     offsetPoint(start, distances[index], base + offset)
@@ -56,11 +82,13 @@ export function chooseBestV2Route(
   options: V2RouteOption[],
   previousRoutes: GeoPoint[][],
   previousBearing: number | null,
-  purpose: 'exploration' | 'closing'
+  purpose: 'exploration' | 'closing',
+  targetDistanceMeters?: number
 ) {
   if (options.length === 0) return null;
 
-  const targetDistance = purpose === 'closing' ? 190 : 175;
+  const targetDistance =
+    targetDistanceMeters ?? (purpose === 'closing' ? 190 : 175);
   const scored = options
     .map((option) => {
       const bearing = routeBearing(option.walkingRoute, option.origin);

@@ -90,8 +90,16 @@ export function createIndoorWalkingRoute(
   };
 }
 
-export function indoorClosingDestination(origin: GeoPoint, seed: number) {
-  return offsetPoint(origin, 165, ((Math.floor(seed) * 61) % 360 + 360) % 360);
+export function indoorClosingDestination(
+  origin: GeoPoint,
+  seed: number,
+  distanceMeters = 190
+) {
+  return offsetPoint(
+    origin,
+    Math.max(120, distanceMeters),
+    ((Math.floor(seed) * 61) % 360 + 360) % 360
+  );
 }
 
 export function pointAlongPolyline(
