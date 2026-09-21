@@ -47,6 +47,7 @@ import {
 } from '../lib/v2-routing';
 import {
   closingRouteTargetDistanceMeters,
+  isSpatiallyConsistentOffRouteSample,
   isTrustedV2GpsAccuracy,
 } from '../lib/v2-routing-policy';
 import { usePassportStore } from './use-passport-store';
@@ -744,9 +745,11 @@ export function useV2DetourController() {
 
       if (offRouteDistance > 75) {
         const previousOffRouteCandidate = offRouteCandidateRef.current;
-        const spatiallyConsistent =
-          previousOffRouteCandidate !== null &&
-          distanceBetween(previousOffRouteCandidate, point) <= 55;
+        const spatiallyConsistent = isSpatiallyConsistentOffRouteSample({
+          previous: previousOffRouteCandidate,
+          current: point,
+          distanceMeters: distanceBetween,
+        });
 
         if (!spatiallyConsistent) {
           offRouteCandidateRef.current = point;
