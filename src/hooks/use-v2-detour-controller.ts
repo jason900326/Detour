@@ -38,6 +38,7 @@ import {
 import {
   buildShortRouteDestinations,
   chooseBestV2Route,
+  closingStopPriority,
   type V2RouteOption,
 } from '../lib/v2-routing';
 import { usePassportStore } from './use-passport-store';
@@ -392,11 +393,18 @@ export function useV2DetourController() {
           minutes: V2_MINUTES,
           distanceScale: 0.55,
         });
-        const endCandidates = candidates.filter((candidate) =>
-          ['green-space', 'square', 'pedestrian', 'footbridge', 'viewpoint', 'fountain'].includes(
-            candidate.kind
+        const endCandidates = candidates
+          .filter((candidate) =>
+            ['green-space', 'square', 'pedestrian', 'footbridge', 'viewpoint', 'fountain'].includes(
+              candidate.kind
+            )
           )
-        );
+          .sort((a, b) => {
+            const suitability =
+              closingStopPriority(a.kind) - closingStopPriority(b.kind);
+            if (suitability !== 0) return suitability;
+            return a.straightDistanceMeters - b.straightDistanceMeters;
+          });
 
         const results = await Promise.allSettled(
           endCandidates.slice(0, 5).map(async (candidate) => ({
