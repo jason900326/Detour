@@ -32,3 +32,7 @@ export function closingRouteTargetDistanceMeters(elapsedSeconds: number) {
   const adaptiveDistance = 190 + secondsBeforeEightMinutes * 0.9;
   return Math.round(Math.max(190, Math.min(480, adaptiveDistance)));
 }
+
+export function isTrustedV2GpsAccuracy(accuracyMeters: number | null | undefined) {
+  return (accuracyMeters ?? Number.POSITIVE_INFINITY) <= 60;
+}
