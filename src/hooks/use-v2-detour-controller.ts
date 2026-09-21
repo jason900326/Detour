@@ -34,6 +34,7 @@ import {
   shouldOfferV2ClosingTarget,
   targetDifficultyForNext,
   replacementDifficultyForV2,
+  resolveV2CompletionPlace,
   type V2TargetDifficulty,
   type V2Target,
 } from '../lib/v2-journey';
@@ -574,13 +575,11 @@ export function useV2DetourController() {
       const durationSeconds = Math.max(1, Math.round((finishedAt - startedAt) / 1000));
       const point = currentPointRef.current;
       const areaLabel = await resolveAreaLabel(point, playtestModeRef.current);
-      const resolvedEndPlace =
-        reason === 'time-limit'
-          ? '現在這裡'
-          : endPlaceLabelRef.current ??
-            (playtestModeRef.current === 'indoor'
-              ? '室內測試完成點'
-              : '附近的停留點');
+      const resolvedEndPlace = resolveV2CompletionPlace({
+        reason,
+        selectedEndPlace: endPlaceLabelRef.current,
+        indoor: playtestModeRef.current === 'indoor',
+      });
       endPlaceLabelRef.current = resolvedEndPlace;
       setEndPlaceLabel(resolvedEndPlace);
 
