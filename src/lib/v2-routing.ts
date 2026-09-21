@@ -20,10 +20,27 @@ export type V2RouteOption = {
 export function buildShortRouteDestinations(
   start: GeoPoint,
   seed: number,
-  previousBearing: number | null
+  previousBearing: number | null,
+  journeyAnchor?: GeoPoint | null
 ) {
-  const base = previousBearing ?? ((seed * 73) % 360);
-  const offsets = previousBearing === null ? [0, 90, 180, 270] : [-60, 12, 72, 138];
+  let base = previousBearing ?? ((seed * 73) % 360);
+  let offsets = previousBearing === null ? [0, 90, 180, 270] : [-60, 12, 72, 138];
+
+  if (journeyAnchor && distanceBetween(start, journeyAnchor) > 420) {
+    const anchorBearing = bearingBetween(start, journeyAnchor);
+    if (previousBearing === null) {
+      base = anchorBearing;
+      offsets = [-45, 0, 45, 90];
+    } else {
+      const correction = signedAngle(anchorBearing - previousBearing);
+      // Never snap back toward the anchor. Bend at most 75° per short segment
+      // so deviation feels accepted while the journey gradually stays bounded.
+      const boundedCorrection = Math.max(-75, Math.min(75, correction));
+      base = previousBearing + boundedCorrection;
+      offsets = [-34, 0, 34, 68];
+    }
+  }
+
   const distances = [150, 175, 205, 230];
 
   return offsets.map((offset, index) =>
