@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Share } from 'react-native';
+import { AppState, Share } from 'react-native';
 
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -392,8 +392,10 @@ export function useV2DetourController() {
         // A closing location is a bonus from the environment. The journey
         // can still end at a safe nearby route point if OSM is unavailable.
       } finally {
-        routePlanningRef.current = false;
-        setIsPlanning(false);
+        if (closingRequestId === routeRequestRef.current) {
+          routePlanningRef.current = false;
+          setIsPlanning(false);
+        }
       }
 
       if (closingRequestId !== routeRequestRef.current || phaseRef.current !== 'closing') {
@@ -614,6 +616,10 @@ export function useV2DetourController() {
     setEndPlaceLabel(null);
     finishInFlightRef.current = false;
     indoorRouteProgressRef.current = 0;
+    stopWatchers();
+    routeRequestRef.current += 1;
+    routePlanningRef.current = false;
+    setRouteSafe(null);
 
     if (mode === 'indoor') {
       const point = INDOOR_START_POINT;
@@ -850,6 +856,26 @@ export function useV2DetourController() {
     }, [consumeCameraResult])
   );
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        stopWatchers();
+        return;
+      }
+
+      if (playtestModeRef.current !== 'live') return;
+      if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
+      void startWatchers();
+    });
+
+    return () => {
+      subscription.remove();
+      stopWatchers();
+      routeRequestRef.current += 1;
+      routePlanningRef.current = false;
+    };
+  }, [startWatchers, stopWatchers]);
+
   const openHistory = useCallback(() => {
     setHistoryDetail(null);
     setPhaseSafe('history');
@@ -877,8 +903,11 @@ export function useV2DetourController() {
   const goHome = useCallback(() => {
     stopWatchers();
     routeRequestRef.current += 1;
+    routePlanningRef.current = false;
     setRouteSafe(null);
     setHistoryDetail(null);
+    setErrorMessage(null);
+    setStatusMessage('');
     setPlaytestModeSafe('live');
     setPhaseSafe('home');
   }, [setPhaseSafe, setPlaytestModeSafe, setRouteSafe, stopWatchers]);
