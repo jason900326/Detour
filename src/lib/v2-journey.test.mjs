@@ -56,6 +56,7 @@ test('V2 environment data only weakly biases the eligible target pool', () => {
 
 test('V2 enters closing after enough discoveries or at the ten-minute boundary', () => {
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 7 * 60, discoveries: 3 }), false);
+  assert.equal(shouldEnterV2Closing({ elapsedSeconds: 2 * 60, discoveries: 4 }), true);
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 8 * 60, discoveries: 3 }), true);
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 10 * 60, discoveries: 1 }), true);
 });
