@@ -1188,7 +1188,9 @@ export function useV2DetourController() {
       });
     }
 
-    indoorRouteProgressRef.current = route.walkingRoute.distanceMeters;
+    // The final beat may synchronously register the next short route, which
+    // resets indoorRouteProgressRef to zero. Do not overwrite that reset with
+    // the completed route's old distance.
   }, [handleLocationUpdate]);
 
   const simulateIndoorDeviation = useCallback((distanceMeters = 100) => {
