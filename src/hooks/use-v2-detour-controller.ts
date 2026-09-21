@@ -982,14 +982,14 @@ export function useV2DetourController() {
       return;
     }
 
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') {
-      setErrorMessage('需要位置權限，Detour 才能從你現在的位置安排下一小段。');
-      setPhaseSafe('home');
-      return;
-    }
-
     try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setErrorMessage('需要位置權限，Detour 才能從你現在的位置安排下一小段。');
+        setPhaseSafe('home');
+        return;
+      }
+
       const location = await withTimeout(
         Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
