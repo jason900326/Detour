@@ -818,7 +818,7 @@ export function useV2DetourController() {
     photosRef.current = [];
     setShareEntry(null);
     cameraRequestIdRef.current = null;
-    void removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
+    await removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
     setTrace([]);
     traceRef.current = [];
     setDiscoveries(0);
