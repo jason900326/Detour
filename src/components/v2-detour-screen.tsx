@@ -388,11 +388,19 @@ function IndoorPlaytestControls({
       </View>
       <View style={styles.indoorButtonRow}>
         <Pressable
+          onPress={() => controller.simulateIndoorFastForward(5 * 60)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉 5:00</Text>
+        </Pressable>
+        <Pressable
           onPress={() => controller.simulateIndoorFastForward(8 * 60 + 30)}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
         >
           <Text style={styles.indoorButtonText}>快轉 8:30</Text>
         </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
         <Pressable
           onPress={() => controller.simulateIndoorFastForward(10 * 60)}
           style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
