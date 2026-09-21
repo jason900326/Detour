@@ -476,7 +476,25 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
           <View style={styles.closingCard}>
             <Text style={styles.closingEyebrow}>FINAL STRETCH</Text>
             <Text style={styles.closingTitle}>最後一段。</Text>
-            <Text style={styles.closingCopy}>不會再出新題。再走一小段，到了才揭曉這趟停在哪裡。</Text>
+            <Text style={styles.closingCopy}>不會再出新的主要題目。再走一小段，到了才揭曉這趟停在哪裡。</Text>
+            {controller.activeTarget && (
+              <View style={styles.closingTarget}>
+                <View style={styles.closingTargetCopy}>
+                  <Text style={styles.closingTargetKicker}>最後順便找找看</Text>
+                  <Text style={styles.closingTargetTitle}>
+                    {controller.activeTarget.emoji}  {controller.activeTarget.title}
+                  </Text>
+                </View>
+                <View style={styles.closingTargetActions}>
+                  <Pressable onPress={controller.replaceTarget} style={styles.closingReplaceButton}>
+                    <Text style={styles.closingReplaceText}>換一個</Text>
+                  </Pressable>
+                  <Pressable onPress={() => void controller.markFound()} style={styles.closingFoundButton}>
+                    <Text style={styles.closingFoundText}>找到了</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
             <View style={styles.closingPromise}>
               <Text style={styles.closingPromiseText}>
                 {closingMinutes ? `約 ${closingMinutes} 分鐘 · 不用趕` : '快到了 · 不用趕'}
@@ -853,6 +871,15 @@ const styles = StyleSheet.create({
   closingEyebrow: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   closingTitle: { marginTop: 12, color: COLORS.paper, fontSize: 28, fontWeight: '900' },
   closingCopy: { marginTop: 8, color: '#D4CDC1', fontSize: 14, lineHeight: 21 },
+  closingTarget: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)' },
+  closingTargetCopy: { gap: 4 },
+  closingTargetKicker: { color: '#FFB29E', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  closingTargetTitle: { color: COLORS.paper, fontSize: 16, fontWeight: '900', lineHeight: 22 },
+  closingTargetActions: { marginTop: 10, flexDirection: 'row', gap: 8 },
+  closingReplaceButton: { flex: 1, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 9, alignItems: 'center' },
+  closingReplaceText: { color: '#D4CDC1', fontSize: 10, fontWeight: '900' },
+  closingFoundButton: { flex: 1.3, borderRadius: 12, backgroundColor: COLORS.signal, paddingVertical: 9, alignItems: 'center' },
+  closingFoundText: { color: COLORS.paper, fontSize: 10, fontWeight: '900' },
   closingPromise: { marginTop: 18, alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: 'rgba(255,255,255,0.1)' },
   closingPromiseText: { color: '#FFB29E', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   waitingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
