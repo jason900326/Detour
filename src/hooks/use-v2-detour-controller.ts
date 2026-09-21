@@ -275,7 +275,10 @@ export function useV2DetourController() {
           const indoorOption =
             chooseBestV2Route(
               options,
-              previousRouteCoordinatesRef.current,
+              [
+                ...(traceRef.current.length > 1 ? [traceRef.current] : []),
+                ...previousRouteCoordinatesRef.current,
+              ],
               previousBearingRef.current,
               purpose
             ) ?? options[0];
@@ -334,7 +337,10 @@ export function useV2DetourController() {
 
         const best = chooseBestV2Route(
           options,
-          previousRouteCoordinatesRef.current,
+          [
+            ...(traceRef.current.length > 1 ? [traceRef.current] : []),
+            ...previousRouteCoordinatesRef.current,
+          ],
           previousBearingRef.current,
           purpose
         );
@@ -435,7 +441,10 @@ export function useV2DetourController() {
         });
         bestOption = chooseBestV2Route(
           options,
-          previousRouteCoordinatesRef.current,
+          [
+            ...(traceRef.current.length > 1 ? [traceRef.current] : []),
+            ...previousRouteCoordinatesRef.current,
+          ],
           previousBearingRef.current,
           'closing'
         );
