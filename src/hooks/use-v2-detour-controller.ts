@@ -815,9 +815,15 @@ export function useV2DetourController() {
 
       const point = currentPointRef.current;
       if (nextElapsed >= MAX_JOURNEY_SECONDS) {
+        setStatusMessage('室內測試：已到 15:00，驗證 Forced Finish。');
         void finishJourney('time-limit');
       } else if (point && phaseRef.current === 'exploration') {
-        enterClosingIfNeeded(point, nextElapsed);
+        const enteredClosing = enterClosingIfNeeded(point, nextElapsed);
+        if (!enteredClosing && nextElapsed >= CLOSING_START_SECONDS) {
+          setStatusMessage(
+            `室內測試：${Math.floor(nextElapsed / 60)}:${String(nextElapsed % 60).padStart(2, '0')}，目前 ${discoveriesRef.current} 個發現；未滿 3 個時應維持 Exploration。`
+          );
+        }
       }
     },
     [enterClosingIfNeeded, finishJourney]
