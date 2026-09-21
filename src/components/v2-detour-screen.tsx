@@ -447,7 +447,6 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             <View style={styles.targetEmojiBubble}>
               <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
             </View>
-            <Text style={styles.targetEyebrow}>沿路找找看</Text>
             <Text style={styles.targetTitle}>{controller.activeTarget.title}</Text>
             <View style={styles.targetActions}>
               <Pressable onPress={controller.replaceTarget} style={styles.replaceButton}>
@@ -792,8 +791,7 @@ const styles = StyleSheet.create({
   targetCard: { marginTop: 12, padding: 18, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center' },
   targetEmojiBubble: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
   targetEmoji: { fontSize: 34 },
-  targetEyebrow: { marginTop: 12, color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  targetTitle: { marginTop: 7, color: COLORS.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  targetTitle: { marginTop: 12, color: COLORS.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
   targetActions: { width: '100%', marginTop: 18, flexDirection: 'row', gap: 10 },
   replaceButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   replaceButtonText: { color: COLORS.muted, fontSize: 14, fontWeight: '800' },
