@@ -240,28 +240,46 @@ export function useV2DetourController() {
 
       try {
         if (playtestModeRef.current === 'indoor') {
-          const walkingRoute = createIndoorWalkingRoute(
-            origin,
-            purpose,
-            Date.now() + discoveriesRef.current * 17,
-            fixedDestination?.point
-          );
-          const destination =
-            walkingRoute.coordinates[walkingRoute.coordinates.length - 1] ?? origin;
-          const indoorOption: V2RouteOption = {
-            origin,
-            destination,
-            walkingRoute,
-            navigationRoute: buildNavigationRouteFromPolyline({
-              coordinates: walkingRoute.coordinates,
-              totalDistanceMeters: walkingRoute.distanceMeters,
-              durationSeconds: walkingRoute.durationSeconds,
-            }),
-            purpose,
-            label: fixedDestination?.label,
-          };
+          const seed = Date.now() + discoveriesRef.current * 17;
+          const destinations = fixedDestination
+            ? [fixedDestination.point]
+            : buildShortRouteDestinations(
+                origin,
+                seed,
+                previousBearingRef.current,
+                journeyAnchorRef.current
+              );
 
-          if (requestId !== routeRequestRef.current) return false;
+          const options: V2RouteOption[] = destinations.map((destination, index) => {
+            const walkingRoute = createIndoorWalkingRoute(
+              origin,
+              purpose,
+              seed + index,
+              destination
+            );
+            return {
+              origin,
+              destination,
+              walkingRoute,
+              navigationRoute: buildNavigationRouteFromPolyline({
+                coordinates: walkingRoute.coordinates,
+                totalDistanceMeters: walkingRoute.distanceMeters,
+                durationSeconds: walkingRoute.durationSeconds,
+              }),
+              purpose,
+              label: fixedDestination?.label,
+            };
+          });
+
+          const indoorOption =
+            chooseBestV2Route(
+              options,
+              previousRouteCoordinatesRef.current,
+              previousBearingRef.current,
+              purpose
+            ) ?? options[0];
+
+          if (!indoorOption || requestId !== routeRequestRef.current) return false;
           registerRoute(indoorOption);
           if (purpose === 'closing') {
             endPlaceLabelRef.current = fixedDestination?.label ?? '室內測試收尾點';
@@ -852,7 +870,7 @@ export function useV2DetourController() {
     indoorRouteProgressRef.current = route.walkingRoute.distanceMeters;
   }, [handleLocationUpdate]);
 
-  const simulateIndoorDeviation = useCallback(() => {
+  const simulateIndoorDeviation = useCallback((distanceMeters = 100) => {
     if (playtestModeRef.current !== 'indoor') return;
     if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
 
@@ -862,7 +880,7 @@ export function useV2DetourController() {
 
     const bearing =
       route.navigationRoute.beats[route.beatIndex]?.bearingDegrees ?? heading;
-    const deviated = indoorDeviationPoint(point, bearing);
+    const deviated = indoorDeviationPoint(point, bearing, distanceMeters);
     handleLocationUpdate({
       coords: {
         latitude: deviated.latitude,
@@ -875,7 +893,11 @@ export function useV2DetourController() {
       },
       timestamp: Date.now(),
     });
-    setStatusMessage('室內測試：已模擬偏離，觀察是否從目前位置重新安排。');
+    setStatusMessage(
+      distanceMeters > 420
+        ? '室內測試：已遠偏離，下一段應逐步往原探索區彎回，但不要求原路返回。'
+        : '室內測試：已模擬偏離，觀察是否從目前位置重新安排。'
+    );
   }, [handleLocationUpdate, heading]);
 
   const simulateIndoorFastForward = useCallback(
