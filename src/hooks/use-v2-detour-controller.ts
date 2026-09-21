@@ -49,6 +49,7 @@ import {
   closingRouteTargetDistanceMeters,
   isSpatiallyConsistentOffRouteSample,
   isTrustedV2GpsAccuracy,
+  isUsableV2StartAccuracy,
 } from '../lib/v2-routing-policy';
 import { usePassportStore } from './use-passport-store';
 import {
@@ -695,6 +696,10 @@ export function useV2DetourController() {
 
   const handleLocationUpdate = useCallback(
     (location: Location.LocationObject) => {
+      if (!isUsableV2StartAccuracy(location.coords.accuracy)) {
+        throw new Error('目前定位精度還不夠。請移到較開闊的位置後再試一次。');
+      }
+
       const point: GeoPoint = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
