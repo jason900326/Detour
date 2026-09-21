@@ -1328,6 +1328,10 @@ export function useV2DetourController() {
       stopWatchers();
       routeRequestRef.current += 1;
       routePlanningRef.current = false;
+      finishRequestRef.current += 1;
+      finishInFlightRef.current = false;
+      environmentRequestRef.current += 1;
+      cameraRequestIdRef.current = null;
     };
   }, [startWatchers, stopWatchers]);
 
