@@ -42,6 +42,14 @@ function navigationInstructionLabel(turn: string) {
   return '繼續直走';
 }
 
+function navigationDistanceLabel(meters: number, turn: string) {
+  if (turn === 'arrive') return '沿著這條路走到終點';
+  if (meters < 10) return '很快就到下一個路口';
+
+  const roundedMeters = Math.max(10, Math.round(meters / 10) * 10);
+  return `約 ${roundedMeters} 公尺後`;
+}
+
 function formatElapsedJourneyTime(totalSeconds: number) {
   const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
   const seconds = Math.max(0, totalSeconds) % 60;
@@ -90,6 +98,7 @@ export function DetourHomeView({
     selectedScene,
     navigationRoute,
     currentNavigationBeat,
+    beatRemainingMeters,
     deviceHeading,
     nextBeatSegment,
     questPulse,
@@ -872,6 +881,12 @@ export function DetourHomeView({
                   <Text style={styles.v35JourneyInstruction}>
                     {navigationInstructionLabel(currentNavigationBeat.turn)}
                   </Text>
+                  <Text style={styles.v35JourneyInstructionDistance}>
+                    {navigationDistanceLabel(
+                      beatRemainingMeters,
+                      currentNavigationBeat.turn
+                    )}
+                  </Text>
                 </View>
               </View>
 
@@ -954,7 +969,7 @@ export function DetourHomeView({
                   pressed && styles.v35JourneyPressed,
                 ]}
               >
-                <Text style={styles.v35DevAdvanceText}>室內模式，走一段路</Text>
+                <Text style={styles.v35DevAdvanceText}>室內測試：走到下一個路口</Text>
               </Pressable>
             )}
 
