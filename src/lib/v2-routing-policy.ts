@@ -26,3 +26,9 @@ export function rubberBandCorrectionDegrees(
     Math.min(maxCorrectionDegrees, correction)
   );
 }
+
+export function closingRouteTargetDistanceMeters(elapsedSeconds: number) {
+  const secondsBeforeEightMinutes = Math.max(0, 8 * 60 - elapsedSeconds);
+  const adaptiveDistance = 190 + secondsBeforeEightMinutes * 0.9;
+  return Math.round(Math.max(190, Math.min(480, adaptiveDistance)));
+}
