@@ -43,6 +43,7 @@ import {
   closingStopPriority,
   type V2RouteOption,
 } from '../lib/v2-routing';
+import { closingRouteTargetDistanceMeters } from '../lib/v2-routing-policy';
 import { usePassportStore } from './use-passport-store';
 import {
   createIndoorWalkingRoute,
@@ -401,7 +402,9 @@ export function useV2DetourController() {
   );
 
   const planClosingRoute = useCallback(
-    async (origin: GeoPoint) => {
+    async (origin: GeoPoint, currentElapsedSeconds: number) => {
+      const closingTargetMeters =
+        closingRouteTargetDistanceMeters(currentElapsedSeconds);
       const closingRequestId = routeRequestRef.current + 1;
       routeRequestRef.current = closingRequestId;
       setRouteSafe(null);
@@ -426,7 +429,11 @@ export function useV2DetourController() {
 
       if (playtestModeRef.current === 'indoor') {
         return planShortRoute(origin, 'closing', {
-          point: indoorClosingDestination(origin, Date.now()),
+          point: indoorClosingDestination(
+            origin,
+            Date.now(),
+            closingTargetMeters
+          ),
           label: '室內測試收尾點',
         });
       }
@@ -442,7 +449,10 @@ export function useV2DetourController() {
           moodId: 'wander',
           context,
           minutes: V2_MINUTES,
-          distanceScale: 0.55,
+          distanceScale: Math.min(
+            0.95,
+            Math.max(0.55, (closingTargetMeters / 480) * 0.9)
+          ),
         });
         const endCandidates = candidates
           .filter((candidate) =>
@@ -484,14 +494,19 @@ export function useV2DetourController() {
             },
           ];
         });
+        const distanceEligibleOptions = options.filter(
+          (option) =>
+            option.walkingRoute.distanceMeters >= closingTargetMeters * 0.55
+        );
         bestOption = chooseBestV2Route(
-          options,
+          distanceEligibleOptions,
           [
             ...(traceRef.current.length > 1 ? [traceRef.current] : []),
             ...previousRouteCoordinatesRef.current,
           ],
           previousBearingRef.current,
-          'closing'
+          'closing',
+          closingTargetMeters
         );
       } catch {
         // A closing location is a bonus from the environment. The journey
@@ -516,7 +531,22 @@ export function useV2DetourController() {
 
       endPlaceLabelRef.current = '附近的停留點';
       setEndPlaceLabel(endPlaceLabelRef.current);
-      return planShortRoute(origin, 'closing');
+      const fallbackScale = closingTargetMeters / 175;
+      const fallbackDestinations = buildShortRouteDestinations(
+        origin,
+        Date.now() + 404,
+        previousBearingRef.current,
+        journeyAnchorRef.current,
+        fallbackScale
+      );
+      const fallbackPoint =
+        fallbackDestinations[1] ??
+        fallbackDestinations[0] ??
+        origin;
+      return planShortRoute(origin, 'closing', {
+        point: fallbackPoint,
+        label: '附近的停留點',
+      });
     },
     [planShortRoute, registerRoute, setPhaseSafe, setTargetSafe]
   );
@@ -598,7 +628,7 @@ export function useV2DetourController() {
         return false;
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      void planClosingRoute(point);
+      void planClosingRoute(point, currentElapsedSeconds);
       return true;
     },
     [planClosingRoute]
