@@ -180,3 +180,15 @@ export function shouldForceV2Finish(elapsedSeconds: number) {
 export function shouldOfferV2ClosingTarget(discoveries: number) {
   return discoveries < 4;
 }
+
+export function resolveV2CompletionPlace(args: {
+  reason: 'arrived' | 'time-limit' | 'manual';
+  selectedEndPlace: string | null;
+  indoor: boolean;
+}) {
+  if (args.reason === 'time-limit') return '現在這裡';
+  return (
+    args.selectedEndPlace ??
+    (args.indoor ? '室內測試完成點' : '附近的停留點')
+  );
+}
