@@ -133,6 +133,7 @@ export function useV2DetourController() {
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const indoorRouteProgressRef = useRef(0);
+  const environmentKindsRef = useRef<string[]>([]);
 
   const {
     passport,
@@ -168,6 +169,26 @@ export function useV2DetourController() {
     locationWatcherRef.current = null;
     headingWatcherRef.current?.remove();
     headingWatcherRef.current = null;
+  }, []);
+
+  const refreshEnvironmentHints = useCallback(async (point: GeoPoint) => {
+    if (playtestModeRef.current !== 'live') return;
+    try {
+      const context = getLightContext(point);
+      const candidates = await findSceneCandidates({
+        start: point,
+        moodId: 'wander',
+        context,
+        minutes: V2_MINUTES,
+        distanceScale: 0.45,
+      });
+      environmentKindsRef.current = Array.from(
+        new Set(candidates.slice(0, 16).map((candidate) => candidate.kind))
+      );
+    } catch {
+      // Environment data is only a weak probability hint. The generic target
+      // pool must remain fully playable when OSM/Overpass is unavailable.
+    }
   }, []);
 
   const registerRoute = useCallback(
@@ -578,6 +599,7 @@ export function useV2DetourController() {
         difficulty,
         excludedIds: previousTargetIdsRef.current,
         excludedEmojis: emojiTrailRef.current,
+        environmentKinds: environmentKindsRef.current,
         seed: Date.now() + discoveriesRef.current * 17,
       });
       previousTargetIdsRef.current = [...previousTargetIdsRef.current, target.id].slice(-8);
@@ -612,6 +634,7 @@ export function useV2DetourController() {
     previousTargetIdsRef.current = [];
     previousRouteCoordinatesRef.current = [];
     previousBearingRef.current = null;
+    environmentKindsRef.current = [];
     endPlaceLabelRef.current = null;
     setEndPlaceLabel(null);
     finishInFlightRef.current = false;
@@ -668,6 +691,7 @@ export function useV2DetourController() {
       startedAtRef.current = Date.now();
       setPhaseSafe('exploration');
       chooseNextTarget(null);
+      void refreshEnvironmentHints(point);
       await startWatchers();
       const routed = await planShortRoute(point, 'exploration');
       if (!routed) {
@@ -685,6 +709,7 @@ export function useV2DetourController() {
   }, [
     chooseNextTarget,
     planShortRoute,
+    refreshEnvironmentHints,
     setPhaseSafe,
     setPlaytestModeSafe,
     startWatchers,
@@ -716,8 +741,11 @@ export function useV2DetourController() {
     if (point && enterClosingIfNeeded(point, elapsed)) return;
 
     chooseNextTarget(targetSeconds, target.difficulty);
-    if (point) void planShortRoute(point, 'exploration');
-  }, [chooseNextTarget, enterClosingIfNeeded, planShortRoute, setTargetSafe]);
+    if (point) {
+      void refreshEnvironmentHints(point);
+      void planShortRoute(point, 'exploration');
+    }
+  }, [chooseNextTarget, enterClosingIfNeeded, planShortRoute, refreshEnvironmentHints, setTargetSafe]);
 
   const replaceTarget = useCallback(() => {
     if (phaseRef.current !== 'exploration' || !activeTargetRef.current) return;
