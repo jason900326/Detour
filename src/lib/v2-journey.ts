@@ -1,6 +1,22 @@
 export type V2TargetDifficulty = 'easy' | 'medium' | 'hard';
 export type V2TargetGaze = 'up' | 'level' | 'down' | 'flex';
 
+export type V2EnvironmentKind =
+  | 'green-space'
+  | 'square'
+  | 'pedestrian'
+  | 'market'
+  | 'food'
+  | 'mural'
+  | 'street-art'
+  | 'artwork'
+  | 'culture'
+  | 'steps'
+  | 'footbridge'
+  | 'fountain'
+  | 'viewpoint'
+  | string;
+
 export type V2Target = {
   id: string;
   emoji: string;
@@ -63,10 +79,57 @@ export function targetDifficultyForNext(args: {
   return 'medium';
 }
 
+function environmentBoost(target: V2Target, kinds: readonly V2EnvironmentKind[]) {
+  const environment = new Set(kinds);
+  let boost = 0;
+
+  if (
+    environment.has('green-space') ||
+    environment.has('square') ||
+    environment.has('viewpoint')
+  ) {
+    if (['tree', 'flower', 'cloud', 'chair', 'shadow', 'plant'].includes(target.id)) {
+      boost += 1;
+    }
+  }
+
+  if (environment.has('market') || environment.has('food')) {
+    if (['door', 'window', 'sign', 'number', 'red-object', 'reflection'].includes(target.id)) {
+      boost += 1;
+    }
+  }
+
+  if (
+    environment.has('mural') ||
+    environment.has('street-art') ||
+    environment.has('artwork') ||
+    environment.has('culture')
+  ) {
+    if (['graffiti', 'red-object', 'reflection', 'modified', 'added-later'].includes(target.id)) {
+      boost += 1;
+    }
+  }
+
+  if (
+    environment.has('pedestrian') ||
+    environment.has('steps') ||
+    environment.has('footbridge')
+  ) {
+    if (['door', 'window', 'chair', 'round-shape', 'number', 'repaired'].includes(target.id)) {
+      boost += 1;
+    }
+  }
+
+  // Deliberately cap the weight. OSM is a probability hint, never proof that
+  // a specific object exists nearby.
+  return Math.min(1, boost);
+}
+
 export function chooseV2Target(args: {
   difficulty: V2TargetDifficulty;
   excludedIds?: readonly string[];
   excludedEmojis?: readonly string[];
+  environmentKinds?: readonly V2EnvironmentKind[];
   seed?: number;
 }): V2Target {
   const excludedIds = new Set(args.excludedIds ?? []);
@@ -82,8 +145,15 @@ export function chooseV2Target(args: {
     (target) => !excludedIds.has(target.id) && !excludedEmojis.has(target.emoji)
   );
   const source = pool.length > 0 ? pool : fallbackPool;
-  const index = Math.abs(Math.floor(args.seed ?? Date.now())) % Math.max(1, source.length);
-  return source[index] ?? V2_TARGETS[0];
+  const environmentKinds = args.environmentKinds ?? [];
+  const weightedSource = source.flatMap((target) => {
+    const weight = 1 + environmentBoost(target, environmentKinds);
+    return Array.from({ length: weight }, () => target);
+  });
+  const index =
+    Math.abs(Math.floor(args.seed ?? Date.now())) %
+    Math.max(1, weightedSource.length);
+  return weightedSource[index] ?? source[0] ?? V2_TARGETS[0];
 }
 
 export function shouldEnterV2Closing(args: {
