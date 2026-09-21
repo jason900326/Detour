@@ -199,6 +199,7 @@ export function useV2DetourController() {
   const offRouteSamplesRef = useRef(0);
   const offRouteCandidateRef = useRef<GeoPoint | null>(null);
   const environmentKindsRef = useRef<string[]>([]);
+  const environmentRequestRef = useRef(0);
   const cameraRequestIdRef = useRef<string | null>(null);
   const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
 
@@ -242,6 +243,9 @@ export function useV2DetourController() {
 
   const refreshEnvironmentHints = useCallback(async (point: GeoPoint) => {
     if (playtestModeRef.current !== 'live') return;
+    const requestId = environmentRequestRef.current + 1;
+    environmentRequestRef.current = requestId;
+
     try {
       const context = getLightContext(point);
       const candidates = await findSceneCandidates({
@@ -251,6 +255,7 @@ export function useV2DetourController() {
         minutes: V2_MINUTES,
         distanceScale: 0.45,
       });
+      if (requestId !== environmentRequestRef.current) return;
       environmentKindsRef.current = Array.from(
         new Set(candidates.slice(0, 16).map((candidate) => candidate.kind))
       );
@@ -909,6 +914,7 @@ export function useV2DetourController() {
     previousTargetIdsRef.current = [];
     previousRouteCoordinatesRef.current = [];
     previousBearingRef.current = null;
+    environmentRequestRef.current += 1;
     environmentKindsRef.current = [];
     journeyAnchorRef.current = null;
     endPlaceLabelRef.current = null;
@@ -1358,6 +1364,8 @@ export function useV2DetourController() {
     setHistoryDetail(null);
     setShareEntry(null);
     cameraRequestIdRef.current = null;
+    environmentRequestRef.current += 1;
+    environmentKindsRef.current = [];
     setErrorMessage(null);
     setStatusMessage('');
     setPlaytestModeSafe('live');
