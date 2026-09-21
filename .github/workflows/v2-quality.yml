@@ -1,9 +1,9 @@
 name: V2 branch quality
 
 on:
-  pull_request:
+  push:
     branches:
-      - codex/detour-v2-indoor-playtest
+      - codex/detour-v2-outdoor-hardening
     paths:
       - "src/**"
       - "package.json"
@@ -12,7 +12,7 @@ on:
       - ".github/workflows/v2-quality.yml"
 
 concurrency:
-  group: v2-quality-${{ github.event.pull_request.number }}
+  group: v2-quality-branch
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout PR
+      - name: Checkout branch
         uses: actions/checkout@v5
 
       - name: Setup Node
