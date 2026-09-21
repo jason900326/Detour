@@ -923,6 +923,12 @@ export function useV2DetourController() {
     [enterClosingIfNeeded, finishJourney]
   );
 
+  const simulateIndoorTargetAge = useCallback((seconds = 120) => {
+    if (playtestModeRef.current !== 'indoor' || !activeTargetRef.current) return;
+    targetStartedAtRef.current = Date.now() - Math.max(1, seconds) * 1000;
+    setStatusMessage(`室內測試：目前題目已模擬尋找 ${Math.round(seconds)} 秒；按「找到了」後下一題應依節奏調整難度。`);
+  }, []);
+
   const simulateIndoorFinish = useCallback(() => {
     if (playtestModeRef.current !== 'indoor') return;
     void finishJourney('manual');
@@ -1110,6 +1116,7 @@ export function useV2DetourController() {
     simulateIndoorStepToEnd,
     simulateIndoorDeviation,
     simulateIndoorFastForward,
+    simulateIndoorTargetAge,
     simulateIndoorFinish,
     markFound,
     replaceTarget,
