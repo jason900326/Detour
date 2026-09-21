@@ -40,15 +40,19 @@ export function usePassportStore() {
   const [passportPhotoIndex, setPassportPhotoIndex] =
     useState(0);
 
-  const loadPassport = useCallback(async () => {
+  const loadPassport = useCallback(async (): Promise<PassportEntry[]> => {
     try {
       const parsed = await readStored(PASSPORT_KEY, isPassport);
-      if (parsed) setPassport(parsed);
+      if (parsed) {
+        setPassport(parsed);
+        return parsed;
+      }
     } catch {
       // Local history must never block the app.
     } finally {
       setPassportLoaded(true);
     }
+    return [];
   }, []);
 
   const savePassport = useCallback(async (nextPassport: PassportEntry[]) => {
