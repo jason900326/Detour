@@ -847,7 +847,6 @@ export function useV2DetourController() {
         return false;
       }
       locationWatcherRef.current = locationWatcher;
-      setErrorMessage(null);
       return true;
     } catch {
       if (generation === watcherGenerationRef.current) {
