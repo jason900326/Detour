@@ -25,7 +25,7 @@ import {
   fetchWalkingRoute,
   type WalkingRoute,
 } from '../lib/routing-engine';
-import { findSceneCandidates, type SceneCandidate } from '../lib/scene-engine';
+import { findSceneCandidates } from '../lib/scene-engine';
 import { readStored, removeStored } from '../lib/storage';
 import {
   chooseV2Target,
@@ -136,6 +136,7 @@ export function useV2DetourController() {
   const ticketSerialRef = useRef(ticketSerial);
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const headingWatcherRef = useRef<Location.LocationSubscription | null>(null);
+  const watcherGenerationRef = useRef(0);
   const indoorRouteProgressRef = useRef(0);
   const environmentKindsRef = useRef<string[]>([]);
   const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
@@ -170,6 +171,7 @@ export function useV2DetourController() {
   }, []);
 
   const stopWatchers = useCallback(() => {
+    watcherGenerationRef.current += 1;
     locationWatcherRef.current?.remove();
     locationWatcherRef.current = null;
     headingWatcherRef.current?.remove();
@@ -617,16 +619,23 @@ export function useV2DetourController() {
 
   const startWatchers = useCallback(async () => {
     stopWatchers();
+    const generation = watcherGenerationRef.current;
+
     try {
-      headingWatcherRef.current = await Location.watchHeadingAsync((nextHeading) => {
+      const headingWatcher = await Location.watchHeadingAsync((nextHeading) => {
         const value = nextHeading.trueHeading >= 0 ? nextHeading.trueHeading : nextHeading.magHeading;
         if (Number.isFinite(value)) setHeading(value);
       });
+      if (generation !== watcherGenerationRef.current) {
+        headingWatcher.remove();
+        return;
+      }
+      headingWatcherRef.current = headingWatcher;
     } catch {
       // A route still works without a compass heading.
     }
 
-    locationWatcherRef.current = await Location.watchPositionAsync(
+    const locationWatcher = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
         distanceInterval: 5,
@@ -634,6 +643,11 @@ export function useV2DetourController() {
       },
       handleLocationUpdate
     );
+    if (generation !== watcherGenerationRef.current) {
+      locationWatcher.remove();
+      return;
+    }
+    locationWatcherRef.current = locationWatcher;
   }, [handleLocationUpdate, stopWatchers]);
 
   const chooseNextTarget = useCallback(
