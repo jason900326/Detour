@@ -27,7 +27,8 @@ export function buildShortRouteDestinations(
   start: GeoPoint,
   seed: number,
   previousBearing: number | null,
-  journeyAnchor?: GeoPoint | null
+  journeyAnchor?: GeoPoint | null,
+  distanceScale = 1
 ) {
   let base = previousBearing ?? ((seed * 73) % 360);
   let offsets = previousBearing === null ? [0, 90, 180, 270] : [-60, 12, 72, 138];
@@ -47,7 +48,9 @@ export function buildShortRouteDestinations(
     }
   }
 
-  const distances = [150, 175, 205, 230];
+  const distances = [150, 175, 205, 230].map((distance) =>
+    Math.round(distance * Math.max(0.6, distanceScale))
+  );
 
   return offsets.map((offset, index) =>
     offsetPoint(start, distances[index], base + offset)
@@ -79,11 +82,13 @@ export function chooseBestV2Route(
   options: V2RouteOption[],
   previousRoutes: GeoPoint[][],
   previousBearing: number | null,
-  purpose: 'exploration' | 'closing'
+  purpose: 'exploration' | 'closing',
+  targetDistanceMeters?: number
 ) {
   if (options.length === 0) return null;
 
-  const targetDistance = purpose === 'closing' ? 190 : 175;
+  const targetDistance =
+    targetDistanceMeters ?? (purpose === 'closing' ? 190 : 175);
   const scored = options
     .map((option) => {
       const bearing = routeBearing(option.walkingRoute, option.origin);
