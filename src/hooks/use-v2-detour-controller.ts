@@ -167,6 +167,7 @@ export function useV2DetourController() {
   const indoorRouteProgressRef = useRef(0);
   const offRouteSamplesRef = useRef(0);
   const environmentKindsRef = useRef<string[]>([]);
+  const cameraRequestIdRef = useRef<string | null>(null);
   const shareReturnPhaseRef = useRef<'finish' | 'history'>('finish');
 
   const {
@@ -816,6 +817,8 @@ export function useV2DetourController() {
     setPhotos([]);
     photosRef.current = [];
     setShareEntry(null);
+    cameraRequestIdRef.current = null;
+    void removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
     setTrace([]);
     traceRef.current = [];
     setDiscoveries(0);
@@ -1132,6 +1135,7 @@ export function useV2DetourController() {
 
   const openCamera = useCallback(() => {
     const requestId = `v2-free-${Date.now()}`;
+    cameraRequestIdRef.current = requestId;
     router.push({
       pathname: '/camera',
       params: {
@@ -1146,10 +1150,20 @@ export function useV2DetourController() {
   const consumeCameraResult = useCallback(async () => {
     const result = await readStored(CAMERA_RESULT_KEY, isCameraRouteResult);
     if (!result || result.source !== 'free') return;
+
+    const expectedRequestId = cameraRequestIdRef.current;
+    if (!expectedRequestId || result.requestId !== expectedRequestId) {
+      // A free-camera result from an older route must never leak into the
+      // current V2 Journey.
+      await removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
+      return;
+    }
+
     const nextPhotos = [...photosRef.current, result.photo];
     photosRef.current = nextPhotos;
     setPhotos(nextPhotos);
-    await removeStored(CAMERA_RESULT_KEY);
+    cameraRequestIdRef.current = null;
+    await removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
   }, []);
 
   useFocusEffect(
@@ -1234,6 +1248,7 @@ export function useV2DetourController() {
     setRouteSafe(null);
     setHistoryDetail(null);
     setShareEntry(null);
+    cameraRequestIdRef.current = null;
     setErrorMessage(null);
     setStatusMessage('');
     setPlaytestModeSafe('live');
