@@ -1434,17 +1434,20 @@ export function useV2DetourController() {
   );
 
   const currentRouteRemainingSeconds = useMemo(() => {
-    if (!routeState || !currentPoint) return null;
+    if (!routeState) return null;
+
+    const trustedPoint = trace[trace.length - 1] ?? currentPoint;
+    if (!trustedPoint) return null;
 
     const remainingMeters = remainingDistanceOnPolyline(
-      currentPoint,
+      trustedPoint,
       routeState.navigationRoute.coordinates
     );
     const totalMeters = Math.max(1, routeState.walkingRoute.distanceMeters);
     const totalSeconds = Math.max(1, routeState.walkingRoute.durationSeconds);
     const ratio = Math.max(0, Math.min(1, remainingMeters / totalMeters));
     return Math.max(0, Math.round(totalSeconds * ratio));
-  }, [currentPoint, routeState]);
+  }, [currentPoint, routeState, trace]);
 
   const walkedDistanceMeters = useMemo(
     () => Math.round(getRouteDistance(trace)),
