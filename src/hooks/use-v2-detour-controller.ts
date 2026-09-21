@@ -658,8 +658,9 @@ export function useV2DetourController() {
         ? passportRef.current
         : await loadPassport();
       passportLoadedRef.current = true;
-      passportRef.current = existingPassport;
-      await savePassport([entry, ...existingPassport]);
+      const nextPassport = [entry, ...existingPassport];
+      passportRef.current = nextPassport;
+      await savePassport(nextPassport);
       setShareEntry(entry);
       setElapsedSeconds(durationSeconds);
       setStatusMessage(
