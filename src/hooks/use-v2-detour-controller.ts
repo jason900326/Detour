@@ -634,7 +634,8 @@ export function useV2DetourController() {
       const finishedAt = Date.now();
       const startedAt = startedAtRef.current ?? finishedAt;
       const durationSeconds = Math.max(1, Math.round((finishedAt - startedAt) / 1000));
-      const point = currentPointRef.current;
+      const point =
+        lastTrustedTracePointRef.current ?? currentPointRef.current;
       const areaLabel = await resolveAreaLabel(point, playtestModeRef.current);
       if (finishRequestId !== finishRequestRef.current) return;
 
