@@ -446,8 +446,8 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
   const closing = controller.phase === 'closing';
   const beat = controller.currentNavigationBeat;
   const closingMinutes =
-    closing && controller.routeState?.walkingRoute.durationSeconds
-      ? Math.max(1, Math.ceil(controller.routeState.walkingRoute.durationSeconds / 60))
+    closing && controller.currentRouteRemainingSeconds != null
+      ? Math.max(1, Math.ceil(controller.currentRouteRemainingSeconds / 60))
       : null;
   return (
     <SafeAreaView style={styles.safe}>
