@@ -59,6 +59,25 @@ function routeRegion(point: { latitude: number; longitude: number } | null) {
   };
 }
 
+function routePreviewRegion(
+  coordinates: { latitude: number; longitude: number }[]
+) {
+  if (coordinates.length === 0) return null;
+  const latitudes = coordinates.map((point) => point.latitude);
+  const longitudes = coordinates.map((point) => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+    latitudeDelta: Math.max(0.002, (maxLatitude - minLatitude) * 1.45),
+    longitudeDelta: Math.max(0.002, (maxLongitude - minLongitude) * 1.45),
+  };
+}
+
 function V2Ticket({
   serial,
   emojiTrail,
@@ -151,6 +170,46 @@ function JourneyMap({
       </MapView>
       <View pointerEvents="none" style={styles.mapCaption}>
         <Text style={styles.mapCaptionText}>只看下一小段</Text>
+      </View>
+    </View>
+  );
+}
+
+function RoutePreview({
+  coordinates,
+  label = '這趟走過的路',
+}: {
+  coordinates: { latitude: number; longitude: number }[];
+  label?: string;
+}) {
+  const region = useMemo(() => routePreviewRegion(coordinates), [coordinates]);
+  if (!region || coordinates.length < 2) return null;
+
+  return (
+    <View style={styles.routePreviewWrap}>
+      <Text style={styles.routePreviewLabel}>{label}</Text>
+      <View style={styles.routePreviewFrame}>
+        <MapView
+          provider={PROVIDER_DEFAULT}
+          style={StyleSheet.absoluteFill}
+          region={region}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          toolbarEnabled={false}
+          showsCompass={false}
+          showsPointsOfInterests={false}
+          showsBuildings={false}
+        >
+          <Polyline
+            coordinates={coordinates}
+            strokeColor={COLORS.signal}
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
+          />
+        </MapView>
       </View>
     </View>
   );
@@ -419,6 +478,8 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
           </ScrollView>
         )}
 
+        <RoutePreview coordinates={controller.trace} />
+
         <View style={styles.finishActions}>
           <Pressable onPress={() => void controller.shareCurrentJourney()} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
@@ -474,6 +535,7 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
               {entry.photos.map((photo) => <Image key={photo.id} source={{ uri: photo.uri }} style={styles.finishPhoto} />)}
             </ScrollView>
           )}
+          <RoutePreview coordinates={entry.route ?? []} label="當時走過的路" />
           <Text style={styles.historyDetailMeta}>{entry.discoveries} 個發現 · {entry.photoCount ?? 0} 張照片</Text>
           <Pressable onPress={() => void controller.shareHistoryEntry(entry)} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
@@ -621,6 +683,9 @@ const styles = StyleSheet.create({
   finishMetaText: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
   photoRow: { gap: 10, paddingTop: 18, paddingBottom: 4 },
   finishPhoto: { width: 118, height: 118, borderRadius: 14, backgroundColor: COLORS.line },
+  routePreviewWrap: { marginTop: 20 },
+  routePreviewLabel: { marginBottom: 8, color: COLORS.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  routePreviewFrame: { height: 150, overflow: 'hidden', borderRadius: 18, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.map },
   finishActions: { marginTop: 24, gap: 10 },
   shareButton: { borderRadius: 16, paddingVertical: 15, alignItems: 'center', backgroundColor: COLORS.ink },
   shareButtonText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
