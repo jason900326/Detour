@@ -1181,6 +1181,48 @@ export function useV2DetourController() {
     [routeState]
   );
 
+  const walkedDistanceMeters = useMemo(
+    () => Math.round(getRouteDistance(trace)),
+    [trace]
+  );
+
+  const indoorDiagnostics = useMemo(() => {
+    if (playtestMode !== 'indoor') return null;
+
+    const anchor = journeyAnchorRef.current;
+    const distanceFromAnchorMeters =
+      anchor && currentPoint
+        ? Math.round(distanceBetween(anchor, currentPoint))
+        : 0;
+    const routeDistanceMeters = routeState
+      ? Math.round(routeState.walkingRoute.distanceMeters)
+      : 0;
+
+    const routeStartDistanceFromAnchor =
+      anchor && routeState
+        ? distanceBetween(anchor, routeState.origin)
+        : null;
+    const routeEndDistanceFromAnchor =
+      anchor && routeState
+        ? distanceBetween(anchor, routeState.destination)
+        : null;
+    const rubberBandActive =
+      routeStartDistanceFromAnchor !== null &&
+      routeStartDistanceFromAnchor > 420;
+    const rubberBandReturning =
+      rubberBandActive &&
+      routeEndDistanceFromAnchor !== null &&
+      routeEndDistanceFromAnchor < routeStartDistanceFromAnchor;
+
+    return {
+      distanceFromAnchorMeters,
+      routeDistanceMeters,
+      routePurpose: routeState?.purpose ?? null,
+      rubberBandActive,
+      rubberBandReturning,
+    };
+  }, [currentPoint, playtestMode, routeState]);
+
   const startOver = useCallback(() => {
     void startJourney(playtestModeRef.current);
   }, [startJourney]);
@@ -1196,6 +1238,8 @@ export function useV2DetourController() {
     routeState,
     routeCoordinates,
     currentNavigationBeat,
+    walkedDistanceMeters,
+    indoorDiagnostics,
     activeTarget,
     emojiTrail,
     photos,
