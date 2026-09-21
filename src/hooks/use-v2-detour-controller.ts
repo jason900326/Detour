@@ -91,6 +91,27 @@ function makeTicketSerial() {
   return `DTR-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+
 async function resolveAreaLabel(
   point: GeoPoint | null,
   mode: V2PlaytestMode
@@ -99,7 +120,11 @@ async function resolveAreaLabel(
   if (!point) return '這一帶';
 
   try {
-    const [address] = await Location.reverseGeocodeAsync(point);
+    const [address] = await withTimeout(
+      Location.reverseGeocodeAsync(point),
+      1800,
+      'reverse-geocode-timeout'
+    );
     if (!address) return '這一帶';
 
     const primary = address.district ?? address.city ?? address.subregion;
@@ -871,9 +896,13 @@ export function useV2DetourController() {
     }
 
     try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
+      const location = await withTimeout(
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        }),
+        10000,
+        '定位逾時，請確認定位服務後再試一次。'
+      );
       const point: GeoPoint = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
