@@ -45,8 +45,17 @@ function navigationCopy(turn: NavigationTurn | undefined, closing: boolean) {
   if (turn === 'right') return '下一個路口右轉';
   if (turn === 'slight-left') return '往左前方續走';
   if (turn === 'slight-right') return '往右前方續走';
-  if (turn === 'arrive') return closing ? '最後一小段。' : '沿這段路找找看。';
-  return closing ? '往這邊走一小段。' : '沿這段路找找看。';
+  if (turn === 'arrive') return closing ? '最後一小段。' : '';
+  return closing ? '往這邊走一小段。' : '';
+}
+
+function isDirectionDecision(turn: NavigationTurn | undefined) {
+  return (
+    turn === 'left' ||
+    turn === 'right' ||
+    turn === 'slight-left' ||
+    turn === 'slight-right'
+  );
 }
 
 function routeRegion(point: { latitude: number; longitude: number } | null) {
@@ -411,11 +420,14 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
 
       <View style={styles.journeyContent}>
         <View style={styles.navigationHint}>
-          <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-          {controller.isPlanning && <Text style={styles.navigationSubHint}>下一小段正在形成</Text>}
-          {!controller.isPlanning && beat?.turn === 'continue' && !closing && (
-            <Text style={styles.navigationSubHint}>不用看地圖，先找眼前的東西</Text>
+          {(closing || isDirectionDecision(beat?.turn)) && (
+            <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
           )}
+          {controller.isPlanning ? (
+            <Text style={styles.navigationSubHint}>下一小段正在形成</Text>
+          ) : !closing && !isDirectionDecision(beat?.turn) ? (
+            <Text style={styles.navigationSubHint}>先看四周，不用一直盯地圖</Text>
+          ) : null}
         </View>
 
         {closing ? (
@@ -759,11 +771,11 @@ const styles = StyleSheet.create({
   journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   journeyState: { marginTop: 3, color: COLORS.muted, fontSize: 11, fontWeight: '700' },
   elapsed: { color: COLORS.ink, fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  mapFrame: { height: 215, marginHorizontal: 14, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
+  mapFrame: { height: 170, marginHorizontal: 14, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
   mapCaption: { position: 'absolute', left: 12, top: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.88)' },
   mapCaptionText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
   journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
-  navigationHint: { minHeight: 40, alignItems: 'center' },
+  navigationHint: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
   navigationHintText: { color: COLORS.ink, fontSize: 16, fontWeight: '900' },
   navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 11, fontWeight: '600' },
   targetCard: { marginTop: 12, padding: 18, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center' },
