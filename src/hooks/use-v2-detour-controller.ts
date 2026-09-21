@@ -929,6 +929,7 @@ export function useV2DetourController() {
     photosRef.current = [];
     setShareEntry(null);
     cameraRequestIdRef.current = null;
+    setTargetSafe(null);
     await removeStored(CAMERA_RESULT_KEY).catch(() => undefined);
     setTrace([]);
     traceRef.current = [];
@@ -1399,6 +1400,7 @@ export function useV2DetourController() {
     routeRequestRef.current += 1;
     routePlanningRef.current = false;
     setRouteSafe(null);
+    setTargetSafe(null);
     setHistoryDetail(null);
     setShareEntry(null);
     cameraRequestIdRef.current = null;
@@ -1410,7 +1412,7 @@ export function useV2DetourController() {
     setStatusMessage('');
     setPlaytestModeSafe('live');
     setPhaseSafe('home');
-  }, [setPhaseSafe, setPlaytestModeSafe, setRouteSafe, stopWatchers]);
+  }, [setPhaseSafe, setPlaytestModeSafe, setRouteSafe, setTargetSafe, stopWatchers]);
 
   useEffect(() => {
     passportRef.current = passport;
