@@ -956,7 +956,7 @@ export function useV2DetourController() {
   );
 
   const startOver = useCallback(() => {
-    void startJourney();
+    void startJourney(playtestModeRef.current);
   }, [startJourney]);
 
   return {
