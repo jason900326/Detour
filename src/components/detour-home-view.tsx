@@ -959,6 +959,7 @@ export function DetourHomeView({
                 >
                   <Image
                     source={{ uri: photos[photos.length - 1].uri }}
+                    resizeMode="cover"
                     style={styles.v35JourneyAlbumImage}
                   />
                   <View style={styles.v35JourneyAlbumLabel}>
@@ -1027,14 +1028,25 @@ export function DetourHomeView({
                       .slice(-6)
                       .reverse()
                       .map((photo) => (
-                        <Image
+                        <View
                           key={photo.id}
-                          source={{ uri: photo.uri }}
-                          style={styles.v35JourneyAlbumGridImage}
-                        />
+                          style={styles.v35JourneyAlbumGridCell}
+                        >
+                          <Image
+                            source={{ uri: photo.uri }}
+                            resizeMode="cover"
+                            style={styles.v35JourneyAlbumGridImage}
+                          />
+                        </View>
                       ))}
                     {Array.from({ length: Math.max(0, 6 - photos.length) }).map((_, index) => (
-                      <View key={`empty-${index}`} style={styles.v35JourneyAlbumGridEmpty} />
+                      <View
+                        key={`empty-${index}`}
+                        style={[
+                          styles.v35JourneyAlbumGridCell,
+                          styles.v35JourneyAlbumGridEmpty,
+                        ]}
+                      />
                     ))}
                   </View>
                 </Pressable>
