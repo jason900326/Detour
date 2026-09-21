@@ -519,24 +519,63 @@ function HistoryEntryCard({
 function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   if (controller.historyDetail) {
     const entry = controller.historyDetail;
+    const coverPhoto = entry.photos?.[0];
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.finishScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.historyDetailScroll} showsVerticalScrollIndicator={false}>
           <Pressable onPress={() => controller.showHistoryEntry(null)} style={styles.backLink}>
             <Text style={styles.backLinkText}>← 所有紀錄</Text>
           </Pressable>
-          <Text style={styles.smallLabel}>JOURNEY HISTORY</Text>
-          <Text style={styles.finishTitle}>{dateLabel(entry.completedAt)}</Text>
-          <Text style={styles.finishPlace}>{entry.city}</Text>
-          <V2Ticket serial={entry.ticketSerial} emojiTrail={entry.emojiTrail ?? []} />
-          {entry.photos && entry.photos.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
-              {entry.photos.map((photo) => <Image key={photo.id} source={{ uri: photo.uri }} style={styles.finishPhoto} />)}
+
+          <View style={styles.historyDetailHeading}>
+            <View>
+              <Text style={styles.smallLabel}>JOURNEY HISTORY</Text>
+              <Text style={styles.historyDetailDate}>{dateLabel(entry.completedAt)}</Text>
+            </View>
+            <Text style={styles.historyDetailArea}>{entry.city}</Text>
+          </View>
+
+          {coverPhoto ? (
+            <Image source={{ uri: coverPhoto.uri }} style={styles.historyDetailHero} />
+          ) : (
+            <View style={styles.historyDetailNoPhoto}>
+              <Text style={styles.historyDetailNoPhotoEmoji}>{entry.emojiTrail?.join(' ') || '—'}</Text>
+            </View>
+          )}
+
+          <View style={styles.historyArchiveCard}>
+            <Text style={styles.historyArchiveLabel}>這趟留下的票</Text>
+            <V2Ticket serial={entry.ticketSerial} emojiTrail={entry.emojiTrail ?? []} compact />
+          </View>
+
+          {entry.photos && entry.photos.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.historyPhotoStrip}>
+              {entry.photos.slice(1).map((photo) => (
+                <Image key={photo.id} source={{ uri: photo.uri }} style={styles.historyDetailThumb} />
+              ))}
             </ScrollView>
           )}
+
           <RoutePreview coordinates={entry.route ?? []} label="當時走過的路" />
-          <Text style={styles.historyDetailMeta}>{entry.discoveries} 個發現 · {entry.photoCount ?? 0} 張照片</Text>
+
+          <View style={styles.historyStatsCard}>
+            <View>
+              <Text style={styles.historyStatsValue}>{entry.discoveries}</Text>
+              <Text style={styles.historyStatsLabel}>發現</Text>
+            </View>
+            <View>
+              <Text style={styles.historyStatsValue}>{entry.photoCount ?? 0}</Text>
+              <Text style={styles.historyStatsLabel}>照片</Text>
+            </View>
+            <View>
+              <Text style={styles.historyStatsValue}>
+                {Math.max(1, Math.round(entry.actualDurationMinutes ?? entry.minutes))}
+              </Text>
+              <Text style={styles.historyStatsLabel}>分鐘</Text>
+            </View>
+          </View>
+
           <Pressable onPress={() => controller.openHistoryShare(entry)} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
@@ -774,6 +813,20 @@ const styles = StyleSheet.create({
   emptyHistoryTitle: { marginTop: 18, color: COLORS.ink, fontSize: 22, fontWeight: '900' },
   emptyHistoryCopy: { marginTop: 8, color: COLORS.muted, fontSize: 13, textAlign: 'center', lineHeight: 20 },
   historyDetailMeta: { marginTop: 18, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  historyDetailScroll: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 34 },
+  historyDetailHeading: { marginTop: 8, marginBottom: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 },
+  historyDetailDate: { marginTop: 6, color: COLORS.ink, fontSize: 30, fontWeight: '900' },
+  historyDetailArea: { flexShrink: 1, color: COLORS.signal, fontSize: 12, fontWeight: '900', textAlign: 'right' },
+  historyDetailHero: { width: '100%', aspectRatio: 1.35, borderRadius: 22, backgroundColor: COLORS.line },
+  historyDetailNoPhoto: { minHeight: 150, borderRadius: 22, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
+  historyDetailNoPhotoEmoji: { color: COLORS.ink, fontSize: 34, letterSpacing: 4 },
+  historyArchiveCard: { marginTop: 16, padding: 14, borderRadius: 20, backgroundColor: '#EDE7DC', borderWidth: 1, borderColor: COLORS.line },
+  historyArchiveLabel: { marginBottom: 10, color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  historyPhotoStrip: { gap: 9, paddingTop: 14 },
+  historyDetailThumb: { width: 82, height: 82, borderRadius: 12, backgroundColor: COLORS.line },
+  historyStatsCard: { marginTop: 18, marginBottom: 16, paddingVertical: 16, paddingHorizontal: 20, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
+  historyStatsValue: { color: COLORS.ink, fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  historyStatsLabel: { marginTop: 3, color: COLORS.muted, fontSize: 10, fontWeight: '800', textAlign: 'center' },
   shareSafe: { flex: 1, backgroundColor: COLORS.ink },
   shareHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   shareBackButton: { paddingVertical: 8, paddingRight: 12 },
