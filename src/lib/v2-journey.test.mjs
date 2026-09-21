@@ -8,6 +8,7 @@ import {
   shouldOfferV2ClosingTarget,
   targetDifficultyForNext,
   replacementDifficultyForV2,
+  resolveV2CompletionPlace,
 } from './v2-journey.ts';
 
 test('V2 starts with an easy target and escalates only after the first finding', () => {
@@ -73,4 +74,24 @@ test('V2 closing offers at most one lightweight target before four discoveries',
   assert.equal(shouldOfferV2ClosingTarget(3), true);
   assert.equal(shouldOfferV2ClosingTarget(4), false);
   assert.equal(shouldOfferV2ClosingTarget(7), false);
+});
+
+
+test('V2 forced finish never claims a destination the player did not reach', () => {
+  assert.equal(
+    resolveV2CompletionPlace({
+      reason: 'time-limit',
+      selectedEndPlace: '某個還沒走到的公園',
+      indoor: false,
+    }),
+    '現在這裡'
+  );
+  assert.equal(
+    resolveV2CompletionPlace({
+      reason: 'arrived',
+      selectedEndPlace: '小公園',
+      indoor: false,
+    }),
+    '小公園'
+  );
 });
