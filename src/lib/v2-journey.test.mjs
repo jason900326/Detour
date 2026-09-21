@@ -5,6 +5,7 @@ import {
   chooseV2Target,
   shouldEnterV2Closing,
   shouldForceV2Finish,
+  shouldOfferV2ClosingTarget,
   targetDifficultyForNext,
   replacementDifficultyForV2,
 } from './v2-journey.ts';
@@ -64,4 +65,12 @@ test('V2 enters closing after enough discoveries or at the ten-minute boundary',
 test('V2 forced finish is a time limit, not a failure state', () => {
   assert.equal(shouldForceV2Finish(14 * 60 + 59), false);
   assert.equal(shouldForceV2Finish(15 * 60), true);
+});
+
+
+test('V2 closing offers at most one lightweight target before four discoveries', () => {
+  assert.equal(shouldOfferV2ClosingTarget(0), true);
+  assert.equal(shouldOfferV2ClosingTarget(3), true);
+  assert.equal(shouldOfferV2ClosingTarget(4), false);
+  assert.equal(shouldOfferV2ClosingTarget(7), false);
 });
