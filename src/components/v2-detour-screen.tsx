@@ -596,6 +596,11 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
 
           <RoutePreview coordinates={entry.route ?? []} label="當時走過的路" />
 
+          <View style={styles.historyEndCard}>
+            <Text style={styles.historyArchiveLabel}>這趟停在</Text>
+            <Text style={styles.historyEndPlace}>{entry.sceneName ?? '這一帶'}</Text>
+          </View>
+
           <View style={styles.historyStatsCard}>
             <View>
               <Text style={styles.historyStatsValue}>{entry.discoveries}</Text>
@@ -862,7 +867,9 @@ const styles = StyleSheet.create({
   historyArchiveLabel: { marginBottom: 10, color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   historyPhotoStrip: { gap: 9, paddingTop: 14 },
   historyDetailThumb: { width: 82, height: 82, borderRadius: 12, backgroundColor: COLORS.line },
-  historyStatsCard: { marginTop: 18, marginBottom: 16, paddingVertical: 16, paddingHorizontal: 20, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
+  historyEndCard: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
+  historyEndPlace: { marginTop: 5, color: COLORS.signal, fontSize: 18, fontWeight: '900' },
+  historyStatsCard: { marginTop: 12, marginBottom: 16, paddingVertical: 16, paddingHorizontal: 20, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around' },
   historyStatsValue: { color: COLORS.ink, fontSize: 20, fontWeight: '900', textAlign: 'center' },
   historyStatsLabel: { marginTop: 3, color: COLORS.muted, fontSize: 10, fontWeight: '800', textAlign: 'center' },
   shareSafe: { flex: 1, backgroundColor: COLORS.ink },
