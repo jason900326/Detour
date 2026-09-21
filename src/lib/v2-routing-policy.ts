@@ -36,3 +36,16 @@ export function closingRouteTargetDistanceMeters(elapsedSeconds: number) {
 export function isTrustedV2GpsAccuracy(accuracyMeters: number | null | undefined) {
   return (accuracyMeters ?? Number.POSITIVE_INFINITY) <= 60;
 }
+
+export function isSpatiallyConsistentOffRouteSample(args: {
+  previous: { latitude: number; longitude: number } | null;
+  current: { latitude: number; longitude: number };
+  distanceMeters: (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => number;
+  maxSeparationMeters?: number;
+}) {
+  if (!args.previous) return false;
+  return (
+    args.distanceMeters(args.previous, args.current) <=
+    (args.maxSeparationMeters ?? 55)
+  );
+}
