@@ -180,6 +180,14 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
           <Text style={styles.startButtonArrow}>→</Text>
         </Pressable>
         <Text style={styles.homeTime}>約 10 分鐘</Text>
+        <Pressable
+          accessibilityLabel="室內測試"
+          onPress={controller.startIndoorJourney}
+          style={({ pressed }) => [styles.homeTestButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.homeTestLabel}>室內測試</Text>
+          <Text style={styles.homeTestCopy}>不需要 GPS · 模擬走路</Text>
+        </Pressable>
       </View>
 
       <View style={styles.homeBottom}>
@@ -207,13 +215,80 @@ function StartingPanel({ controller }: { controller: ReturnType<typeof useV2Deto
         {controller.errorMessage && (
           <View style={styles.inlineError}>
             <Text style={styles.errorText}>{controller.errorMessage}</Text>
-            <Pressable onPress={() => void controller.startJourney()} style={styles.retryButton}>
+            <Pressable
+              onPress={controller.isIndoorMode ? controller.startIndoorJourney : () => void controller.startJourney()}
+              style={styles.retryButton}
+            >
               <Text style={styles.retryButtonText}>再試一次</Text>
             </Pressable>
           </View>
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+function IndoorPlaytestControls({
+  controller,
+}: {
+  controller: ReturnType<typeof useV2DetourController>;
+}) {
+  if (!controller.isIndoorMode) return null;
+
+  return (
+    <View style={styles.indoorControls}>
+      <View style={styles.indoorControlsHeader}>
+        <Text style={styles.indoorControlsTitle}>室內測試控制</Text>
+        <Text style={styles.indoorControlsCopy}>不讀 GPS、不呼叫路線服務</Text>
+      </View>
+      <View style={styles.indoorButtonRow}>
+        <Pressable
+          disabled={controller.isPlanning}
+          onPress={() => controller.simulateIndoorStep(35)}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            styles.indoorButtonPrimary,
+            (pressed || controller.isPlanning) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonPrimaryText}>走 35m</Text>
+        </Pressable>
+        <Pressable
+          disabled={controller.isPlanning}
+          onPress={controller.simulateIndoorStepToEnd}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || controller.isPlanning) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>走到這段結尾</Text>
+        </Pressable>
+        <Pressable
+          disabled={controller.isPlanning}
+          onPress={controller.simulateIndoorDeviation}
+          style={({ pressed }) => [
+            styles.indoorButton,
+            (pressed || controller.isPlanning) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.indoorButtonText}>模擬偏離</Text>
+        </Pressable>
+      </View>
+      <View style={styles.indoorButtonRow}>
+        <Pressable
+          onPress={() => controller.simulateIndoorFastForward(10 * 60)}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>快轉到 Closing</Text>
+        </Pressable>
+        <Pressable
+          onPress={controller.simulateIndoorFinish}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>直接完成</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -270,6 +345,8 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             <Text style={styles.waitingCopy}>{controller.statusMessage}</Text>
           </View>
         )}
+
+        <IndoorPlaytestControls controller={controller} />
 
         <View style={styles.journeyBottomRow}>
           <Pressable
@@ -445,6 +522,9 @@ const styles = StyleSheet.create({
   startButtonText: { color: COLORS.paper, fontSize: 20, fontWeight: '900' },
   startButtonArrow: { color: COLORS.paper, fontSize: 25, fontWeight: '800' },
   homeTime: { marginTop: 12, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  homeTestButton: { marginTop: 20, minWidth: 230, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: COLORS.line, backgroundColor: 'rgba(255,253,247,0.56)', alignItems: 'center' },
+  homeTestLabel: { color: COLORS.ink, fontSize: 13, fontWeight: '900' },
+  homeTestCopy: { marginTop: 3, color: COLORS.muted, fontSize: 10, fontWeight: '700' },
   homeBottom: { paddingHorizontal: 24, paddingBottom: 20, alignItems: 'center' },
   homeAccent: { width: 42, height: 5, borderRadius: 99, backgroundColor: COLORS.signal, marginBottom: 12 },
   homeFootnote: { color: COLORS.muted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
@@ -496,6 +576,15 @@ const styles = StyleSheet.create({
   waitingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
   waitingTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
   waitingCopy: { marginTop: 7, color: COLORS.muted, fontSize: 13 },
+  indoorControls: { marginTop: 10, padding: 10, borderRadius: 16, backgroundColor: '#EAE3D7', borderWidth: 1, borderColor: COLORS.line },
+  indoorControlsHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  indoorControlsTitle: { color: COLORS.ink, fontSize: 11, fontWeight: '900' },
+  indoorControlsCopy: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  indoorButtonRow: { marginTop: 8, flexDirection: 'row', gap: 7 },
+  indoorButton: { flex: 1, minHeight: 32, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  indoorButtonPrimary: { backgroundColor: COLORS.signal, borderColor: COLORS.signal },
+  indoorButtonText: { color: COLORS.ink, fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  indoorButtonPrimaryText: { color: COLORS.paper, fontSize: 10, fontWeight: '900', textAlign: 'center' },
   journeyBottomRow: { marginTop: 12, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cameraButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
   cameraButtonIcon: { color: COLORS.signal, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
