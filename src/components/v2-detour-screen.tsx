@@ -481,7 +481,7 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
         <RoutePreview coordinates={controller.trace} />
 
         <View style={styles.finishActions}>
-          <Pressable onPress={() => void controller.shareCurrentJourney()} style={styles.shareButton}>
+          <Pressable onPress={controller.openCurrentShare} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
           <Pressable onPress={() => void controller.startOver()} style={styles.startAgainButton}>
@@ -537,7 +537,7 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
           )}
           <RoutePreview coordinates={entry.route ?? []} label="當時走過的路" />
           <Text style={styles.historyDetailMeta}>{entry.discoveries} 個發現 · {entry.photoCount ?? 0} 張照片</Text>
-          <Pressable onPress={() => void controller.shareHistoryEntry(entry)} style={styles.shareButton}>
+          <Pressable onPress={() => controller.openHistoryShare(entry)} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
         </ScrollView>
@@ -572,6 +572,69 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
   );
 }
 
+function SharePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
+  const entry = controller.shareEntry;
+
+  if (!entry) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.shareEmpty}>
+          <Text style={styles.finishTitle}>這趟還沒有可分享的內容。</Text>
+          <Pressable onPress={controller.closeShare} style={styles.historyLinkButton}>
+            <Text style={styles.historyLinkText}>返回</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const photo = entry.photos?.[0];
+  const emojis = entry.emojiTrail ?? [];
+
+  return (
+    <SafeAreaView style={styles.shareSafe}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.shareHeader}>
+        <Pressable onPress={controller.closeShare} style={styles.shareBackButton}>
+          <Text style={styles.shareBackText}>← 返回</Text>
+        </Pressable>
+        <Text style={styles.shareHeaderLabel}>SHARE DETOUR</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.shareScroll} showsVerticalScrollIndicator={false}>
+        {photo ? (
+          <>
+            <Image source={{ uri: photo.uri }} style={styles.shareHeroPhoto} />
+            <View style={styles.shareIdentityBlock}>
+              <Text style={styles.shareBrand}>DETOUR</Text>
+              <Text style={styles.shareEmoji}>{emojis.join(' ') || '—'}</Text>
+              <Text style={styles.sharePlace}>{entry.sceneName ?? entry.city}</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.shareTicketWrap}>
+            <V2Ticket serial={entry.ticketSerial} emojiTrail={emojis} />
+          </View>
+        )}
+
+        <RoutePreview coordinates={entry.route ?? []} label="這趟的路" />
+
+        <View style={styles.shareMetaRow}>
+          <Text style={styles.shareMeta}>{entry.discoveries} 個發現</Text>
+          <Text style={styles.shareMeta}>
+            {Math.max(1, Math.round(entry.actualDurationMinutes ?? entry.minutes))} 分鐘
+          </Text>
+        </View>
+
+        <Pressable onPress={() => void controller.performShare()} style={styles.sharePrimaryButton}>
+          <Text style={styles.sharePrimaryText}>叫出分享選單</Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 export function V2DetourScreen() {
   const controller = useV2DetourController();
   const panelByPhase: Record<V2Phase, ReactNode> = {
@@ -581,6 +644,7 @@ export function V2DetourScreen() {
     closing: <JourneyPanel controller={controller} />,
     finish: <FinishPanel controller={controller} />,
     history: <HistoryPanel controller={controller} />,
+    share: <SharePanel controller={controller} />,
   };
   return panelByPhase[controller.phase];
 }
@@ -710,4 +774,21 @@ const styles = StyleSheet.create({
   emptyHistoryTitle: { marginTop: 18, color: COLORS.ink, fontSize: 22, fontWeight: '900' },
   emptyHistoryCopy: { marginTop: 8, color: COLORS.muted, fontSize: 13, textAlign: 'center', lineHeight: 20 },
   historyDetailMeta: { marginTop: 18, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  shareSafe: { flex: 1, backgroundColor: COLORS.ink },
+  shareHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  shareBackButton: { paddingVertical: 8, paddingRight: 12 },
+  shareBackText: { color: COLORS.paper, fontSize: 13, fontWeight: '900' },
+  shareHeaderLabel: { color: '#BDB5A8', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  shareScroll: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34 },
+  shareHeroPhoto: { width: '100%', aspectRatio: 0.88, borderRadius: 24, backgroundColor: '#2D2924' },
+  shareIdentityBlock: { paddingTop: 20, paddingBottom: 4 },
+  shareBrand: { color: COLORS.signal, fontSize: 12, fontWeight: '900', letterSpacing: 2.4 },
+  shareEmoji: { marginTop: 10, color: COLORS.paper, fontSize: 30, lineHeight: 42, letterSpacing: 4 },
+  sharePlace: { marginTop: 7, color: '#BDB5A8', fontSize: 13, fontWeight: '700' },
+  shareTicketWrap: { alignItems: 'center', paddingVertical: 14 },
+  shareMetaRow: { marginTop: 16, flexDirection: 'row', justifyContent: 'space-between' },
+  shareMeta: { color: '#BDB5A8', fontSize: 11, fontWeight: '800' },
+  sharePrimaryButton: { marginTop: 22, borderRadius: 18, paddingVertical: 16, alignItems: 'center', backgroundColor: COLORS.signal },
+  sharePrimaryText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
+  shareEmpty: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'center' },
 });
