@@ -454,17 +454,26 @@ export function useV2DetourController() {
             Math.max(0.55, (closingTargetMeters / 480) * 0.9)
           ),
         });
+        const minimumStraightDistance = Math.min(
+          180,
+          closingTargetMeters * 0.35
+        );
         const endCandidates = candidates
-          .filter((candidate) =>
-            ['green-space', 'square', 'pedestrian', 'footbridge', 'viewpoint', 'fountain'].includes(
-              candidate.kind
-            )
+          .filter(
+            (candidate) =>
+              ['green-space', 'square', 'pedestrian', 'footbridge', 'viewpoint', 'fountain'].includes(
+                candidate.kind
+              ) &&
+              candidate.straightDistanceMeters >= minimumStraightDistance
           )
           .sort((a, b) => {
             const suitability =
               closingStopPriority(a.kind) - closingStopPriority(b.kind);
             if (suitability !== 0) return suitability;
-            return a.straightDistanceMeters - b.straightDistanceMeters;
+            return (
+              Math.abs(a.straightDistanceMeters - closingTargetMeters) -
+              Math.abs(b.straightDistanceMeters - closingTargetMeters)
+            );
           });
 
         const results = await Promise.allSettled(
