@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Image,
@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import MapView, { Circle, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg';
+import { captureRef } from 'react-native-view-shot';
 
 import type { PassportEntry } from '../lib/app-model';
 import type { NavigationTurn } from '../lib/navigation-engine';
@@ -96,6 +98,92 @@ function routePreviewRegion(
     latitudeDelta: Math.max(0.002, (maxLatitude - minLatitude) * 1.45),
     longitudeDelta: Math.max(0.002, (maxLongitude - minLongitude) * 1.45),
   };
+}
+
+function buildShareRoutePath(
+  coordinates: { latitude: number; longitude: number }[],
+  width = 300,
+  height = 92,
+  padding = 12
+) {
+  if (coordinates.length < 2) return null;
+
+  const latitudes = coordinates.map((point) => point.latitude);
+  const longitudes = coordinates.map((point) => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+  const latitudeRange = Math.max(0.000001, maxLatitude - minLatitude);
+  const longitudeRange = Math.max(0.000001, maxLongitude - minLongitude);
+
+  const points = coordinates.map((point) => ({
+    x:
+      padding +
+      ((point.longitude - minLongitude) / longitudeRange) *
+        (width - padding * 2),
+    y:
+      padding +
+      ((maxLatitude - point.latitude) / latitudeRange) *
+        (height - padding * 2),
+  }));
+
+  const path = points
+    .map((point, index) =>
+      `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+    )
+    .join(' ');
+
+  return {
+    path,
+    start: points[0],
+    end: points[points.length - 1],
+  };
+}
+
+function ShareRouteGraphic({
+  coordinates,
+}: {
+  coordinates: { latitude: number; longitude: number }[];
+}) {
+  const route = useMemo(() => buildShareRoutePath(coordinates), [coordinates]);
+
+  return (
+    <View style={styles.shareCardRoute}>
+      <Text style={styles.shareCardRouteLabel}>THIS DETOUR</Text>
+      <View style={styles.shareCardRouteGraphic}>
+        {route ? (
+          <Svg width="100%" height="100%" viewBox="0 0 300 92">
+            <SvgPath
+              d={route.path}
+              stroke={COLORS.signal}
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            <SvgCircle
+              cx={route.start.x}
+              cy={route.start.y}
+              r={5}
+              fill={COLORS.ink}
+            />
+            <SvgCircle
+              cx={route.end.x}
+              cy={route.end.y}
+              r={7}
+              fill={COLORS.signal}
+            />
+          </Svg>
+        ) : (
+          <View style={styles.shareCardRouteEmpty}>
+            <View style={styles.shareCardRouteDash} />
+            <View style={styles.shareCardRouteDot} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
 }
 
 function V2Ticket({
@@ -748,6 +836,9 @@ function HistoryPanel({ controller }: { controller: ReturnType<typeof useV2Detou
 
 function SharePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const entry = controller.shareEntry;
+  const shareCardRef = useRef<View>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   if (!entry) {
     return (
@@ -765,6 +856,35 @@ function SharePanel({ controller }: { controller: ReturnType<typeof useV2DetourC
 
   const photo = entry.photos?.[0];
   const emojis = entry.emojiTrail ?? [];
+  const place = entry.sceneName ?? entry.city;
+  const durationMinutes = Math.max(
+    1,
+    Math.round(entry.actualDurationMinutes ?? entry.minutes)
+  );
+
+  const shareRenderedCard = async () => {
+    if (isExporting || !shareCardRef.current) return;
+    setIsExporting(true);
+    setShareError(null);
+
+    try {
+      const imageUri = await captureRef(shareCardRef, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+      });
+      await controller.performShare(imageUri);
+    } catch {
+      try {
+        await controller.performShare();
+        setShareError('分享卡產生失敗，已改用一般分享。');
+      } catch {
+        setShareError('目前無法分享，請再試一次。');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.shareSafe}>
@@ -777,32 +897,66 @@ function SharePanel({ controller }: { controller: ReturnType<typeof useV2DetourC
       </View>
 
       <ScrollView contentContainerStyle={styles.shareScroll} showsVerticalScrollIndicator={false}>
-        {photo ? (
-          <>
-            <Image source={{ uri: photo.uri }} style={styles.shareHeroPhoto} />
-            <View style={styles.shareIdentityBlock}>
-              <Text style={styles.shareBrand}>DETOUR</Text>
-              <Text style={styles.shareEmoji}>{emojis.join(' ') || '—'}</Text>
-              <Text style={styles.sharePlace}>{entry.sceneName ?? entry.city}</Text>
-            </View>
-          </>
-        ) : (
-          <View style={styles.shareTicketWrap}>
-            <V2Ticket serial={entry.ticketSerial} emojiTrail={emojis} />
+        <View
+          ref={shareCardRef}
+          collapsable={false}
+          style={[
+            styles.shareCaptureCard,
+            photo ? styles.shareCaptureCardPhoto : styles.shareCaptureCardTicket,
+          ]}
+        >
+          <View style={styles.shareCardTop}>
+            <Text style={styles.shareCardBrand}>DETOUR</Text>
+            <Text style={styles.shareCardSerial}>
+              {entry.ticketSerial ?? 'DETOUR'}
+            </Text>
           </View>
-        )}
 
-        <RoutePreview coordinates={entry.route ?? []} label="這趟的路" />
+          {photo ? (
+            <>
+              <Image source={{ uri: photo.uri }} style={styles.shareCardHeroPhoto} />
+              <View style={styles.shareCardIdentity}>
+                <Text style={styles.shareCardEmoji}>{emojis.join(' ') || '—'}</Text>
+                <Text style={styles.shareCardPlace}>{place}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.shareCardTicketMain}>
+              <Text style={styles.shareCardTicketKicker}>這趟留下的東西</Text>
+              <Text style={styles.shareCardTicketEmoji}>
+                {emojis.join(' ') || '—'}
+              </Text>
+              <View style={styles.shareCardTicketRule} />
+              <Text style={styles.shareCardTicketPlace}>{place}</Text>
+            </View>
+          )}
 
-        <View style={styles.shareMetaRow}>
-          <Text style={styles.shareMeta}>{entry.discoveries} 個發現</Text>
-          <Text style={styles.shareMeta}>
-            {Math.max(1, Math.round(entry.actualDurationMinutes ?? entry.minutes))} 分鐘
-          </Text>
+          <ShareRouteGraphic coordinates={entry.route ?? []} />
+
+          <View style={styles.shareCardBottom}>
+            <Text style={styles.shareCardMeta}>{entry.discoveries} 個發現</Text>
+            <Text style={styles.shareCardMeta}>{durationMinutes} 分鐘</Text>
+            <Text style={styles.shareCardMeta}>{entry.city}</Text>
+          </View>
         </View>
 
-        <Pressable onPress={() => void controller.performShare()} style={styles.sharePrimaryButton}>
-          <Text style={styles.sharePrimaryText}>叫出分享選單</Text>
+        <Text style={styles.sharePreviewHint}>
+          你現在看到的這張卡，就是實際分享出去的圖片。
+        </Text>
+
+        {shareError && <Text style={styles.shareError}>{shareError}</Text>}
+
+        <Pressable
+          disabled={isExporting}
+          onPress={() => void shareRenderedCard()}
+          style={({ pressed }) => [
+            styles.sharePrimaryButton,
+            (pressed || isExporting) && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.sharePrimaryText}>
+            {isExporting ? '正在產生分享圖…' : '分享這張 Detour'}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -988,15 +1142,32 @@ const styles = StyleSheet.create({
   shareBackText: { color: COLORS.paper, fontSize: 13, fontWeight: '900' },
   shareHeaderLabel: { color: '#BDB5A8', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   shareScroll: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34 },
-  shareHeroPhoto: { width: '100%', aspectRatio: 0.88, borderRadius: 24, backgroundColor: '#2D2924' },
-  shareIdentityBlock: { paddingTop: 20, paddingBottom: 4 },
-  shareBrand: { color: COLORS.signal, fontSize: 12, fontWeight: '900', letterSpacing: 2.4 },
-  shareEmoji: { marginTop: 10, color: COLORS.paper, fontSize: 30, lineHeight: 42, letterSpacing: 4 },
-  sharePlace: { marginTop: 7, color: '#BDB5A8', fontSize: 13, fontWeight: '700' },
-  shareTicketWrap: { alignItems: 'center', paddingVertical: 14 },
-  shareMetaRow: { marginTop: 16, flexDirection: 'row', justifyContent: 'space-between' },
-  shareMeta: { color: '#BDB5A8', fontSize: 11, fontWeight: '800' },
-  sharePrimaryButton: { marginTop: 22, borderRadius: 18, paddingVertical: 16, alignItems: 'center', backgroundColor: COLORS.signal },
+  shareCaptureCard: { width: '100%', aspectRatio: 0.8, borderRadius: 24, overflow: 'hidden', padding: 18 },
+  shareCaptureCardPhoto: { backgroundColor: COLORS.ink },
+  shareCaptureCardTicket: { backgroundColor: COLORS.paper },
+  shareCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  shareCardBrand: { color: COLORS.signal, fontSize: 13, fontWeight: '900', letterSpacing: 2.6 },
+  shareCardSerial: { color: '#8E8579', fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+  shareCardHeroPhoto: { width: '100%', flex: 1, minHeight: 190, borderRadius: 18, backgroundColor: '#2D2924' },
+  shareCardIdentity: { paddingTop: 13 },
+  shareCardEmoji: { color: COLORS.paper, fontSize: 27, lineHeight: 36, letterSpacing: 3 },
+  shareCardPlace: { marginTop: 3, color: '#C7BFB3', fontSize: 12, fontWeight: '700' },
+  shareCardTicketMain: { flex: 1, minHeight: 220, justifyContent: 'center', paddingHorizontal: 8 },
+  shareCardTicketKicker: { color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  shareCardTicketEmoji: { marginTop: 18, color: COLORS.ink, fontSize: 38, lineHeight: 52, letterSpacing: 5 },
+  shareCardTicketRule: { height: 1, marginTop: 22, backgroundColor: COLORS.line },
+  shareCardTicketPlace: { marginTop: 14, color: COLORS.signal, fontSize: 16, fontWeight: '900' },
+  shareCardRoute: { marginTop: 12 },
+  shareCardRouteLabel: { color: '#8E8579', fontSize: 8, fontWeight: '900', letterSpacing: 1.3 },
+  shareCardRouteGraphic: { height: 72, marginTop: 4, borderRadius: 14, overflow: 'hidden', backgroundColor: 'rgba(129,121,111,0.10)' },
+  shareCardRouteEmpty: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
+  shareCardRouteDash: { flex: 1, height: 4, borderRadius: 99, backgroundColor: COLORS.signal, opacity: 0.55 },
+  shareCardRouteDot: { width: 12, height: 12, marginLeft: -6, borderRadius: 6, backgroundColor: COLORS.signal },
+  shareCardBottom: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(142,133,121,0.24)', flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  shareCardMeta: { flexShrink: 1, color: '#8E8579', fontSize: 9, fontWeight: '800' },
+  sharePreviewHint: { marginTop: 13, color: '#BDB5A8', fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  shareError: { marginTop: 10, color: '#FFB29E', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  sharePrimaryButton: { marginTop: 18, borderRadius: 18, paddingVertical: 16, alignItems: 'center', backgroundColor: COLORS.signal },
   sharePrimaryText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
   shareEmpty: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'center' },
 });
