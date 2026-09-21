@@ -5,20 +5,14 @@ import {
   signedAngle,
   type NavigationRoute,
 } from './navigation-engine';
+import {
+  closingStopPriority,
+  rubberBandCorrectionDegrees,
+} from './v2-routing-policy';
 import { offsetPoint } from './geo-utils';
 import type { WalkingRoute } from './routing-engine';
 
-export function closingStopPriority(kind: string) {
-  const priority: Record<string, number> = {
-    'green-space': 0,
-    square: 1,
-    pedestrian: 2,
-    fountain: 3,
-    viewpoint: 4,
-    footbridge: 5,
-  };
-  return priority[kind] ?? 99;
-}
+export { closingStopPriority } from './v2-routing-policy';
 
 export type V2RouteOption = {
   origin: GeoPoint;
@@ -44,11 +38,11 @@ export function buildShortRouteDestinations(
       base = anchorBearing;
       offsets = [-45, 0, 45, 90];
     } else {
-      const correction = signedAngle(anchorBearing - previousBearing);
       // Never snap back toward the anchor. Bend at most 75° per short segment
       // so deviation feels accepted while the journey gradually stays bounded.
-      const boundedCorrection = Math.max(-75, Math.min(75, correction));
-      base = previousBearing + boundedCorrection;
+      base =
+        previousBearing +
+        rubberBandCorrectionDegrees(previousBearing, anchorBearing);
       offsets = [-34, 0, 34, 68];
     }
   }
