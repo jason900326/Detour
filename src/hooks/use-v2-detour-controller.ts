@@ -32,6 +32,7 @@ import {
   shouldEnterV2Closing,
   shouldForceV2Finish,
   targetDifficultyForNext,
+  replacementDifficultyForV2,
   type V2TargetDifficulty,
   type V2Target,
 } from '../lib/v2-journey';
@@ -809,11 +810,19 @@ export function useV2DetourController() {
 
   const replaceTarget = useCallback(() => {
     if (phaseRef.current !== 'exploration' || !activeTargetRef.current) return;
-    const previousDifficulty = activeTargetRef.current.difficulty;
-    chooseNextTarget(null, previousDifficulty);
+    const difficulty = replacementDifficultyForV2(activeTargetRef.current.difficulty);
+    const target = chooseV2Target({
+      difficulty,
+      excludedIds: previousTargetIdsRef.current,
+      excludedEmojis: emojiTrailRef.current,
+      environmentKinds: environmentKindsRef.current,
+      seed: Date.now() + previousTargetIdsRef.current.length * 31,
+    });
+    previousTargetIdsRef.current = [...previousTargetIdsRef.current, target.id].slice(-8);
+    setTargetSafe(target);
     setStatusMessage('換一個，繼續走。');
     void Haptics.selectionAsync();
-  }, [chooseNextTarget]);
+  }, [setTargetSafe]);
 
   const retryCurrentRoute = useCallback(async () => {
     const point = currentPointRef.current;
