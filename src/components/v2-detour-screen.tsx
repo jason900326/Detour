@@ -397,6 +397,12 @@ function IndoorPlaytestControls({
         >
           <Text style={styles.indoorButtonText}>直接完成 UI</Text>
         </Pressable>
+        <Pressable
+          onPress={controller.goHome}
+          style={({ pressed }) => [styles.indoorButton, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.indoorButtonText}>結束測試</Text>
+        </Pressable>
       </View>
     </View>
   );
