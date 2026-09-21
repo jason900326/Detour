@@ -485,7 +485,7 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
             <Text style={styles.shareButtonText}>分享這趟</Text>
           </Pressable>
           <Pressable onPress={() => void controller.startOver()} style={styles.startAgainButton}>
-            <Text style={styles.startAgainText}>再繞一下</Text>
+            <Text style={styles.startAgainText}>{controller.isIndoorMode ? '再測一次' : '再繞一下'}</Text>
           </Pressable>
           <Pressable onPress={controller.openHistory} style={styles.historyLinkButton}>
             <Text style={styles.historyLinkText}>看紀錄</Text>
