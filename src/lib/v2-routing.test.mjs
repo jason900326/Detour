@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  closingRouteTargetDistanceMeters,
   closingStopPriority,
   rubberBandCorrectionDegrees,
 } from './v2-routing-policy.ts';
@@ -22,4 +23,12 @@ test('V2 closing prefers places that are naturally easy to stop at', () => {
   assert.ok(closingStopPriority('green-space') < closingStopPriority('viewpoint'));
   assert.ok(closingStopPriority('square') < closingStopPriority('footbridge'));
   assert.ok(closingStopPriority('pedestrian') < closingStopPriority('unknown-kind'));
+});
+
+
+test('V2 early closing keeps enough route to taper toward the normal journey length', () => {
+  assert.equal(closingRouteTargetDistanceMeters(8 * 60), 190);
+  assert.ok(closingRouteTargetDistanceMeters(5 * 60) > 300);
+  assert.ok(closingRouteTargetDistanceMeters(2 * 60) >= 450);
+  assert.equal(closingRouteTargetDistanceMeters(10 * 60), 190);
 });
