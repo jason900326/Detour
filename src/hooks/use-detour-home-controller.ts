@@ -169,6 +169,7 @@ export function useDetourHomeController() {
   const [recoverySnapshot, setRecoverySnapshot] =
     useState<ActiveJourneySnapshot | null>(null);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [directStartActive, setDirectStartActive] = useState(false);
 
   const {
     passport,
@@ -237,6 +238,7 @@ export function useDetourHomeController() {
   const prewarmRef = useRef<DetourPrewarm | null>(null);
   const prewarmInFlightRef = useRef(false);
   const shareTicketRef = useRef<any>(null);
+  const directStartRef = useRef(false);
 
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenY = useRef(new Animated.Value(0)).current;
@@ -352,6 +354,7 @@ export function useDetourHomeController() {
     acknowledgeActiveSideEvent,
     maybeTriggerSideEvent,
     replaceActiveSideEvent,
+    presentInitialSideEvent,
     resetSideEventRuntime,
   } = sideEventController;
 
@@ -1182,6 +1185,32 @@ export function useDetourHomeController() {
     transitionTo('mood');
   }
 
+  async function startDirectDetour() {
+    if (stageRef.current !== 'time' || directStartRef.current) return;
+
+    const defaultMinutes = 15;
+    const defaultMood: MoodId = 'wander';
+    directStartRef.current = true;
+    setDirectStartActive(true);
+    setSelectedTime(String(defaultMinutes));
+    setSliderDisplayMinutes(defaultMinutes);
+    timeSliderDisplayRef.current = defaultMinutes;
+    setSelectedMood(defaultMood);
+    setSelectedColor(null);
+    resetTicketVisualReady();
+    routeProgress.stopAnimation();
+    routeProgress.setValue(0);
+
+    const session = await createPlaytestSession({
+      devMode,
+      minutes: defaultMinutes,
+      moodId: defaultMood,
+    });
+    playtestSessionIdRef.current = session.id;
+    void refreshPlaytestSessions();
+    transitionTo('preparing');
+  }
+
   async function chooseMood(moodId: MoodId) {
     await Haptics.selectionAsync();
     setSelectedMood(moodId);
@@ -1275,6 +1304,8 @@ export function useDetourHomeController() {
     setPhotos([]);
     setLastCompletedEntry(null);
     setSelectedPassportId(null);
+    directStartRef.current = false;
+    setDirectStartActive(false);
     cameraBridge.resetCameraRequest();
     lastTracePointRef.current = null;
     planRef.current = null;
@@ -1304,7 +1335,13 @@ export function useDetourHomeController() {
       return;
     }
     if (stage === 'preparing' || stage === 'ready') {
-      transitionTo('mood');
+      if (directStartRef.current) {
+        directStartRef.current = false;
+        setDirectStartActive(false);
+        transitionTo('time');
+      } else {
+        transitionTo('mood');
+      }
       return;
     }
     if (stage === 'passport') {
@@ -1668,7 +1705,9 @@ export function useDetourHomeController() {
 
     routeProgress.stopAnimation();
     routeProgress.setValue(0);
-    await waitForTicketVisualReady();
+    if (!directStartRef.current) {
+      await waitForTicketVisualReady();
+    }
 
     Animated.timing(routeProgress, {
       toValue: 0.13,
@@ -1944,6 +1983,14 @@ export function useDetourHomeController() {
       );
       setStage('ready');
       stageRef.current = 'ready';
+
+      if (directStartRef.current) {
+        await startDetour({
+          directStart: true,
+          immediateSideEvent: true,
+          startPoint,
+        });
+      }
     } catch (error) {
       stopLocationWatcher();
 
@@ -1970,8 +2017,12 @@ export function useDetourHomeController() {
     }
   }
 
-  async function startDetour() {
-    const startPoint = detourStart;
+  async function startDetour(options?: {
+    directStart?: boolean;
+    immediateSideEvent?: boolean;
+    startPoint?: GeoPoint;
+  }) {
+    const startPoint = options?.startPoint ?? detourStart;
     const route = navigationRouteRef.current;
 
     if (
@@ -2008,7 +2059,15 @@ export function useDetourHomeController() {
 
     setActiveTrace([startPoint]);
     lastTracePointRef.current = startPoint;
-    transitionTo('journey');
+    transitionTo('journey', () => {
+      if (options?.directStart) {
+        directStartRef.current = false;
+        setDirectStartActive(false);
+      }
+      if (options?.immediateSideEvent) {
+        presentInitialSideEvent();
+      }
+    });
     await startTraceWatcher();
     await startHeadingWatcher();
   }
@@ -2222,6 +2281,7 @@ export function useDetourHomeController() {
     activeCameraRequestRef: cameraBridge.activeCameraRequestRef,
     stage,
     setStage,
+    directStartActive,
     preferences,
     setPreferences,
     onboardingStep,
@@ -2415,6 +2475,7 @@ export function useDetourHomeController() {
     toggleDevMode,
     chooseTime,
     continueFromTime,
+    startDirectDetour,
     chooseMood,
     continueFromMood,
     resetDetour,

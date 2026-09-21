@@ -16,7 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { useDetourHomeController } from '../hooks/use-detour-home-controller';
 import { isAIEngineConfigured } from '../lib/ai-engine';
-import type { SceneIssueReason, WalkingPace } from '../lib/app-model';
+import type {
+  SceneIssueReason,
+  SessionPhoto,
+  WalkingPace,
+} from '../lib/app-model';
 import { MOODS } from '../lib/app-model';
 import { ticketSerial } from '../lib/detour-formatters';
 import { offsetPoint } from '../lib/navigation-engine';
@@ -26,6 +30,7 @@ import { BONE, INK, MUTED, SIGNAL } from '../theme/detour-theme';
 import { CollectionStages } from './home/collection-stages';
 import { V45MoodIcon, V45Skyline } from './mood-visuals';
 import { SideEventPaper } from './side-event-paper';
+import { JourneyRoutePulse } from './journey-route-pulse';
 import {
   DETOUR_TICKET_HEIGHT,
   DETOUR_TICKET_WIDTH,
@@ -40,6 +45,14 @@ function navigationInstructionLabel(turn: string) {
   if (turn === 'slight-right') return '下一個路口往右前方';
   if (turn === 'arrive') return '快到了';
   return '繼續直走';
+}
+
+function navigationDistanceLabel(meters: number, turn: string) {
+  if (turn === 'arrive') return '沿著這條路走到終點';
+  if (meters < 10) return '很快就到下一個路口';
+
+  const roundedMeters = Math.max(10, Math.round(meters / 10) * 10);
+  return `約 ${roundedMeters} 公尺後`;
 }
 
 function formatElapsedJourneyTime(totalSeconds: number) {
@@ -79,6 +92,7 @@ export function DetourHomeView({
     onboardingFromSettings,
     ticketBuildError,
     setTicketBuildError,
+    directStartActive,
     selectedTime,
     sliderDisplayMinutes,
     selectedMood,
@@ -89,6 +103,7 @@ export function DetourHomeView({
     selectedScene,
     navigationRoute,
     currentNavigationBeat,
+    beatRemainingMeters,
     deviceHeading,
     nextBeatSegment,
     questPulse,
@@ -134,7 +149,7 @@ export function DetourHomeView({
     sharePlaytestData,
     clearPlaytestData,
     timeSliderResponder,
-    continueFromTime,
+    startDirectDetour,
     chooseMood,
     continueFromMood,
     prepareDetourTicket,
@@ -156,6 +171,13 @@ export function DetourHomeView({
   const [completionIrisActive, setCompletionIrisActive] = useState(false);
   const [arrivalPhotoFinishPending, setArrivalPhotoFinishPending] = useState(false);
   const [liveAlbumVisible, setLiveAlbumVisible] = useState(false);
+  const [albumPreviewPhoto, setAlbumPreviewPhoto] = useState<SessionPhoto | null>(null);
+  const [journeyMapVisible, setJourneyMapVisible] = useState(false);
+
+  const closeLiveAlbum = () => {
+    setAlbumPreviewPhoto(null);
+    setLiveAlbumVisible(false);
+  };
   const arrivalPhotoStartCountRef = useRef(0);
 
   const printingLayout = useMemo(() => {
@@ -582,119 +604,15 @@ export function DetourHomeView({
               />
             </Animated.View>
 
-            <Text style={styles.v35HomeQuestion}>今天有多少時間，{`\n`}可以拿來偏離一下？</Text>
+            <Text style={styles.v35HomeQuestion}>現在有一段空檔嗎？{`\n`}直接走一段。</Text>
             <DetourAccentStroke width={126} style={styles.v35Underline} />
-            <Animated.View
-              style={[
-                styles.v35MinuteReadout,
-                {
-                  paddingHorizontal: 18,
-                  overflow: 'visible',
-                  transform: [{ scale: minutePulse }],
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.v35MinuteNumber,
-                  { letterSpacing: 0, paddingHorizontal: 5, overflow: 'visible' },
-                ]}
-              >
-                {sliderDisplayMinutes}
-              </Text>
-              <Text style={styles.v35MinuteUnit}>分</Text>
-            </Animated.View>
+            <View style={{ flex: 1 }} />
 
-            <View
-              style={[
-                styles.v35SliderWrap,
-                { height: 58, marginHorizontal: 20 },
-              ]}
-              onLayout={(event) => {
-                timeSliderWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
-              }}
-              {...timeSliderResponder.panHandlers}
-            >
-              <View
-                style={[
-                  styles.v35SliderRail,
-                  { top: 15, height: 4, borderRadius: 2 },
-                ]}
-              />
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.v35SliderFill,
-                  {
-                    top: 15,
-                    height: 4,
-                    borderRadius: 2,
-                    width: timeSliderProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-              <Text
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: -2,
-                  top: 32,
-                  fontSize: 12,
-                  fontWeight: '800',
-                  color: MUTED,
-                }}
-              >
-                10
-              </Text>
-              <Text
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  right: -2,
-                  top: 32,
-                  fontSize: 12,
-                  fontWeight: '800',
-                  color: MUTED,
-                }}
-              >
-                60
-              </Text>
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.v35SliderThumb,
-                  {
-                    top: 0,
-                    width: 34,
-                    height: 34,
-                    marginLeft: -17,
-                    borderRadius: 17,
-                    borderWidth: 1,
-                    shadowOpacity: 0.12,
-                    left: timeSliderProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.v35SliderThumbCore,
-                    { width: 22, height: 22, borderRadius: 11 },
-                  ]}
-                />
-              </Animated.View>
-            </View>
-
-            <Pressable onPress={continueFromTime} style={styles.v35TicketButton}>
+            <Pressable onPress={() => void startDirectDetour()} style={styles.v35TicketButton}>
               <View style={styles.v35TicketNotchLeft} />
               <View style={styles.v35TicketNotchRight} />
               <Text style={styles.v35TicketArrow}>→</Text>
-              <Text style={styles.v35TicketText}>開始 {sliderDisplayMinutes} 分鐘的旅程</Text>
+              <Text style={styles.v35TicketText}>開始走一段</Text>
               <View style={styles.v35TicketDivider} />
               <Text style={styles.v35TicketMark}>▰</Text>
             </Pressable>
@@ -769,6 +687,40 @@ export function DetourHomeView({
         )}
 
         {(stage === 'preparing' || stage === 'ready') && (
+          directStartActive ? (
+            <View style={styles.v45PrintingScreen}>
+              <View style={styles.v48PrintingTopBar}>
+                <View style={{ width: 36 }} />
+                <Text style={styles.v45PrintingBrand}>DETOUR</Text>
+              </View>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
+                <Text style={styles.v45PrintingTitle}>正在找一條可以走的路⋯</Text>
+                <Text style={[styles.v48RetryBody, { textAlign: 'center', marginTop: 16 }]}>
+                  不用選擇，找到後直接出發。
+                </Text>
+              </View>
+              <Modal visible={Boolean(ticketBuildError)} transparent animationType="fade" onRequestClose={goBack}>
+                <View style={styles.v48RetryOverlay}>
+                  <View style={styles.v48RetryCard}>
+                    <Text style={styles.v48RetryEyebrow}>找路失敗</Text>
+                    <Text style={styles.v48RetryTitle}>這趟還沒準備好。</Text>
+                    <Text style={styles.v48RetryBody}>{ticketBuildError}</Text>
+                    <Pressable
+                      onPress={() => {
+                        routeProgress.setValue(0);
+                        setTicketBuildError(null);
+                        void prepareDetourTicket();
+                      }}
+                      style={styles.v48RetryPrimary}
+                    >
+                      <Text style={styles.v48RetryPrimaryText}>再試一次</Text>
+                      <Text style={styles.v48RetryPrimaryArrow}>→</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </Modal>
+            </View>
+          ) : (
           <View
             style={[
               styles.v45PrintingScreen,
@@ -869,7 +821,7 @@ export function DetourHomeView({
 
             {stage === 'ready' && ticketReadyUnlocked && (
               <Pressable
-                onPress={startDetour}
+                onPress={() => void startDetour()}
                 style={[
                   styles.v48DepartButton,
                   {
@@ -905,6 +857,7 @@ export function DetourHomeView({
               </View>
             </Modal>
           </View>
+          )
         )}
 
         {stage === 'journey' && plan && navigationRoute && currentNavigationBeat && (
@@ -920,77 +873,72 @@ export function DetourHomeView({
             </View>
 
             <View style={styles.v35JourneyHero}>
-              {latitude !== null && longitude !== null ? (
-                <View style={styles.v35JourneyMapWrap}>
-                <MapView
-                  style={styles.v35JourneyMap}
-                  mapType="standard"
-                  initialRegion={{
-                    latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
-                    longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
-                    latitudeDelta: 0.0022,
-                    longitudeDelta: 0.0022,
-                  }}
-                  showsUserLocation={false}
-                  showsMyLocationButton={false}
-                  showsCompass={false}
-                  pitchEnabled={false}
-                  rotateEnabled={false}
-                >
-                  <Polygon
-                    coordinates={headingSectorCoordinates(
-                      { latitude, longitude },
-                      deviceHeading
-                    )}
-                    fillColor="rgba(30, 135, 255, 0.28)"
-                    strokeColor="rgba(30, 135, 255, 0.5)"
-                    strokeWidth={1}
+              {selectedMood !== 'color' && activeSideEvent && (
+                <View style={styles.v35JourneySideEventWrap}>
+                  <SideEventPaper
+                    event={activeSideEvent}
+                    onFound={() => openCamera('side')}
+                    onCompleted={acknowledgeActiveSideEvent}
+                    photoConfirmed={sideEventPhotoConfirmed}
+                    onReplace={replaceActiveSideEvent}
                   />
-                  <Circle
-                    center={{ latitude, longitude }}
-                    radius={8}
-                    strokeColor="#FFFFFF"
-                    strokeWidth={2}
-                    fillColor="#1683FF"
-                  />
-                  <Polyline coordinates={nextBeatSegment} strokeColor={SIGNAL} strokeWidth={5} lineCap="round" />
-                  <Circle center={currentNavigationBeat.point} radius={10} strokeColor={BONE} strokeWidth={1} fillColor={SIGNAL} />
-                </MapView>
                 </View>
-              ) : (
-                <View style={styles.v35JourneyMapPlaceholder} />
               )}
 
-              <Text style={styles.v35JourneyInstruction}>
-                {navigationInstructionLabel(currentNavigationBeat.turn)}
-              </Text>
+              <View style={styles.v35JourneyInstructionBlock}>
+                <View style={styles.v35JourneyInstructionRule} />
+                <View style={styles.v35JourneyInstructionCopy}>
+                  <Text style={styles.v35JourneyInstructionEyebrow}>接下來</Text>
+                  <Text style={styles.v35JourneyInstruction}>
+                    {navigationInstructionLabel(currentNavigationBeat.turn)}
+                  </Text>
+                  <Text style={styles.v35JourneyInstructionDistance}>
+                    {navigationDistanceLabel(
+                      beatRemainingMeters,
+                      currentNavigationBeat.turn
+                    )}
+                  </Text>
+                </View>
+                <JourneyRoutePulse
+                  progress={
+                    currentNavigationBeat.segmentDistanceMeters > 0
+                      ? 1 -
+                        beatRemainingMeters /
+                          currentNavigationBeat.segmentDistanceMeters
+                      : 0
+                  }
+                />
+              </View>
 
-                {selectedMood !== 'color' && activeSideEvent && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="查看路線"
+                onPress={() => setJourneyMapVisible(true)}
+                style={({ pressed }) => [
+                  styles.nextBeatMapButton,
+                  pressed && styles.nextBeatMapButtonPressed,
+                ]}
+              >
+                <View style={styles.nextBeatMapButtonCopy}>
+                  <Text style={styles.nextBeatMapButtonEyebrow}>需要方向？</Text>
+                  <Text style={styles.nextBeatMapButtonText}>查看路線</Text>
+                </View>
+                <Text style={styles.nextBeatMapButtonArrow}>↗</Text>
+              </Pressable>
+
+              {selectedMood === 'color' && selectedColor && (
+                <View style={styles.v35JourneyColorHint}>
                   <View
-                    style={{
-                      width: '100%',
-                      marginTop: 24,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <SideEventPaper
-                      event={activeSideEvent}
-                      onFound={() => openCamera('side')}
-                      onCompleted={acknowledgeActiveSideEvent}
-                      photoConfirmed={sideEventPhotoConfirmed}
-                      onReplace={replaceActiveSideEvent}
-                    />
-                  </View>
-                )}
-
-                {selectedMood === 'color' && selectedColor && (
-                  <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: selectedColor.hex, borderRadius: 999 }}>
-                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedColor.hex }} />
-                    <Text style={{ color: BONE, fontSize: 15, fontWeight: '800' }}>
-                      今天找{selectedColor.label} · 看到就拍
-                    </Text>
-                  </View>
-                )}
+                    style={[
+                      styles.v35JourneyColorDot,
+                      { backgroundColor: selectedColor.hex },
+                    ]}
+                  />
+                  <Text style={styles.v35JourneyColorText}>
+                    今天找{selectedColor.label} · 看到就拍
+                  </Text>
+                </View>
+              )}
                 {isRerouting && <Text style={styles.v35JourneyStatus}>正在重新找路…</Text>}
             </View>
 
@@ -1003,15 +951,26 @@ export function DetourHomeView({
             )}
 
             <View style={styles.v35JourneyBottom}>
-              <Pressable onPress={() => openCamera('free')} style={styles.v35JourneyCamera}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="拍照記錄沿途發現"
+                onPress={() => openCamera('free')}
+                style={({ pressed }) => [
+                  styles.v35JourneyCamera,
+                  pressed && styles.v35JourneyPressed,
+                ]}
+              >
                 <Text style={styles.v35JourneyCameraIcon}>📷</Text>
-                <Text style={styles.v35JourneyCameraText}>拍照</Text>
+                <View style={styles.v35JourneyCameraCopy}>
+                  <Text style={styles.v35JourneyCameraEyebrow}>沿途發現</Text>
+                  <Text style={styles.v35JourneyCameraText}>拍照</Text>
+                </View>
                 <Text style={styles.v35JourneyCameraArrow}>→</Text>
               </Pressable>
               {photos.length > 0 && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="開啟即時相簿"
+                  accessibilityLabel={`開啟即時相簿，共 ${photos.length} 張照片`}
                   onPress={() => setLiveAlbumVisible(true)}
                   style={({ pressed }) => [
                     styles.v35JourneyAlbum,
@@ -1020,8 +979,12 @@ export function DetourHomeView({
                 >
                   <Image
                     source={{ uri: photos[photos.length - 1].uri }}
+                    resizeMode="cover"
                     style={styles.v35JourneyAlbumImage}
                   />
+                  <View style={styles.v35JourneyAlbumLabel}>
+                    <Text style={styles.v35JourneyAlbumLabelText}>相簿</Text>
+                  </View>
                   {photos.length > 1 && (
                     <View style={styles.v35JourneyAlbumCount}>
                       <Text style={styles.v35JourneyAlbumCountText}>{photos.length}</Text>
@@ -1034,14 +997,19 @@ export function DetourHomeView({
             {devMode && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="室內模式，走一段路"
+                accessibilityLabel="室內測試，走到下一個路口"
+                accessibilityHint="模擬走一段路並更新路線提示"
                 onPress={() => void simulateNextBeat()}
                 style={({ pressed }) => [
                   styles.v35DevAdvance,
                   pressed && styles.v35JourneyPressed,
                 ]}
               >
-                <Text style={styles.v35DevAdvanceText}>室內模式，走一段路</Text>
+                <View style={styles.v35DevAdvanceCopy}>
+                  <Text style={styles.v35DevAdvanceEyebrow}>室內測試</Text>
+                  <Text style={styles.v35DevAdvanceText}>走到下一個路口</Text>
+                </View>
+                <Text style={styles.v35DevAdvanceArrow}>→</Text>
               </Pressable>
             )}
 
@@ -1049,18 +1017,16 @@ export function DetourHomeView({
               visible={liveAlbumVisible}
               transparent
               animationType="fade"
-              onRequestClose={() => setLiveAlbumVisible(false)}
+              onRequestClose={closeLiveAlbum}
             >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="關閉即時相簿"
-                onPress={() => setLiveAlbumVisible(false)}
-                style={styles.v35JourneyAlbumOverlay}
-              >
+              <View style={styles.v35JourneyAlbumOverlay}>
                 <Pressable
-                  onPress={(event) => event.stopPropagation()}
-                  style={styles.v35JourneyAlbumCard}
-                >
+                  accessibilityRole="button"
+                  accessibilityLabel="關閉即時相簿"
+                  onPress={closeLiveAlbum}
+                  style={styles.v35JourneyModalBackdrop}
+                />
+                <View style={styles.v35JourneyAlbumCard}>
                   <View style={styles.v35JourneyAlbumHeader}>
                     <View>
                       <Text style={styles.v35JourneyAlbumTitle}>即時相簿</Text>
@@ -1069,7 +1035,7 @@ export function DetourHomeView({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="關閉"
-                      onPress={() => setLiveAlbumVisible(false)}
+                      onPress={closeLiveAlbum}
                       style={styles.v35JourneyAlbumClose}
                     >
                       <Text style={styles.v35JourneyAlbumCloseText}>×</Text>
@@ -1080,16 +1046,174 @@ export function DetourHomeView({
                       .slice(-6)
                       .reverse()
                       .map((photo) => (
-                        <Image
+                        <Pressable
                           key={photo.id}
-                          source={{ uri: photo.uri }}
-                          style={styles.v35JourneyAlbumGridImage}
-                        />
+                          accessibilityRole="button"
+                          accessibilityLabel={`檢視照片：${photo.missionTitle || '沿途發現'}`}
+                          onPress={() => setAlbumPreviewPhoto(photo)}
+                          style={({ pressed }) => [
+                            styles.v35JourneyAlbumGridCell,
+                            pressed && styles.v35JourneyAlbumGridPressed,
+                          ]}
+                        >
+                          <Image
+                            source={{ uri: photo.uri }}
+                            resizeMode="cover"
+                            style={styles.v35JourneyAlbumGridImage}
+                          />
+                        </Pressable>
                       ))}
                     {Array.from({ length: Math.max(0, 6 - photos.length) }).map((_, index) => (
-                      <View key={`empty-${index}`} style={styles.v35JourneyAlbumGridEmpty} />
+                      <View
+                        key={`empty-${index}`}
+                        style={[
+                          styles.v35JourneyAlbumGridCell,
+                          styles.v35JourneyAlbumGridEmpty,
+                        ]}
+                      />
                     ))}
                   </View>
+                </View>
+              </View>
+            </Modal>
+
+            <Modal
+              visible={albumPreviewPhoto !== null}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setAlbumPreviewPhoto(null)}
+            >
+              <View style={styles.v35JourneyPhotoPreviewOverlay}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="關閉照片預覽"
+                  onPress={() => setAlbumPreviewPhoto(null)}
+                  style={styles.v35JourneyModalBackdrop}
+                />
+                <View style={styles.v35JourneyPhotoPreviewCard}>
+                  {albumPreviewPhoto && (
+                    <>
+                      <Image
+                        source={{ uri: albumPreviewPhoto.uri }}
+                        resizeMode="contain"
+                        style={styles.v35JourneyPhotoPreviewImage}
+                      />
+                      <View style={styles.v35JourneyPhotoPreviewFooter}>
+                        <Text style={styles.v35JourneyPhotoPreviewTitle}>
+                          {albumPreviewPhoto.missionTitle || '沿途發現'}
+                        </Text>
+                        <Text style={styles.v35JourneyPhotoPreviewMeta}>
+                          點一下背景關閉照片
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="關閉照片預覽"
+                    onPress={() => setAlbumPreviewPhoto(null)}
+                    style={styles.v35JourneyPhotoPreviewClose}
+                  >
+                    <Text style={styles.v35JourneyPhotoPreviewCloseText}>×</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Modal>
+
+            <Modal
+              visible={journeyMapVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setJourneyMapVisible(false)}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉路線地圖"
+                onPress={() => setJourneyMapVisible(false)}
+                style={styles.v35JourneyAlbumOverlay}
+              >
+                <Pressable
+                  onPress={(event) => event.stopPropagation()}
+                  style={styles.v35JourneyAlbumCard}
+                >
+                  <View style={styles.v35JourneyAlbumHeader}>
+                    <View>
+                      <Text style={styles.v35JourneyAlbumTitle}>這一段路線</Text>
+                      <Text style={styles.v35JourneyAlbumMeta}>
+                        {navigationInstructionLabel(currentNavigationBeat.turn)}
+                      </Text>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="關閉路線地圖"
+                      onPress={() => setJourneyMapVisible(false)}
+                      style={styles.v35JourneyAlbumClose}
+                    >
+                      <Text style={styles.v35JourneyAlbumCloseText}>×</Text>
+                    </Pressable>
+                  </View>
+
+                  {latitude !== null && longitude !== null ? (
+                    <View
+                      style={[
+                        styles.v35JourneyMapWrap,
+                        { height: 360, marginBottom: 0, borderRadius: 16 },
+                      ]}
+                    >
+                      <MapView
+                        style={styles.v35JourneyMap}
+                        mapType="standard"
+                        initialRegion={{
+                          latitude: (latitude + currentNavigationBeat.point.latitude) / 2,
+                          longitude: (longitude + currentNavigationBeat.point.longitude) / 2,
+                          latitudeDelta: 0.0022,
+                          longitudeDelta: 0.0022,
+                        }}
+                        showsUserLocation={false}
+                        showsMyLocationButton={false}
+                        showsCompass={false}
+                        pitchEnabled={false}
+                        rotateEnabled={false}
+                      >
+                        <Polygon
+                          coordinates={headingSectorCoordinates(
+                            { latitude, longitude },
+                            deviceHeading
+                          )}
+                          fillColor="rgba(30, 135, 255, 0.28)"
+                          strokeColor="rgba(30, 135, 255, 0.5)"
+                          strokeWidth={1}
+                        />
+                        <Circle
+                          center={{ latitude, longitude }}
+                          radius={8}
+                          strokeColor="#FFFFFF"
+                          strokeWidth={2}
+                          fillColor="#1683FF"
+                        />
+                        <Polyline
+                          coordinates={nextBeatSegment}
+                          strokeColor={SIGNAL}
+                          strokeWidth={5}
+                          lineCap="round"
+                        />
+                        <Circle
+                          center={currentNavigationBeat.point}
+                          radius={10}
+                          strokeColor={BONE}
+                          strokeWidth={1}
+                          fillColor={SIGNAL}
+                        />
+                      </MapView>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.v35JourneyMapPlaceholder,
+                        { height: 360, marginBottom: 0, borderRadius: 16 },
+                      ]}
+                    />
+                  )}
                 </Pressable>
               </Pressable>
             </Modal>

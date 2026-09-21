@@ -4,7 +4,7 @@ export const STAGE_TRANSITIONS: Readonly<Record<Stage, readonly Stage[]>> = {
   boot: ['onboarding', 'time'],
   onboarding: ['settings', 'time'],
   settings: ['time', 'onboarding'],
-  time: ['mood', 'settings', 'passport'],
+  time: ['mood', 'settings', 'passport', 'preparing'],
   mood: ['time', 'preparing'],
   preparing: ['mood', 'ready'],
   ready: ['mood', 'journey'],

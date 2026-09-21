@@ -145,6 +145,7 @@ export default function DetourCameraScreen() {
   const [flashMode, setFlashMode] = useState<FlashMode>('off');
   const [exposure, setExposure] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [zoomReady, setZoomReady] = useState(false);
   const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
   const [hasFocused, setHasFocused] = useState(false);
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
@@ -172,12 +173,14 @@ export default function DetourCameraScreen() {
 
   useEffect(() => {
     setCameraReady(false);
+    setZoomReady(false);
     setMountError(null);
     setHasFocused(false);
     focusOpacity.stopAnimation();
     focusOpacity.setValue(0);
     if (!device) return;
     setZoom(normalZoomForDevice(device));
+    setZoomReady(true);
     setExposure(
       device.supportsExposureBias
         ? clampZoom(0, device.minExposureBias, device.maxExposureBias)
@@ -201,7 +204,10 @@ export default function DetourCameraScreen() {
 
   const normalZoom = device ? normalZoomForDevice(device) : 1;
   const cameraShouldRun =
-    isScreenFocused && appState === 'active' && !pendingCaptureUri;
+    isScreenFocused &&
+    appState === 'active' &&
+    !pendingCaptureUri &&
+    zoomReady;
   const lensZoomLevels = device
     ? Array.from(
         new Set([
@@ -307,6 +313,7 @@ export default function DetourCameraScreen() {
   function switchFacing() {
     setFacing((current) => current === 'back' ? 'front' : 'back');
     setCameraReady(false);
+    setZoomReady(false);
     setHasFocused(false);
     focusOpacity.stopAnimation();
     focusOpacity.setValue(0);
@@ -564,7 +571,7 @@ export default function DetourCameraScreen() {
               device={device}
               outputs={[photoOutput]}
               isActive={cameraShouldRun}
-              zoom={zoom}
+              zoom={zoomReady ? zoom : normalZoom}
               exposure={device.supportsExposureBias ? exposure : undefined}
               orientationSource="device"
               resizeMode="cover"
