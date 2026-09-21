@@ -192,3 +192,14 @@ export function resolveV2CompletionPlace(args: {
     (args.indoor ? '室內測試完成點' : '附近的停留點')
   );
 }
+
+export function shouldKeepV2TargetIntoClosing(args: {
+  difficulty: V2TargetDifficulty;
+  targetAgeSeconds: number | null;
+}) {
+  if (args.difficulty === 'hard') return false;
+  if (args.targetAgeSeconds !== null && args.targetAgeSeconds > 105) {
+    return false;
+  }
+  return true;
+}
