@@ -35,6 +35,18 @@ test('V2 target selection never repeats an excluded id or emoji when alternative
   assert.notEqual(next.emoji, first.emoji);
 });
 
+test('V2 environment data only weakly biases the eligible target pool', () => {
+  const generic = chooseV2Target({ difficulty: 'easy', seed: 12 });
+  const greenWeighted = chooseV2Target({
+    difficulty: 'easy',
+    environmentKinds: ['green-space'],
+    seed: 12,
+  });
+
+  assert.equal(generic.id, 'cloud');
+  assert.ok(['tree', 'flower', 'cloud', 'chair', 'shadow', 'plant'].includes(greenWeighted.id));
+});
+
 test('V2 enters closing after enough discoveries or at the ten-minute boundary', () => {
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 7 * 60, discoveries: 3 }), false);
   assert.equal(shouldEnterV2Closing({ elapsedSeconds: 8 * 60, discoveries: 3 }), true);
