@@ -728,7 +728,14 @@ export function useV2DetourController() {
       const remaining = remainingDistanceOnPolyline(point, beat.segmentCoordinates);
       const offRouteDistance = distanceToPolyline(point, route.navigationRoute.coordinates);
 
-      if (offRouteDistance > 75 && accuracy <= 70) {
+      // Low-quality samples may move the visible dot, but they must never
+      // advance a beat, trigger a reroute, or finish the Journey.
+      if (accuracy > 60) {
+        offRouteSamplesRef.current = 0;
+        return;
+      }
+
+      if (offRouteDistance > 75) {
         offRouteSamplesRef.current += 1;
         if (offRouteSamplesRef.current < OFF_ROUTE_CONFIRMATIONS) return;
 
