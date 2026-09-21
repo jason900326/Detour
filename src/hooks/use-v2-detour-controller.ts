@@ -803,7 +803,8 @@ export function useV2DetourController() {
 
   const replaceTarget = useCallback(() => {
     if (phaseRef.current !== 'exploration' || !activeTargetRef.current) return;
-    chooseNextTarget(null);
+    const previousDifficulty = activeTargetRef.current.difficulty;
+    chooseNextTarget(null, previousDifficulty);
     setStatusMessage('換一個，繼續走。');
     void Haptics.selectionAsync();
   }, [chooseNextTarget]);
