@@ -9,9 +9,10 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import MapView, { Circle, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle, Path as SvgPath } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 
@@ -38,32 +39,67 @@ const COLORS = {
   map: '#E4E8E0',
 };
 
-function useSwipeBack(onBack: () => void, enabled = true) {
+const AnimatedSafeAreaView = Animated.createAnimatedComponent(SafeAreaView);
+
+function useSwipeBack(
+  onBack: () => void,
+  enabled = true,
+  translateX?: Animated.Value
+) {
   const onBackRef = useRef(onBack);
+  const enabledRef = useRef(enabled);
+  const committingRef = useRef(false);
+  const { width } = useWindowDimensions();
 
   useEffect(() => {
     onBackRef.current = onBack;
-  }, [onBack]);
+    enabledRef.current = enabled;
+  }, [onBack, enabled]);
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponderCapture: (_, gesture) =>
-          gesture.x0 <= 32 &&
-          gesture.dx > 16 &&
-          Math.abs(gesture.dy) < 18,
-        onPanResponderRelease: (_, gesture) => {
-          if (
-            gesture.x0 <= 32 &&
-            gesture.dx > 72 &&
-            Math.abs(gesture.dy) < 60
-          ) {
-            onBackRef.current();
-          }
-        },
-      }),
-    []
-  );
+  const responder = useMemo(() => {
+    const reset = () => {
+      if (!translateX) return;
+      Animated.spring(translateX, {
+        toValue: 0,
+        speed: 24,
+        bounciness: 0,
+        useNativeDriver: true,
+      }).start();
+    };
+    return PanResponder.create({
+      // Only claim a deliberate one-finger edge swipe, not map panning or scrolling.
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        enabledRef.current &&
+        !committingRef.current &&
+        gesture.numberActiveTouches === 1 &&
+        gesture.x0 <= 28 &&
+        gesture.dx > 12 &&
+        gesture.dx > Math.abs(gesture.dy) * 1.5,
+      onPanResponderGrant: () => translateX?.stopAnimation(),
+      onPanResponderMove: (_, gesture) => {
+        translateX?.setValue(Math.max(0, Math.min(width, gesture.dx)));
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const shouldGoBack = enabledRef.current &&
+          Math.abs(gesture.dy) < 80 &&
+          (gesture.dx > Math.min(100, width * 0.25) ||
+            (gesture.dx > 35 && gesture.vx > 0.5));
+        if (!shouldGoBack) { reset(); return; }
+        if (!translateX) { onBackRef.current(); return; }
+        committingRef.current = true;
+        Animated.timing(translateX, {
+          toValue: width,
+          duration: 160,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          committingRef.current = false;
+          if (finished) onBackRef.current();
+        });
+      },
+      onPanResponderTerminate: reset,
+      onPanResponderTerminationRequest: () => false,
+    });
+  }, [translateX, width]);
 
   return enabled ? responder.panHandlers : {};
 }
@@ -282,17 +318,19 @@ function JourneyMap({
   coordinates,
   caption = '只看下一小段',
   overlay,
+  height = 300,
 }: {
   point: { latitude: number; longitude: number } | null;
   coordinates: { latitude: number; longitude: number }[];
   caption?: string;
   overlay?: ReactNode;
+  height?: number;
 }) {
   const region = useMemo(() => routeRegion(point), [point]);
   if (!point || !region) return null;
 
   return (
-    <View style={styles.mapFrame}>
+    <View style={[styles.mapFrame, { height }]}>
       <MapView
         provider={PROVIDER_DEFAULT}
         style={StyleSheet.absoluteFill}
@@ -370,119 +408,15 @@ function RoutePreview({
 }
 
 function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
-  const [isPreparing, setIsPreparing] = useState(false);
-  const prepareProgress = useRef(new Animated.Value(0)).current;
-  const signFloat = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(signFloat, { toValue: 1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(signFloat, { toValue: 0, duration: 1500, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [signFloat]);
-
-  const enterPreparing = () => {
-    setIsPreparing(true);
-    prepareProgress.setValue(0);
-    Animated.spring(prepareProgress, {
-      toValue: 1,
-      speed: 18,
-      bounciness: 4,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const leavePreparing = () => {
-    Animated.timing(prepareProgress, {
-      toValue: 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start(() => setIsPreparing(false));
-  };
-
-  const swipeBackHandlers = useSwipeBack(leavePreparing, isPreparing);
-
-  if (isPreparing) {
-    return (
-      <SafeAreaView style={styles.safe} {...swipeBackHandlers}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.prepareHeader}>
-          <Pressable onPress={leavePreparing} style={styles.prepareBack}>
-            <Text style={styles.prepareBackText}>←</Text>
-          </Pressable>
-          <Pressable onPress={leavePreparing} style={styles.logoButton}>
-            <Text style={styles.brand}>DETOUR</Text>
-          </Pressable>
-          <View style={styles.prepareHeaderSpacer} />
-        </View>
-
-        <Animated.View
-          style={[
-            styles.prepareScene,
-            {
-              opacity: prepareProgress,
-              transform: [
-                {
-                  translateY: prepareProgress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [32, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Text style={styles.prepareEyebrow}>BEFORE YOU GO</Text>
-          <Text style={styles.prepareTitle}>準備好了嗎？</Text>
-
-          <View style={styles.prepareSignStack}>
-            <Animated.View
-              style={[
-                styles.prepareSign,
-                {
-                  transform: [
-                    { rotate: '-2deg' },
-                    {
-                      translateY: signFloat.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, -5],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <Text style={styles.prepareSignSmall}>這趟</Text>
-              <Text style={styles.prepareSignMain}>終點保密</Text>
-              <Text style={styles.prepareSignArrow}>↗</Text>
-            </Animated.View>
-            <View style={styles.preparePost} />
-          </View>
-
-          <Text style={styles.prepareCopy}>先看一眼四周。按下去之後，第一個方向才會出現。</Text>
-
-          <Pressable
-            accessibilityLabel="準備好了，開始走"
-            onPress={() => void controller.startJourney()}
-            style={({ pressed }) => [styles.readyButton, pressed && styles.readyButtonPressed]}
-          >
-            <Text style={styles.readyButtonText}>準備好了</Text>
-            <Text style={styles.readyButtonArrow}>→</Text>
-          </Pressable>
-        </Animated.View>
-      </SafeAreaView>
-    );
-  }
+  const { height } = useWindowDimensions();
+  const compact = height < 720;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.homeHeader}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="DETOUR 首頁"
           onPress={controller.goHome}
           onLongPress={controller.startIndoorJourney}
@@ -493,13 +427,17 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
         </Pressable>
       </View>
 
-      <View style={styles.homeCenter}>
+      <ScrollView
+        contentContainerStyle={[styles.homeCenter, compact && styles.homeCenterCompact]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         <View style={styles.streetPoster}>
-          <Text style={styles.homeTitle}>繞一下？</Text>
-          <View style={styles.streetRule} />
+          <Text style={styles.homeTitle}>不知道要幹嘛？</Text>
+          <Text style={styles.homeDuration}>約 10 分鐘的小探險</Text>
         </View>
 
-        <View style={styles.homeWorld}>
+        <View style={[styles.homeWorld, compact && styles.homeWorldCompact]}>
           <V2HomeWanderMotion />
           <View style={styles.homeStartDot} />
           <View style={styles.homeUnknownToken}>
@@ -509,30 +447,32 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
 
         <View style={styles.homeActions}>
           <Pressable
-            accessibilityLabel="去繞一下"
-            onPress={enterPreparing}
+            accessibilityRole="button"
+            accessibilityLabel="繞一下？"
+            onPress={() => void controller.startJourney()}
             style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
           >
-            <Text style={styles.playButtonText}>去繞一下</Text>
+            <Text style={styles.playButtonText}>繞一下？</Text>
             <View style={styles.playButtonIcon}>
               <Text style={styles.playButtonArrow}>↗</Text>
             </View>
           </Pressable>
 
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="我的票根"
             onPress={controller.openHistory}
-            style={({ pressed }) => [styles.passportButton, pressed && styles.buttonPressed]}
+            style={({ pressed }) => [styles.playButton, styles.passportButton, pressed && styles.playButtonPressed]}
           >
-            <Text style={styles.passportButtonText}>我的票根</Text>
-            <View style={styles.passportButtonIcon}>
-              <Text style={styles.passportButtonArrow}>→</Text>
+            <Text style={[styles.playButtonText, styles.passportButtonText]}>我的票根</Text>
+            <View style={[styles.playButtonIcon, styles.passportButtonIcon]}>
+              <Text style={styles.playButtonArrow}>↗</Text>
             </View>
           </Pressable>
         </View>
 
         {controller.errorMessage && <Text style={styles.errorText}>{controller.errorMessage}</Text>}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -740,7 +680,12 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
   const closing = controller.phase === 'closing';
   const beat = controller.currentNavigationBeat;
   const targetMotion = useRef(new Animated.Value(1)).current;
-  const swipeBackHandlers = useSwipeBack(controller.goHome);
+  const backOffset = useRef(new Animated.Value(0)).current;
+  const swipeBackHandlers = useSwipeBack(controller.goHome, true, backOffset);
+  const { height, fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const availableHeight = height - insets.top - insets.bottom;
+  const mapHeight = Math.max(200, Math.min(340, availableHeight - (closing ? 370 : 280) * Math.max(1, fontScale)));
 
   useEffect(() => {
     targetMotion.setValue(0);
@@ -758,15 +703,22 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
       : null;
 
   return (
-    <SafeAreaView style={styles.safe} {...swipeBackHandlers}>
+    <AnimatedSafeAreaView
+      style={[styles.safe, { transform: [{ translateX: backOffset }] }]}
+      onAccessibilityEscape={controller.goHome}
+      {...swipeBackHandlers}
+    >
       <StatusBar barStyle="dark-content" />
       <View style={styles.journeyHeader}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="返回首頁"
           onPress={controller.goHome}
           style={({ pressed }) => [styles.journeyBackButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.journeyBackIcon}>←</Text>
+          <Svg width={24} height={24} viewBox="0 0 24 24" accessibilityElementsHidden>
+            <SvgPath d="M15 5 L8 12 L15 19" stroke={COLORS.ink} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </Svg>
         </Pressable>
         <View style={styles.journeyMeta}>
           <Text style={styles.elapsed}>{elapsedLabel(controller.elapsedSeconds)}</Text>
@@ -784,155 +736,147 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
         </View>
       </View>
 
-      <JourneyMap
-        point={controller.currentPoint}
-        coordinates={controller.routeCoordinates}
-        caption={closing ? '最後一段 · 終點仍保密' : 'EXPLORE MODE'}
-        overlay={
-          <View pointerEvents="none" style={styles.mapNavigationOverlay}>
-            <View style={styles.mapDirectionDial}>
-              <View style={styles.mapDirectionDialInner}>
-                <Text style={styles.mapDirectionGlyph}>{directionGlyph(beat?.turn, closing)}</Text>
+      <ScrollView contentContainerStyle={styles.journeyScroll} showsVerticalScrollIndicator={false} bounces={false}>
+        <JourneyMap
+          height={mapHeight}
+          point={controller.currentPoint}
+          coordinates={controller.routeCoordinates}
+          caption={closing ? '最後一小段' : '只看下一段'}
+          overlay={
+            <View pointerEvents="none" style={styles.mapNavigationOverlay}>
+              <View style={styles.mapDirectionDial}>
+                <View style={styles.mapDirectionDialInner}>
+                  <Text style={styles.mapDirectionGlyph}>{directionGlyph(beat?.turn, closing)}</Text>
+                </View>
+                <View style={styles.mapDirectionTick} />
               </View>
-              <View style={styles.mapDirectionTick} />
+              <View style={styles.mapNavigationCopy}>
+                {(closing || isDirectionDecision(beat?.turn)) ? (
+                  <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
+                ) : (
+                  <Text style={styles.navigationIdle}>繼續直走</Text>
+                )}
+                <Text style={styles.navigationSubHint}>
+                  {controller.isPlanning
+                    ? closing
+                      ? '再走一小段，到了會告訴你'
+                      : '先照這個方向走'
+                    : !closing && !isDirectionDecision(beat?.turn)
+                      ? '抬頭看看，下一個變化我會提醒你'
+                      : ' '}
+                </Text>
+              </View>
             </View>
-            <View style={styles.mapNavigationCopy}>
-              <Text style={styles.mapNavigationEyebrow}>
-                {closing ? 'FINAL STRETCH' : 'NEXT MOVE'}
-              </Text>
-              {(closing || isDirectionDecision(beat?.turn)) ? (
-                <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-              ) : (
-                <Text style={styles.navigationIdle}>繼續直走</Text>
+          }
+        />
+
+        <View style={styles.journeyContent}>
+          <V2DiscoveryBurst trigger={controller.discoveries} />
+
+          {closing ? (
+            <View style={styles.closingCard}>
+              <V2ClosingConverge />
+              <Text style={styles.closingTitle}>最後一段。</Text>
+              <Text style={styles.closingCopy}>再走一小段，到了就揭曉。</Text>
+              {controller.activeTarget && (
+                <View style={styles.closingTarget}>
+                  <View style={styles.closingTargetCopy}>
+                    <Text style={styles.closingTargetKicker}>最後順便找找看</Text>
+                    <Text style={styles.closingTargetTitle}>
+                      {controller.activeTarget.emoji}  {controller.activeTarget.title}
+                    </Text>
+                  </View>
+                  <View style={styles.closingTargetActions}>
+                    <Pressable onPress={controller.replaceTarget} style={styles.closingReplaceButton}>
+                      <Text style={styles.closingReplaceText}>換一個</Text>
+                    </Pressable>
+                    <Pressable onPress={() => void controller.markFound()} style={styles.closingFoundButton}>
+                      <Text style={styles.closingFoundText}>找到了</Text>
+                    </Pressable>
+                  </View>
+                </View>
               )}
-              <Text style={styles.navigationSubHint}>
-                {controller.isPlanning
-                  ? closing
-                    ? '再走一小段，到了會告訴你'
-                    : '先照這個方向走'
-                  : !closing && !isDirectionDecision(beat?.turn)
-                    ? '抬頭看看，下一個變化我會提醒你'
-                    : ' '}
-              </Text>
-            </View>
-          </View>
-        }
-      />
-
-      <View style={styles.journeyContent}>
-        <V2DiscoveryBurst trigger={controller.discoveries} />
-
-        {closing ? (
-          <View style={styles.closingCard}>
-            <V2ClosingConverge />
-            <Text style={styles.closingEyebrow}>FINAL STRETCH</Text>
-            <Text style={styles.closingTitle}>最後一段。</Text>
-            <Text style={styles.closingCopy}>不會再出新的主要題目。再走一小段，到了才揭曉這趟停在哪裡。</Text>
-            {controller.activeTarget && (
-              <View style={styles.closingTarget}>
-                <View style={styles.closingTargetCopy}>
-                  <Text style={styles.closingTargetKicker}>最後順便找找看</Text>
-                  <Text style={styles.closingTargetTitle}>
-                    {controller.activeTarget.emoji}  {controller.activeTarget.title}
-                  </Text>
-                </View>
-                <View style={styles.closingTargetActions}>
-                  <Pressable onPress={controller.replaceTarget} style={styles.closingReplaceButton}>
-                    <Text style={styles.closingReplaceText}>換一個</Text>
-                  </Pressable>
-                  <Pressable onPress={() => void controller.markFound()} style={styles.closingFoundButton}>
-                    <Text style={styles.closingFoundText}>找到了</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-            <View style={styles.closingPromise}>
-              <Text style={styles.closingPromiseText}>
-                {closingMinutes ? `約 ${closingMinutes} 分鐘 · 不用趕` : '快到了 · 不用趕'}
-              </Text>
-            </View>
-          </View>
-        ) : controller.activeTarget ? (
-          <Animated.View
-            style={[
-              styles.targetSignWrap,
-              {
-                opacity: targetMotion,
-                transform: [
-                  {
-                    translateX: targetMotion.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [28, 0],
-                    }),
-                  },
-                  {
-                    rotate: targetMotion.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['3deg', '-1deg'],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.targetSign}>
-              <View style={styles.targetSignTop}>
-                <Text style={styles.targetSignLabel}>LOOK FOR</Text>
-                <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
-              </View>
-              <Text style={styles.targetSignTitle}>{controller.activeTarget.title}</Text>
-              <View style={styles.targetSignArrowBox}>
-                <Text style={styles.targetSignArrow}>→</Text>
+              <View style={styles.closingPromise}>
+                <Text style={styles.closingPromiseText}>
+                  {closingMinutes ? `約 ${closingMinutes} 分鐘 · 不用趕` : '快到了 · 不用趕'}
+                </Text>
               </View>
             </View>
-            <View style={styles.targetSignPost} />
-            <View style={styles.targetActions}>
-              <Pressable onPress={controller.replaceTarget} style={styles.replaceButton}>
-                <Text style={styles.replaceButtonText}>換一個</Text>
-              </Pressable>
-              <Pressable onPress={() => void controller.markFound()} style={styles.foundButton}>
-                <Text style={styles.foundButtonText}>找到了</Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        ) : (
-          <View style={styles.waitingCard}>
-            <Text style={styles.waitingTitle}>先走著。</Text>
-            <Text style={styles.waitingCopy}>下一個發現會在路上出現。</Text>
-          </View>
-        )}
-
-        <IndoorPlaytestControls controller={controller} />
-
-        <View style={styles.journeyBottomRow}>
-          <View style={styles.cameraCluster}>
-            <Pressable
-              accessibilityLabel="想留就拍"
-              onPress={controller.openCamera}
-              style={({ pressed }) => [styles.cameraButton, pressed && styles.buttonPressed]}
+          ) : controller.activeTarget ? (
+            <Animated.View
+              style={[
+                styles.targetSignWrap,
+                {
+                  opacity: targetMotion,
+                  transform: [
+                    {
+                      translateX: targetMotion.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [28, 0],
+                      }),
+                    },
+                    {
+                      rotate: targetMotion.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['3deg', '-1deg'],
+                      }),
+                    },
+                  ],
+                },
+              ]}
             >
-              <Text style={styles.cameraButtonIcon}>＋</Text>
-              <Text style={styles.cameraButtonText}>想留就拍</Text>
-            </Pressable>
-            {controller.photos.length > 0 && (
-              <Image
-                source={{ uri: controller.photos[controller.photos.length - 1].uri }}
-                style={styles.livePhotoThumb}
-              />
-            )}
-          </View>
-        </View>
+              <View style={styles.targetSign}>
+                <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
+                <Text style={styles.targetSignTitle}>{controller.activeTarget.title}</Text>
+              </View>
+              <View style={styles.targetActions}>
+                <Pressable onPress={controller.replaceTarget} style={styles.replaceButton}>
+                  <Text style={styles.replaceButtonText}>換一個</Text>
+                </Pressable>
+                <Pressable onPress={() => void controller.markFound()} style={styles.foundButton}>
+                  <Text style={styles.foundButtonText}>找到了</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : (
+            <View style={styles.waitingCard}>
+              <Text style={styles.waitingTitle}>先走著。</Text>
+              <Text style={styles.waitingCopy}>下一個發現會在路上出現。</Text>
+            </View>
+          )}
 
-        {controller.errorMessage && (
-          <View style={styles.journeyError}>
-            <Text style={styles.errorText}>{controller.errorMessage}</Text>
-            <Pressable onPress={() => void controller.retryCurrentRoute()}>
-              <Text style={styles.retryLink}>重新安排</Text>
-            </Pressable>
+          <IndoorPlaytestControls controller={controller} />
+
+          <View style={styles.journeyBottomRow}>
+            <View style={styles.cameraCluster}>
+              <Pressable
+                accessibilityLabel="想留就拍"
+                onPress={controller.openCamera}
+                style={({ pressed }) => [styles.cameraButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.cameraButtonIcon}>＋</Text>
+                <Text style={styles.cameraButtonText}>想留就拍</Text>
+              </Pressable>
+              {controller.photos.length > 0 && (
+                <Image
+                  source={{ uri: controller.photos[controller.photos.length - 1].uri }}
+                  style={styles.livePhotoThumb}
+                />
+              )}
+            </View>
           </View>
-        )}
-      </View>
-    </SafeAreaView>
+
+          {controller.errorMessage && (
+            <View style={styles.journeyError}>
+              <Text style={styles.errorText}>{controller.errorMessage}</Text>
+              <Pressable onPress={() => void controller.retryCurrentRoute()}>
+                <Text style={styles.retryLink}>重新安排</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </AnimatedSafeAreaView>
   );
 }
 
@@ -945,11 +889,12 @@ function FinishPanel({ controller }: { controller: ReturnType<typeof useV2Detour
       <ScrollView contentContainerStyle={styles.finishScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.finishHeader}>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="返回首頁"
             onPress={controller.goHome}
             style={styles.logoButton}
           >
-            <Text style={styles.finishBrand}>DETOUR</Text>
+            <Text style={styles.homeBrand}>DETOUR</Text>
           </Pressable>
           <V2FinishMark />
           <Text style={styles.smallLabel}>DETOUR COMPLETE</Text>
@@ -1278,67 +1223,31 @@ export function V2DetourScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bone },
   brand: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 2.4 },
-  homeBrand: { color: COLORS.ink, fontSize: 30, lineHeight: 34, fontWeight: '900', letterSpacing: 3.2 },
-  finishBrand: { color: COLORS.ink, fontSize: 30, lineHeight: 34, fontWeight: '900', letterSpacing: 3.2 },
-  logoButton: { alignSelf: 'flex-start' },
+  homeBrand: { color: COLORS.ink, fontSize: 44, lineHeight: 50, fontWeight: '900', letterSpacing: 3 },
+  logoButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   smallLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
-  homeHeader: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 2, flexDirection: 'row', alignItems: 'center' },
-  prepareHeader: { paddingHorizontal: 20, paddingTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  prepareBack: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  prepareBackText: { color: COLORS.ink, fontSize: 22, fontWeight: '900' },
-  prepareHeaderSpacer: { width: 42, height: 42 },
-  prepareScene: { flex: 1, paddingHorizontal: 28, justifyContent: 'center' },
-  prepareEyebrow: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
-  prepareTitle: { marginTop: 8, color: COLORS.ink, fontSize: 47, lineHeight: 53, fontWeight: '900', letterSpacing: -2.1 },
-  prepareSignStack: { marginTop: 34, height: 208, alignItems: 'center' },
-  prepareSign: { width: '92%', minHeight: 124, paddingHorizontal: 22, paddingVertical: 18, borderRadius: 12, backgroundColor: COLORS.paper, borderWidth: 3, borderColor: COLORS.signal, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  prepareSignSmall: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  prepareSignMain: { marginTop: 6, color: COLORS.ink, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -0.8 },
-  prepareSignArrow: { position: 'absolute', right: 18, bottom: 12, color: COLORS.signal, fontSize: 32, fontWeight: '900' },
-  preparePost: { width: 12, height: 86, marginTop: -2, borderRadius: 8, backgroundColor: '#AAA196' },
-  prepareCopy: { maxWidth: 310, color: COLORS.muted, fontSize: 14, lineHeight: 22, fontWeight: '700' },
-  readyButton: { alignSelf: 'flex-start', marginTop: 28, minHeight: 58, paddingLeft: 20, paddingRight: 12, borderRadius: 29, backgroundColor: COLORS.ink, flexDirection: 'row', alignItems: 'center', gap: 18 },
-  readyButtonPressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
-  readyButtonText: { color: COLORS.paper, fontSize: 17, fontWeight: '900' },
-  readyButtonArrow: { color: COLORS.signal, fontSize: 24, fontWeight: '900' },
-  settingsButton: { minWidth: 42, height: 36, paddingHorizontal: 12, borderRadius: 99, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  settingsButtonText: { color: COLORS.ink, fontSize: 14, fontWeight: '900', letterSpacing: 1.6 },
-  homeCenter: { flex: 1, justifyContent: 'flex-start', paddingHorizontal: 24, paddingTop: 18 },
+  homeHeader: { paddingHorizontal: 24, paddingTop: 0, paddingBottom: 0 },
+  homeCenter: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 },
   streetPoster: { paddingTop: 0 },
-  streetPosterTop: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
-  homeTitle: { marginTop: 0, color: COLORS.ink, fontSize: 66, lineHeight: 72, fontWeight: '900', letterSpacing: -3.6 },
-  streetRule: { width: 62, height: 5, marginTop: 10, borderRadius: 99, backgroundColor: COLORS.signal },
-  streetPosterBottom: { marginTop: 10, flexDirection: 'row', gap: 16 },
-  streetPosterMeta: { color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  homeWorld: { height: 138, marginTop: 2, marginBottom: 8, justifyContent: 'center' },
+  homeCenterCompact: { paddingTop: 6 },
+  homeWorldCompact: { height: 112 },
+  homeDuration: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
+  homeTitle: { color: COLORS.ink, fontSize: 36, lineHeight: 44, fontWeight: '900', letterSpacing: -1.6 },
+  homeWorld: { height: 128, marginTop: 0, marginBottom: 8, justifyContent: 'center' },
   homeStartDot: { position: 'absolute', left: 4, bottom: 48, width: 13, height: 13, borderRadius: 99, backgroundColor: COLORS.ink, borderWidth: 3, borderColor: COLORS.bone },
   homeUnknownToken: { position: 'absolute', right: 4, top: 4, minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, alignItems: 'center', transform: [{ rotate: '4deg' }], shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
-  homeUnknownSmall: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   homeUnknownText: { marginTop: 2, color: COLORS.signal, fontSize: 25, fontWeight: '900', letterSpacing: 3 },
-  homeWorldHint: { position: 'absolute', left: 24, bottom: 12, color: COLORS.muted, fontSize: 11, fontWeight: '800' },
-  homeActions: { alignItems: 'flex-start', gap: 10 },
-  playButton: { width: 206, minHeight: 60, paddingLeft: 22, paddingRight: 7, borderRadius: 30, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  homeActions: { alignItems: 'stretch', gap: 12 },
+  playButton: { width: '100%', minHeight: 62, paddingLeft: 22, paddingRight: 7, borderRadius: 31, borderWidth: 2, borderColor: COLORS.signal, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   playButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
   playButtonText: { color: COLORS.paper, fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
   playButtonIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   playButtonArrow: { color: COLORS.signal, fontSize: 28, fontWeight: '900' },
-  passportButton: { width: 206, minHeight: 60, paddingLeft: 22, paddingRight: 7, borderRadius: 30, backgroundColor: COLORS.paper, borderWidth: 2, borderColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  passportButtonText: { color: COLORS.signal, fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
-  passportButtonIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
-  passportButtonArrow: { color: COLORS.signal, fontSize: 26, fontWeight: '900' },
+  passportButton: { backgroundColor: COLORS.bone },
+  passportButtonText: { color: COLORS.signal },
+  passportButtonIcon: { backgroundColor: COLORS.bone },
   buttonPressed: { opacity: 0.72 },
-  homeBottom: { paddingHorizontal: 24, paddingBottom: 20 },
-  passportStrip: { minHeight: 82, paddingHorizontal: 17, paddingVertical: 14, borderRadius: 20, backgroundColor: 'rgba(255,253,247,0.72)', borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  passportCopy: { flexShrink: 1 },
-  passportLabel: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.0 },
-  passportCount: { marginTop: 4, color: COLORS.ink, fontSize: 17, fontWeight: '900' },
-  passportStamps: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  passportStamp: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  passportStampFilled: { backgroundColor: COLORS.paleSignal, borderColor: COLORS.signal },
-  passportStampText: { color: COLORS.line, fontSize: 11, fontWeight: '900' },
-  passportStampTextFilled: { color: COLORS.signal },
-  passportArrow: { marginLeft: 6, color: COLORS.ink, fontSize: 22, fontWeight: '900' },
-  settingsOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 20, justifyContent: 'flex-end', backgroundColor: 'rgba(22,19,15,0.36)' },
+  settingsOverlay: { ...StyleSheet.absoluteFill, zIndex: 20, justifyContent: 'flex-end', backgroundColor: 'rgba(22,19,15,0.36)' },
   settingsSheet: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 28, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: COLORS.paper },
   settingsSheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   settingsEyebrow: { color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.6 },
@@ -1375,57 +1284,50 @@ const styles = StyleSheet.create({
   inlineError: { alignItems: 'center', maxWidth: 320 },
   retryButton: { marginTop: 14, borderWidth: 1, borderColor: COLORS.signal, borderRadius: 99, paddingHorizontal: 18, paddingVertical: 10 },
   retryButtonText: { color: COLORS.signal, fontSize: 13, fontWeight: '800' },
-  journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  journeyBackButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  journeyBackIcon: { color: COLORS.ink, fontSize: 23, lineHeight: 27, fontWeight: '900' },
+  journeyHeader: { paddingHorizontal: 20, paddingTop: 2, paddingBottom: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  journeyBackButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
   journeyState: { marginTop: 3, color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.25 },
   journeyMeta: { minWidth: 88, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'flex-end' },
   elapsed: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   discoveryTrail: { marginTop: 6, flexDirection: 'row', gap: 5 },
   discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: COLORS.line },
   discoveryDotFound: { width: 14, backgroundColor: COLORS.signal },
-  navigationIdle: { color: COLORS.ink, fontSize: 35, lineHeight: 39, fontWeight: '900', letterSpacing: -1.3 },
+  navigationIdle: { color: COLORS.ink, fontSize: 38, lineHeight: 44, fontWeight: '900', letterSpacing: -1.3 },
   mapFrame: { height: 300, marginHorizontal: 18, overflow: 'hidden', borderRadius: 30, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
   mapCaption: { position: 'absolute', left: 14, top: 14, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.90)' },
   mapCaptionText: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  mapNavigationOverlay: { position: 'absolute', left: 14, right: 14, bottom: 14, minHeight: 112, paddingHorizontal: 13, paddingVertical: 12, borderRadius: 24, backgroundColor: 'rgba(255,253,247,0.94)', borderWidth: 1, borderColor: 'rgba(216,208,195,0.78)', flexDirection: 'row', alignItems: 'center', gap: 13, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  mapDirectionDial: { width: 76, height: 76, borderRadius: 38, backgroundColor: COLORS.bone, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  mapDirectionDialInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: COLORS.signal, alignItems: 'center', justifyContent: 'center' },
-  mapDirectionGlyph: { color: COLORS.paper, fontSize: 34, lineHeight: 39, fontWeight: '900' },
+  mapNavigationOverlay: { position: 'absolute', left: 12, right: 12, bottom: 12, minHeight: 104, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 24, backgroundColor: 'rgba(255,253,247,0.96)', borderWidth: 1, borderColor: 'rgba(216,208,195,0.78)', flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  mapDirectionDial: { width: 54, height: 54, borderRadius: 27, backgroundColor: COLORS.bone, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  mapDirectionDialInner: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.signal, alignItems: 'center', justifyContent: 'center' },
+  mapDirectionGlyph: { color: COLORS.paper, fontSize: 30, lineHeight: 36, fontWeight: '900' },
   mapDirectionTick: { position: 'absolute', top: -3, width: 4, height: 12, borderRadius: 99, backgroundColor: COLORS.ink },
   mapNavigationCopy: { flex: 1, minWidth: 0 },
-  mapNavigationEyebrow: { marginBottom: 3, color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
-  journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
-  navigationHintText: { color: COLORS.ink, fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: -1.1 },
-  navigationSubHint: { marginTop: 3, color: COLORS.muted, fontSize: 10, lineHeight: 14, fontWeight: '800' },
+  journeyScroll: { flexGrow: 1, paddingBottom: 8 },
+  journeyContent: { paddingHorizontal: 20, paddingTop: 4 },
+  navigationHintText: { color: COLORS.ink, fontSize: 36, lineHeight: 42, fontWeight: '900', letterSpacing: -1.1 },
+  navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 13, lineHeight: 19, fontWeight: '600' },
   targetSignWrap: { marginTop: 8, alignItems: 'center' },
-  targetSign: { width: '100%', minHeight: 96, paddingHorizontal: 15, paddingTop: 10, paddingBottom: 12, borderRadius: 12, backgroundColor: COLORS.paper, borderWidth: 2, borderColor: COLORS.signal, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 9, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
-  targetSignTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  targetSignLabel: { color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
-  targetEmoji: { fontSize: 23 },
-  targetSignTitle: { maxWidth: '84%', marginTop: 7, color: COLORS.ink, fontSize: 22, lineHeight: 27, fontWeight: '900', letterSpacing: -0.5 },
-  targetSignArrowBox: { position: 'absolute', right: 12, bottom: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8', alignItems: 'center', justifyContent: 'center' },
-  targetSignArrow: { color: COLORS.signal, fontSize: 20, fontWeight: '900' },
-  targetSignPost: { width: 9, height: 16, marginTop: -2, borderRadius: 6, backgroundColor: '#AAA196' },
-  targetActions: { width: '100%', marginTop: 10, flexDirection: 'row', gap: 8 },
-  replaceButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingVertical: 11, alignItems: 'center' },
+  targetSign: { width: '100%', minHeight: 70, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal },
+  targetEmoji: { fontSize: 28, lineHeight: 34 },
+  targetSignTitle: { flex: 1, color: COLORS.ink, fontSize: 20, lineHeight: 26, fontWeight: '800', letterSpacing: -0.4 },
+  targetActions: { width: '100%', marginTop: 8, flexDirection: 'row', gap: 8 },
+  replaceButton: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   replaceButtonText: { color: COLORS.muted, fontSize: 13, fontWeight: '800' },
-  foundButton: { flex: 1.4, borderRadius: 14, paddingVertical: 11, alignItems: 'center', backgroundColor: COLORS.signal },
+  foundButton: { flex: 1.4, minHeight: 44, borderRadius: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.signal },
   foundButtonText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
-  closingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8' },
-  closingEyebrow: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  closingTitle: { marginTop: 12, color: COLORS.ink, fontSize: 28, fontWeight: '900' },
-  closingCopy: { marginTop: 8, color: COLORS.muted, fontSize: 14, lineHeight: 21 },
-  closingTarget: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#FFC8B8' },
+  closingCard: { marginTop: 8, padding: 14, borderRadius: 20, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8' },
+  closingTitle: { marginTop: 4, color: COLORS.ink, fontSize: 24, fontWeight: '900' },
+  closingCopy: { marginTop: 4, color: COLORS.muted, fontSize: 14, lineHeight: 20 },
+  closingTarget: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#FFC8B8' },
   closingTargetCopy: { gap: 4 },
   closingTargetKicker: { color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   closingTargetTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '900', lineHeight: 22 },
   closingTargetActions: { marginTop: 10, flexDirection: 'row', gap: 8 },
-  closingReplaceButton: { flex: 1, borderRadius: 12, borderWidth: 1, borderColor: '#E7B9AA', paddingVertical: 9, alignItems: 'center', backgroundColor: COLORS.paper },
-  closingReplaceText: { color: COLORS.muted, fontSize: 10, fontWeight: '900' },
-  closingFoundButton: { flex: 1.3, borderRadius: 12, backgroundColor: COLORS.signal, paddingVertical: 9, alignItems: 'center' },
-  closingFoundText: { color: COLORS.paper, fontSize: 10, fontWeight: '900' },
-  closingPromise: { marginTop: 18, alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: COLORS.paper },
+  closingReplaceButton: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: '#E7B9AA', paddingVertical: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
+  closingReplaceText: { color: COLORS.muted, fontSize: 13, fontWeight: '800' },
+  closingFoundButton: { flex: 1.3, minHeight: 44, borderRadius: 12, backgroundColor: COLORS.signal, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  closingFoundText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
+  closingPromise: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 11, paddingVertical: 6, backgroundColor: COLORS.paper },
   closingPromiseText: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   waitingCard: { marginTop: 12, padding: 22, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
   waitingTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
@@ -1451,9 +1353,6 @@ const styles = StyleSheet.create({
   cameraButtonIcon: { width: 22, height: 22, borderRadius: 8, overflow: 'hidden', color: COLORS.paper, backgroundColor: COLORS.signal, fontSize: 16, lineHeight: 22, fontWeight: '900', textAlign: 'center' },
   cameraButtonText: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   livePhotoThumb: { width: 40, height: 40, borderRadius: 11, backgroundColor: COLORS.line, borderWidth: 2, borderColor: COLORS.paper },
-  ticketMiniWrap: { alignItems: 'flex-end', maxWidth: '65%' },
-  ticketMiniLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
-  ticketMiniEmoji: { marginTop: 2, color: COLORS.ink, fontSize: 17, letterSpacing: 2 },
   journeyError: { alignItems: 'center', paddingBottom: 8 },
   retryLink: { marginTop: 5, color: COLORS.signal, fontSize: 12, fontWeight: '900' },
   finishScroll: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 34 },
