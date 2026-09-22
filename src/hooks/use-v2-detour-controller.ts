@@ -920,7 +920,7 @@ export function useV2DetourController() {
       // the player's actual location.
       void planShortRoute(point, 'exploration');
     },
-    [finishJourney, planShortRoute]
+    [finishJourney, planShortRoute, refreshEnvironmentHints]
   );
 
   const startWatchers = useCallback(async () => {
