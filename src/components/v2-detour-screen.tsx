@@ -337,26 +337,109 @@ function RoutePreview({
 
 function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const [showSettings, setShowSettings] = useState(false);
-  const playPulse = useRef(new Animated.Value(1)).current;
+  const [isPreparing, setIsPreparing] = useState(false);
+  const prepareProgress = useRef(new Animated.Value(0)).current;
+  const signFloat = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(playPulse, {
-          toValue: 1.025,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(playPulse, {
-          toValue: 1,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(signFloat, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(signFloat, { toValue: 0, duration: 1500, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [playPulse]);
+  }, [signFloat]);
+
+  const enterPreparing = () => {
+    setIsPreparing(true);
+    prepareProgress.setValue(0);
+    Animated.spring(prepareProgress, {
+      toValue: 1,
+      speed: 18,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const leavePreparing = () => {
+    Animated.timing(prepareProgress, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setIsPreparing(false));
+  };
+
+  if (isPreparing) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.prepareHeader}>
+          <Pressable onPress={leavePreparing} style={styles.prepareBack}>
+            <Text style={styles.prepareBackText}>←</Text>
+          </Pressable>
+          <Text style={styles.brand}>DETOUR</Text>
+          <View style={styles.prepareHeaderSpacer} />
+        </View>
+
+        <Animated.View
+          style={[
+            styles.prepareScene,
+            {
+              opacity: prepareProgress,
+              transform: [
+                {
+                  translateY: prepareProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [32, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.prepareEyebrow}>BEFORE YOU GO</Text>
+          <Text style={styles.prepareTitle}>準備好了嗎？</Text>
+
+          <View style={styles.prepareSignStack}>
+            <Animated.View
+              style={[
+                styles.prepareSign,
+                {
+                  transform: [
+                    { rotate: '-2deg' },
+                    {
+                      translateY: signFloat.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -5],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.prepareSignSmall}>這趟</Text>
+              <Text style={styles.prepareSignMain}>終點保密</Text>
+              <Text style={styles.prepareSignArrow}>↗</Text>
+            </Animated.View>
+            <View style={styles.preparePost} />
+          </View>
+
+          <Text style={styles.prepareCopy}>先看一眼四周。按下去之後，第一個方向才會出現。</Text>
+
+          <Pressable
+            accessibilityLabel="準備好了，開始走"
+            onPress={() => void controller.startJourney()}
+            style={({ pressed }) => [styles.readyButton, pressed && styles.readyButtonPressed]}
+          >
+            <Text style={styles.readyButtonText}>準備好了</Text>
+            <Text style={styles.readyButtonArrow}>→</Text>
+          </Pressable>
+        </Animated.View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -373,30 +456,35 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
       </View>
 
       <View style={styles.homeCenter}>
-        <Text style={styles.homeTitle}>繞一下？</Text>
+        <View style={styles.streetPoster}>
+          <Text style={styles.streetPosterTop}>TAKE THE LONG WAY</Text>
+          <Text style={styles.homeTitle}>繞一下？</Text>
+          <View style={styles.streetRule} />
+          <View style={styles.streetPosterBottom}>
+            <Text style={styles.streetPosterMeta}>10–15 MIN</Text>
+            <Text style={styles.streetPosterMeta}>DESTINATION ???</Text>
+          </View>
+        </View>
 
         <View style={styles.homeWorld}>
           <V2HomeWanderMotion />
           <View style={styles.homeStartDot} />
           <View style={styles.homeUnknownToken}>
-            <Text style={styles.homeUnknownSmall}>終點</Text>
+            <Text style={styles.homeUnknownSmall}>哪裡？</Text>
             <Text style={styles.homeUnknownText}>???</Text>
           </View>
-          <Text style={styles.homeWorldHint}>路會自己長出來</Text>
         </View>
 
-        <Animated.View style={{ transform: [{ scale: playPulse }] }}>
-          <Pressable
-            accessibilityLabel="開始 Detour"
-            onPress={() => void controller.startJourney()}
-            style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
-          >
-            <Text style={styles.playButtonText}>出發</Text>
-            <View style={styles.playButtonIcon}>
-              <Text style={styles.playButtonArrow}>→</Text>
-            </View>
-          </Pressable>
-        </Animated.View>
+        <Pressable
+          accessibilityLabel="先準備一下"
+          onPress={enterPreparing}
+          style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
+        >
+          <Text style={styles.playButtonText}>準備出發</Text>
+          <View style={styles.playButtonIcon}>
+            <Text style={styles.playButtonArrow}>↗</Text>
+          </View>
+        </Pressable>
       </View>
 
       <View style={styles.homeBottom}>
@@ -405,30 +493,12 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
           style={({ pressed }) => [styles.passportStrip, pressed && styles.buttonPressed]}
         >
           <View style={styles.passportCopy}>
-            <Text style={styles.passportLabel}>我的 Detour</Text>
+            <Text style={styles.passportLabel}>走過的路</Text>
             <Text style={styles.passportCount}>
-              {controller.passport.length > 0 ? `${controller.passport.length} 趟` : '還沒有紀錄'}
+              {controller.passport.length > 0 ? `${controller.passport.length} 趟 Detour` : '還沒有紀錄'}
             </Text>
           </View>
-          <View style={styles.passportStamps}>
-            {Array.from({ length: 4 }).map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.passportStamp,
-                  index < Math.min(4, controller.passport.length) && styles.passportStampFilled,
-                ]}
-              >
-                <Text style={[
-                  styles.passportStampText,
-                  index < Math.min(4, controller.passport.length) && styles.passportStampTextFilled,
-                ]}>
-                  {index < controller.passport.length ? '✓' : '·'}
-                </Text>
-              </View>
-            ))}
-            <Text style={styles.passportArrow}>→</Text>
-          </View>
+          <Text style={styles.passportArrow}>→</Text>
         </Pressable>
         {controller.errorMessage && <Text style={styles.errorText}>{controller.errorMessage}</Text>}
       </View>
@@ -446,7 +516,6 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
                 <Text style={styles.settingsCloseText}>×</Text>
               </Pressable>
             </View>
-
             <View style={styles.settingsRule} />
             <View style={styles.settingRow}>
               <Text style={styles.settingName}>一趟多久</Text>
@@ -454,13 +523,12 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
             </View>
             <View style={styles.settingRow}>
               <Text style={styles.settingName}>終點</Text>
-              <Text style={styles.settingValue}>先保密</Text>
+              <Text style={styles.settingValue}>保密</Text>
             </View>
             <View style={styles.settingRow}>
-              <Text style={styles.settingName}>計時</Text>
-              <Text style={styles.settingValue}>正向計時</Text>
+              <Text style={styles.settingName}>地圖</Text>
+              <Text style={styles.settingValue}>固定顯示</Text>
             </View>
-
             <Pressable
               accessibilityLabel="室內測試"
               onPress={() => {
@@ -478,6 +546,7 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
     </SafeAreaView>
   );
 }
+
 function StartingPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   return (
     <SafeAreaView style={styles.safe}>
@@ -653,6 +722,17 @@ function IndoorPlaytestControls({
 function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const closing = controller.phase === 'closing';
   const beat = controller.currentNavigationBeat;
+  const targetMotion = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    targetMotion.setValue(0);
+    Animated.spring(targetMotion, {
+      toValue: 1,
+      speed: 18,
+      bounciness: 5,
+      useNativeDriver: true,
+    }).start();
+  }, [controller.activeTarget?.id, targetMotion]);
   const closingMinutes =
     closing && controller.currentRouteRemainingSeconds != null
       ? Math.max(1, Math.ceil(controller.currentRouteRemainingSeconds / 60))
@@ -743,12 +823,39 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             </View>
           </View>
         ) : controller.activeTarget ? (
-          <View style={styles.targetCard}>
-            <View style={styles.targetPaperTop}>
-              <Text style={styles.targetPaperLabel}>路上找找看</Text>
-              <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
+          <Animated.View
+            style={[
+              styles.targetSignWrap,
+              {
+                opacity: targetMotion,
+                transform: [
+                  {
+                    translateX: targetMotion.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [28, 0],
+                    }),
+                  },
+                  {
+                    rotate: targetMotion.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['3deg', '-1deg'],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.targetSign}>
+              <View style={styles.targetSignTop}>
+                <Text style={styles.targetSignLabel}>LOOK FOR</Text>
+                <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
+              </View>
+              <Text style={styles.targetSignTitle}>{controller.activeTarget.title}</Text>
+              <View style={styles.targetSignArrowBox}>
+                <Text style={styles.targetSignArrow}>→</Text>
+              </View>
             </View>
-            <Text style={styles.targetTitle}>{controller.activeTarget.title}</Text>
+            <View style={styles.targetSignPost} />
             <View style={styles.targetActions}>
               <Pressable onPress={controller.replaceTarget} style={styles.replaceButton}>
                 <Text style={styles.replaceButtonText}>換一個</Text>
@@ -757,7 +864,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
                 <Text style={styles.foundButtonText}>找到了</Text>
               </Pressable>
             </View>
-          </View>
+          </Animated.View>
         ) : (
           <View style={styles.waitingCard}>
             <Text style={styles.waitingTitle}>先走著。</Text>
@@ -1127,20 +1234,43 @@ const styles = StyleSheet.create({
   brand: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 2.4 },
   smallLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
   homeHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  prepareHeader: { paddingHorizontal: 20, paddingTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  prepareBack: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  prepareBackText: { color: COLORS.ink, fontSize: 22, fontWeight: '900' },
+  prepareHeaderSpacer: { width: 42, height: 42 },
+  prepareScene: { flex: 1, paddingHorizontal: 28, justifyContent: 'center' },
+  prepareEyebrow: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
+  prepareTitle: { marginTop: 8, color: COLORS.ink, fontSize: 47, lineHeight: 53, fontWeight: '900', letterSpacing: -2.1 },
+  prepareSignStack: { marginTop: 34, height: 208, alignItems: 'center' },
+  prepareSign: { width: '92%', minHeight: 124, paddingHorizontal: 22, paddingVertical: 18, borderRadius: 12, backgroundColor: COLORS.signal, borderWidth: 4, borderColor: COLORS.paper, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
+  prepareSignSmall: { color: '#FFE3D9', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  prepareSignMain: { marginTop: 6, color: COLORS.paper, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -0.8 },
+  prepareSignArrow: { position: 'absolute', right: 18, bottom: 12, color: COLORS.paper, fontSize: 32, fontWeight: '900' },
+  preparePost: { width: 12, height: 86, marginTop: -2, borderRadius: 8, backgroundColor: '#AAA196' },
+  prepareCopy: { maxWidth: 310, color: COLORS.muted, fontSize: 14, lineHeight: 22, fontWeight: '700' },
+  readyButton: { alignSelf: 'flex-start', marginTop: 28, minHeight: 58, paddingLeft: 20, paddingRight: 12, borderRadius: 29, backgroundColor: COLORS.ink, flexDirection: 'row', alignItems: 'center', gap: 18 },
+  readyButtonPressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
+  readyButtonText: { color: COLORS.paper, fontSize: 17, fontWeight: '900' },
+  readyButtonArrow: { color: COLORS.signal, fontSize: 24, fontWeight: '900' },
   settingsButton: { minWidth: 42, height: 36, paddingHorizontal: 12, borderRadius: 99, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
   settingsButtonText: { color: COLORS.ink, fontSize: 14, fontWeight: '900', letterSpacing: 1.6 },
   homeCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  homeTitle: { color: COLORS.ink, fontSize: 66, lineHeight: 72, fontWeight: '900', letterSpacing: -3.6 },
-  homeWorld: { height: 196, marginTop: 10, marginBottom: 8, justifyContent: 'center' },
+  streetPoster: { paddingTop: 8 },
+  streetPosterTop: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
+  homeTitle: { marginTop: 3, color: COLORS.ink, fontSize: 66, lineHeight: 72, fontWeight: '900', letterSpacing: -3.6 },
+  streetRule: { width: 62, height: 5, marginTop: 12, borderRadius: 99, backgroundColor: COLORS.signal },
+  streetPosterBottom: { marginTop: 10, flexDirection: 'row', gap: 16 },
+  streetPosterMeta: { color: COLORS.muted, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  homeWorld: { height: 164, marginTop: 6, marginBottom: 8, justifyContent: 'center' },
   homeStartDot: { position: 'absolute', left: 4, bottom: 48, width: 13, height: 13, borderRadius: 99, backgroundColor: COLORS.ink, borderWidth: 3, borderColor: COLORS.bone },
   homeUnknownToken: { position: 'absolute', right: 4, top: 4, minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, alignItems: 'center', transform: [{ rotate: '4deg' }], shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   homeUnknownSmall: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   homeUnknownText: { marginTop: 2, color: COLORS.signal, fontSize: 25, fontWeight: '900', letterSpacing: 3 },
   homeWorldHint: { position: 'absolute', left: 24, bottom: 12, color: COLORS.muted, fontSize: 11, fontWeight: '800' },
-  playButton: { minWidth: 210, alignSelf: 'flex-start', minHeight: 76, paddingLeft: 24, paddingRight: 10, borderRadius: 38, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  playButton: { minWidth: 188, alignSelf: 'flex-start', minHeight: 62, paddingLeft: 22, paddingRight: 8, borderRadius: 31, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   playButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
-  playButtonText: { color: COLORS.paper, fontSize: 29, fontWeight: '900', letterSpacing: -0.8 },
-  playButtonIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  playButtonText: { color: COLORS.paper, fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  playButtonIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   playButtonArrow: { color: COLORS.signal, fontSize: 28, fontWeight: '900' },
   buttonPressed: { opacity: 0.72 },
   homeBottom: { paddingHorizontal: 24, paddingBottom: 20 },
@@ -1210,11 +1340,15 @@ const styles = StyleSheet.create({
   journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
   navigationHintText: { color: COLORS.ink, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -1.0 },
   navigationSubHint: { marginTop: 5, color: COLORS.muted, fontSize: 11, lineHeight: 16, fontWeight: '800' },
-  targetCard: { marginTop: 12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16, borderRadius: 8, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: '#E1D8CB', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2, transform: [{ rotate: '0.7deg' }] },
-  targetPaperTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  targetPaperLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },
-  targetEmoji: { fontSize: 30 },
-  targetTitle: { marginTop: 20, color: COLORS.signal, fontSize: 25, lineHeight: 32, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
+  targetSignWrap: { marginTop: 12, alignItems: 'center' },
+  targetSign: { width: '100%', minHeight: 128, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 18, borderRadius: 12, backgroundColor: COLORS.signal, borderWidth: 4, borderColor: COLORS.paper, shadowColor: '#000', shadowOpacity: 0.10, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  targetSignTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  targetSignLabel: { color: '#FFE3D9', fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
+  targetEmoji: { fontSize: 29 },
+  targetSignTitle: { maxWidth: '82%', marginTop: 13, color: COLORS.paper, fontSize: 27, lineHeight: 33, fontWeight: '900', letterSpacing: -0.6 },
+  targetSignArrowBox: { position: 'absolute', right: 14, bottom: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  targetSignArrow: { color: COLORS.signal, fontSize: 23, fontWeight: '900' },
+  targetSignPost: { width: 10, height: 24, marginTop: -2, borderRadius: 6, backgroundColor: '#AAA196' },
   targetActions: { width: '100%', marginTop: 18, flexDirection: 'row', gap: 10 },
   replaceButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   replaceButtonText: { color: COLORS.muted, fontSize: 14, fontWeight: '800' },
