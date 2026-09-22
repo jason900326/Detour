@@ -11,30 +11,32 @@ export function DirectionBeacon({
   routing?: boolean;
 }) {
   const reduce = useReducedMotion();
-  const opacity = useRef(new Animated.Value(0.35)).current;
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (reduce) {
-      opacity.setValue(0.65);
+      progress.setValue(0.45);
       return;
     }
     const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.95,
-          duration: routing ? 650 : 1100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.35,
-          duration: routing ? 650 : 1100,
-          useNativeDriver: true,
-        }),
-      ]),
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: routing ? 1100 : 1900,
+        useNativeDriver: true,
+      }),
     );
     animation.start();
     return () => animation.stop();
-  }, [opacity, reduce, routing]);
+  }, [progress, reduce, routing]);
+
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1.16],
+  });
+  const opacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.28, 0],
+  });
 
   return (
     <View
@@ -49,38 +51,41 @@ export function DirectionBeacon({
         justifyContent: "center",
       }}
     >
-      <Svg width={126} height={126} style={{ position: "absolute" }}>
-        <Path
-          d="M18 82 C17 47 36 23 67 27 C99 31 111 58 96 79 C82 99 55 91 48 108"
-          fill="none"
-          stroke="#E8E2D5"
-          strokeWidth={4}
-          strokeLinecap="round"
-        />
-      </Svg>
-      <Animated.View style={{ position: "absolute", opacity }}>
-        <Svg width={126} height={126}>
-          <Path
-            d="M18 82 C17 47 36 23 67 27 C99 31 111 58 96 79 C82 99 55 91 48 108"
-            fill="none"
-            stroke={C.orange}
-            strokeWidth={5}
-            strokeLinecap="round"
-          />
-        </Svg>
-      </Animated.View>
       <View
         style={{
-          width: 88,
-          height: 88,
+          position: "absolute",
+          width: 78,
+          height: 78,
+          borderRadius: 39,
+          backgroundColor: "#F7E9E2",
+          borderWidth: 2,
+          borderColor: "#F4623C29",
+        }}
+      />
+      <Animated.View
+        style={{
+          position: "absolute",
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          borderWidth: 2.5,
+          borderColor: C.orange,
+          opacity,
+          transform: [{ scale }],
+        }}
+      />
+      <View
+        style={{
+          width: 86,
+          height: 86,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ rotate: `${relative ?? 0}deg` }],
         }}
       >
-        <Svg width={88} height={88}>
+        <Svg width={86} height={86}>
           <Path
-            d="M20 38 L44 14 L68 38 M44 14 L44 72"
+            d="M20 37 L43 14 L66 37 M43 14 L43 70"
             fill="none"
             stroke={routing ? C.muted : C.ink}
             strokeWidth={7}
