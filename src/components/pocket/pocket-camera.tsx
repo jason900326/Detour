@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, C, s } from "./pocket-ui";
 import { EdgeBack } from "./pocket-edge-back";
 import { WanderMotion } from "./pocket-motion";
@@ -22,6 +22,7 @@ export default function PocketCamera({
   onSave: (uri: string) => void;
 }) {
   const [permission, request] = useCameraPermissions();
+  const insets = useSafeAreaInsets();
   const camera = useRef<CameraView>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,7 +75,16 @@ export default function PocketCamera({
         }
       }}
     >
-      <SafeAreaView style={[s.screen, { backgroundColor: C.ink }]}>
+      <View
+        style={[
+          s.screen,
+          {
+            backgroundColor: C.ink,
+            paddingTop: Math.max(insets.top, 18),
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}
+      >
         <EdgeBack
           onBack={
             busy
@@ -85,17 +95,26 @@ export default function PocketCamera({
                 }
           }
         >
-          <View style={[s.page, { flex: 1 }]}>
+          <View style={[s.page, { flex: 1, paddingTop: 8 }]}>
             <View style={s.header}>
               <Text style={[s.brand, { color: C.white }]}>留住這一眼</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="關閉相機"
                 disabled={busy}
+                hitSlop={10}
                 onPress={onClose}
-                style={s.round}
+                style={[
+                  s.round,
+                  {
+                    width: 52,
+                    height: 52,
+                    borderRadius: 26,
+                    borderColor: "#686D64",
+                  },
+                ]}
               >
-                <Text style={{ color: C.white, fontSize: 20 }}>×</Text>
+                <Text style={{ color: C.white, fontSize: 24, lineHeight: 28 }}>×</Text>
               </Pressable>
             </View>
             {permission?.granted ? (
@@ -234,7 +253,7 @@ export default function PocketCamera({
             )}
           </View>
         </EdgeBack>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
