@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  PanResponder,
+  BackHandler,
   Image,
   Modal,
   Platform,
@@ -27,16 +25,26 @@ import {
   guidanceBearingOnPolyline,
   distanceToPolyline,
 } from "../../lib/navigation-engine";
-import { Button, C, Enter, HomeTicket, s, Ticket, Trail } from "./pocket-ui";
+import { Button, C, Enter, s, Ticket, Trail } from "./pocket-ui";
+import { WanderMotion } from "./pocket-motion";
+import { EdgeBack } from "./pocket-edge-back";
+import { PhotoDeck } from "./pocket-photo-deck";
+import {
+  previousPocketScreen,
+  type PocketScreen,
+} from "../../lib/pocket-navigation";
 import PocketMap from "./pocket-map";
 import PocketCamera from "./pocket-camera";
 
-type Screen = "home" | "history" | "detail" | "share" | "settings";
+type Screen = PocketScreen;
 export default function PocketApp() {
   const c = usePocketJourney();
   const [screen, setScreen] = useState<Screen>("home");
   const [atHome, setAtHome] = useState(false);
-  const swipeX = useRef(new Animated.Value(0)).current;
+  const [covers, setCovers] = useState<Record<string, string>>({});
+  const [loadedCover, setLoadedCover] = useState("");
+  const [coverError, setCoverError] = useState(false);
+  const [shareOrigin, setShareOrigin] = useState<"home" | "detail">("home");
   const [selected, setSelected] = useState<PocketJourney | null>(null);
   const [camera, setCamera] = useState(false);
   const [map, setMap] = useState(false);
@@ -48,6 +56,11 @@ export default function PocketApp() {
   const active = j && j.phase !== "finished";
   const completed = j?.phase === "finished";
   const displayed = selected ?? j;
+  const cover = displayed
+    ? (covers[displayed.id] ?? displayed.photos[0])
+    : undefined;
+  const currentCover = useRef(cover);
+  currentCover.current = cover;
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
   useEffect(() => {
     if (completed) setCamera(false);
@@ -62,24 +75,27 @@ export default function PocketApp() {
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
-  const swipeBack = PanResponder.create({
-    onMoveShouldSetPanResponderCapture: (_, g) =>
-      !!isJourney &&
-      !camera &&
-      !endSheet &&
-      g.x0 < 32 &&
-      g.dx > 12 &&
-      Math.abs(g.dy) < g.dx / 2,
-    onPanResponderMove: (_, g) => swipeX.setValue(Math.max(0, g.dx)),
-    onPanResponderRelease: (_, g) => {
-      if (g.dx > 90 || (g.dx > 35 && g.vx > 0.5)) goHome();
-      Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
-    },
-    onPanResponderTerminate: () =>
-      Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start(),
+  function back() {
+    const previous = previousPocketScreen(screen, shareOrigin);
+    if (previous) setScreen(previous);
+  }
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (sharing || c.starting || c.finishing) return true;
+      if (isJourney) {
+        setEndSheet(true);
+        return true;
+      }
+      if (screen !== "home") {
+        back();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
   });
   async function share() {
-    if (sharing) return;
+    if (sharing || (cover && (loadedCover !== cover || coverError))) return;
     setSharing(true);
     setShareError("");
     try {
@@ -107,6 +123,7 @@ export default function PocketApp() {
           accessibilityRole="button"
           accessibilityLabel="返回"
           onPress={back}
+          disabled={sharing}
           style={s.round}
         >
           <Text style={{ fontSize: 23, color: C.ink }}>←</Text>
@@ -128,9 +145,19 @@ export default function PocketApp() {
         </Text>
       )}
       {back && <View style={{ width: 44 }} />}
+      {!back && !isCompletion && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="玩法說明"
+          style={s.round}
+          onPress={() => setScreen("settings")}
+        >
+          <Text style={{ color: C.ink, fontSize: 20 }}>?</Text>
+        </Pressable>
+      )}
     </View>
   );
-  if (!c.ready)
+  if (!c.ready || c.starting || c.finishing)
     return (
       <SafeAreaView
         style={[
@@ -139,21 +166,21 @@ export default function PocketApp() {
         ]}
       >
         <Text style={s.brand}>DETOUR ↗</Text>
-        <ActivityIndicator color={C.orange} />
+        <WanderMotion />
+        <Text style={[s.paperTitle, { fontSize: 30 }]}>
+          {c.finishing ? "把這一點意外，收好。" : "意外，就從這裡開始。"}
+        </Text>
       </SafeAreaView>
     );
   const pageKey = isJourney ? "journey" : isCompletion ? "completion" : screen;
   return (
     <SafeAreaView style={s.screen}>
       <StatusBar style="dark" />
-      <Animated.View
-        style={{ flex: 1, transform: [{ translateX: swipeX }] }}
-        {...swipeBack.panHandlers}
-      >
+      <EdgeBack onBack={screen !== "home" && !sharing ? back : undefined}>
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
-            paddingBottom: isJourney ? 85 : 0,
+            paddingBottom: 0,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -162,16 +189,28 @@ export default function PocketApp() {
               {screen === "home" && (!j || atHome) && (
                 <>
                   <Header />
-                  <View>
-                    <Text style={[s.title, { fontSize: 30, lineHeight: 40 }]}>
-                      不知道要幹嘛
+                  <View
+                    style={{
+                      flex: 1,
+                      minHeight: 310,
+                      justifyContent: "center",
+                      paddingVertical: 16,
+                    }}
+                  >
+                    <Text style={s.eyebrow}>約 10 分鐘 · 一人份的小探險</Text>
+                    <Text
+                      style={[
+                        s.title,
+                        { fontSize: 42, lineHeight: 53, marginTop: 18 },
+                      ]}
+                    >
+                      不知道{"\n"}要幹嘛
                       <Text style={{ color: C.orange }}>？</Text>
                     </Text>
+                    <View style={{ alignItems: "center", marginTop: 16 }}>
+                      <WanderMotion />
+                    </View>
                   </View>
-                  <Enter delay={120}>
-                    <HomeTicket />
-                  </Enter>
-                  <View style={{ height: 12 }} />
                   {!!c.error && (
                     <View style={s.error}>
                       <Text style={s.errorText}>{c.error}</Text>
@@ -179,13 +218,11 @@ export default function PocketApp() {
                   )}
                   <Button
                     label={
-                      c.starting
-                        ? "找一下你的位置…"
-                        : active
-                          ? "繼續這趟 ↗"
-                          : completed
-                            ? "看看這趟票根"
-                            : "繞一下？"
+                      active
+                        ? "繼續這趟 ↗"
+                        : completed
+                          ? "看看這趟票根"
+                          : "繞一下？"
                     }
                     onPress={() => {
                       setAtHome(false);
@@ -193,7 +230,7 @@ export default function PocketApp() {
                     }}
                     disabled={c.starting}
                   />
-                  <View style={{ marginTop: 12 }}>
+                  <View style={{ marginTop: 14, marginBottom: 16 }}>
                     <Button
                       secondary
                       label="我的票根"
@@ -207,11 +244,11 @@ export default function PocketApp() {
                   <View style={s.header}>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="返回首頁，保留旅程"
-                      onPress={goHome}
+                      accessibilityLabel="結束這趟旅程"
+                      onPress={() => setEndSheet(true)}
                       style={s.round}
                     >
-                      <Text style={{ fontSize: 28, color: C.ink }}>←</Text>
+                      <Text style={{ fontSize: 24, color: C.ink }}>×</Text>
                     </Pressable>
                     <View style={s.pill}>
                       <Text style={s.pillText}>
@@ -229,25 +266,68 @@ export default function PocketApp() {
                   </View>
                   {j.target ? (
                     <Enter key={`${j.target.id}-${j.targetSince}`}>
-                      <View style={s.paper}>
-                        <View style={s.tape} />
-                        <Text style={[s.eyebrow, { color: "#8A7C99" }]}>
-                          這一小段，找找看
-                        </Text>
-                        <Text style={{ fontSize: 48, marginTop: 8 }}>
+                      <View
+                        style={[
+                          s.paper,
+                          {
+                            alignItems: "stretch",
+                            padding: 24,
+                            borderRadius: 28,
+                          },
+                        ]}
+                      >
+                        <View style={[s.tape, { alignSelf: "center" }]} />
+                        <View style={s.row}>
+                          <Text style={[s.eyebrow, { color: "#756483" }]}>
+                            這一眼的任務
+                          </Text>
+                          <Text style={s.serial}>
+                            NO. {String(j.found.length + 1).padStart(2, "0")}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 68,
+                            marginTop: 20,
+                            textAlign: "center",
+                          }}
+                        >
                           {j.target.emoji}
                         </Text>
-                        <Text style={s.paperTitle}>{j.target.title}</Text>
-                        <Text style={s.paperHint}>{j.target.hint}</Text>
+                        <Text
+                          style={[
+                            s.paperTitle,
+                            { fontSize: 32, lineHeight: 42 },
+                          ]}
+                        >
+                          {j.target.title}
+                        </Text>
+                        <Text
+                          style={[
+                            s.paperHint,
+                            { alignSelf: "center", marginBottom: 24 },
+                          ]}
+                        >
+                          {j.target.hint}
+                        </Text>
+                        <Button
+                          label="找到了"
+                          accessibilityLabel="找到了，開啟相機記錄"
+                          onPress={() => {
+                            c.discover();
+                            setCamera(true);
+                          }}
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => c.discover(true)}
+                          style={[s.link, { marginTop: 8 }]}
+                        >
+                          <Text style={[s.linkText, { color: "#65546F" }]}>
+                            ↻　換個目標
+                          </Text>
+                        </Pressable>
                       </View>
-                      <Button label="找到了" onPress={() => c.discover()} />
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => c.discover(true)}
-                        style={[s.link, { marginTop: 6 }]}
-                      >
-                        <Text style={s.linkText}>↻　換一個</Text>
-                      </Pressable>
                     </Enter>
                   ) : (
                     <Enter>
@@ -302,21 +382,51 @@ export default function PocketApp() {
                   )}
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setEndSheet(true)}
-                    style={s.link}
+                    accessibilityLabel="沿途留一張，開啟相機"
+                    onPress={() => setCamera(true)}
+                    style={[
+                      s.row,
+                      {
+                        backgroundColor: C.ink,
+                        padding: 18,
+                        borderRadius: 22,
+                        marginTop: 8,
+                      },
+                    ]}
                   >
-                    <Text style={s.linkText}>在這裡結束</Text>
-                  </Pressable>
-                  <View style={[s.row, { marginTop: 18 }]}>
-                    <View>
-                      <Text style={s.muted}>
-                        {j.photos.length
-                          ? `已留下 ${j.photos.length} 張照片`
-                          : "想留住這一眼？"}
+                    <CameraGlyph />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: C.white,
+                          fontSize: 18,
+                          fontWeight: "700",
+                        }}
+                      >
+                        沿途留一張
                       </Text>
-                      <Text style={s.muted}>拍照隨你，不用交作業。</Text>
+                      <Text
+                        style={{ color: "#CACDBF", fontSize: 12, marginTop: 4 }}
+                      >
+                        {j.photos.length
+                          ? `${j.photos.length} 張，留在這趟裡`
+                          : "把偶然，收進今天。"}
+                      </Text>
                     </View>
-                  </View>
+                    {j.photos.at(-1) ? (
+                      <Image
+                        source={{ uri: j.photos.at(-1) }}
+                        style={{
+                          width: 44,
+                          height: 48,
+                          borderRadius: 6,
+                          transform: [{ rotate: "6deg" }],
+                        }}
+                      />
+                    ) : (
+                      <Text style={{ color: C.white, fontSize: 26 }}>＋</Text>
+                    )}
+                  </Pressable>
                   {!!c.error && (
                     <View style={s.error}>
                       <Text style={s.errorText}>{c.error}</Text>
@@ -356,28 +466,7 @@ export default function PocketApp() {
                   >
                     這趟停在 {j.endpoint?.name ?? "街角"}。
                   </Text>
-                  {j.photos.length > 0 && (
-                    <>
-                      <Text style={s.sectionTitle}>路上的幾眼</Text>
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ gap: 12 }}
-                      >
-                        {j.photos.map((uri) => (
-                          <Image
-                            key={uri}
-                            source={{ uri }}
-                            style={{
-                              width: 150,
-                              height: 185,
-                              borderRadius: 10,
-                            }}
-                          />
-                        ))}
-                      </ScrollView>
-                    </>
-                  )}
+                  <PhotoDeck key={j.id} photos={j.photos} />
                   <Trail points={j.trace} height={105} />
                   <Text
                     style={[s.muted, { textAlign: "center", marginBottom: 25 }]}
@@ -394,6 +483,9 @@ export default function PocketApp() {
                     label="分享這一趟"
                     onPress={() => {
                       setSelected(j);
+                      setShareOrigin("home");
+                      setLoadedCover("");
+                      setCoverError(false);
                       setScreen("share");
                     }}
                   />
@@ -486,13 +578,7 @@ export default function PocketApp() {
                   <Text style={s.body}>
                     {new Date(displayed.startedAt).toLocaleString("zh-TW")}
                   </Text>
-                  {displayed.photos.map((uri) => (
-                    <Image
-                      key={uri}
-                      source={{ uri }}
-                      style={[s.photo, { marginTop: 17 }]}
-                    />
-                  ))}
+                  <PhotoDeck key={displayed.id} photos={displayed.photos} />
                   <Text style={s.sectionTitle}>走過的路</Text>
                   <Trail points={displayed.trace} />
                   {displayed.found.map((f, i) => (
@@ -516,20 +602,80 @@ export default function PocketApp() {
                   <View style={{ height: 25 }} />
                   <Button
                     label="分享這一趟"
-                    onPress={() => setScreen("share")}
+                    onPress={() => {
+                      setShareOrigin("detail");
+                      setLoadedCover("");
+                      setCoverError(false);
+                      setScreen("share");
+                    }}
                   />
                 </>
               )}
               {screen === "share" && displayed && (
                 <>
-                  <Header
-                    title="把這一點意外分享出去"
-                    back={() =>
-                      setScreen(
-                        completed && displayed.id === j?.id ? "home" : "detail",
-                      )
-                    }
-                  />
+                  <Header title="把這一點意外分享出去" back={back} />
+                  {displayed.photos.length > 0 && (
+                    <View style={{ marginBottom: 20 }}>
+                      <Text style={[s.eyebrow, { marginBottom: 12 }]}>
+                        哪一眼，放在最前面？
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 10 }}
+                      >
+                        {displayed.photos.map((uri, index) => (
+                          <Pressable
+                            key={uri}
+                            accessibilityRole="button"
+                            accessibilityLabel={`選照片 ${index + 1} 作為分享封面`}
+                            accessibilityState={{
+                              selected: cover === uri,
+                              disabled: sharing,
+                            }}
+                            disabled={sharing}
+                            onPress={() => {
+                              if (cover !== uri) {
+                                setLoadedCover("");
+                                setCoverError(false);
+                                setCovers((v) => ({
+                                  ...v,
+                                  [displayed.id]: uri,
+                                }));
+                              }
+                            }}
+                            style={{
+                              borderWidth: 3,
+                              borderColor:
+                                cover === uri ? C.orange : "transparent",
+                              padding: 3,
+                              borderRadius: 14,
+                            }}
+                          >
+                            <Image
+                              source={{ uri }}
+                              style={{ width: 62, height: 76, borderRadius: 8 }}
+                            />
+                            {cover === uri && (
+                              <Text
+                                style={{
+                                  position: "absolute",
+                                  bottom: 5,
+                                  right: 5,
+                                  color: C.white,
+                                  backgroundColor: C.orange,
+                                  borderRadius: 8,
+                                  paddingHorizontal: 5,
+                                }}
+                              >
+                                ✓
+                              </Text>
+                            )}
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
                   <View
                     ref={shareRef}
                     collapsable={false}
@@ -539,10 +685,20 @@ export default function PocketApp() {
                       borderRadius: 8,
                     }}
                   >
-                    {displayed.photos[0] ? (
+                    {cover ? (
                       <>
                         <Image
-                          source={{ uri: displayed.photos[0] }}
+                          key={cover}
+                          source={{ uri: cover }}
+                          onLoad={() => {
+                            if (currentCover.current !== cover) return;
+                            setLoadedCover(cover);
+                            setCoverError(false);
+                          }}
+                          onError={() => {
+                            if (currentCover.current === cover)
+                              setCoverError(true);
+                          }}
                           style={[s.photo, { borderRadius: 3 }]}
                         />
                         <Text
@@ -560,7 +716,7 @@ export default function PocketApp() {
                             color: C.ink,
                           }}
                         >
-                          今天，去繞了一下。
+                          沒有目的地。卻遇見了這個。
                         </Text>
                       </>
                     ) : (
@@ -590,11 +746,24 @@ export default function PocketApp() {
                     </View>
                   </View>
                   <View style={{ height: 24 }} />
+                  {sharing && (
+                    <View style={{ alignItems: "center" }}>
+                      <WanderMotion small />
+                    </View>
+                  )}
                   <Button
-                    label={sharing ? "準備分享中…" : "分享圖片"}
+                    label="分享這一趟"
                     onPress={() => void share()}
-                    disabled={sharing}
+                    disabled={
+                      sharing ||
+                      (!!cover && (loadedCover !== cover || coverError))
+                    }
                   />
+                  {coverError && (
+                    <Text style={s.errorText}>
+                      這張照片無法讀取，請選另一張。
+                    </Text>
+                  )}
                   {!!shareError && (
                     <Text style={s.errorText}>{shareError}</Text>
                   )}
@@ -607,26 +776,24 @@ export default function PocketApp() {
               )}
               {screen === "settings" && (
                 <>
-                  <Header
-                    title="關於這一小段路"
-                    back={() => setScreen("home")}
-                  />
+                  <Header title="怎麼繞？" back={() => setScreen("home")} />
                   <Text style={[s.title, { marginVertical: 20 }]}>
-                    隨時出發。{"\n"}隨時停下。
+                    出門，{"\n"}剩下的交給好奇。
                   </Text>
-                  <Text style={s.sectionTitle}>你留下的，只屬於你</Text>
+                  <Text style={s.sectionTitle}>👀　帶著一個目標走</Text>
+                  <Text style={s.body}>跟著方向，看看平常沒注意的地方。</Text>
+                  <Text style={s.sectionTitle}>📷　找到，就留一眼</Text>
                   <Text style={s.body}>
-                    票根和照片儲存在這台裝置。定位用來記錄路線，並向
-                    OpenStreetMap 相關服務取得附近街道與步行方向。
+                    按「找到了」開相機；也可以先不拍。找不到就換一個。
                   </Text>
-                  <Text style={s.sectionTitle}>走你能安全走的路</Text>
-                  <Text style={s.body}>
-                    地圖可能不完整。遇到封閉道路或不舒服的地方，換個方向就好。
+                  <Text style={s.sectionTitle}>🎟️　收好今天的意外</Text>
+                  <Text style={s.body}>約 10 分鐘後，帶回照片和專屬票根。</Text>
+                  <Text style={[s.muted, { marginTop: 24 }]}>
+                    走安全、能通行的路。照片與票根留在這台裝置。
                   </Text>
-                  <Text style={s.sectionTitle}>約 10 分鐘的小探險</Text>
-                  <Text style={s.body}>
-                    找到就按，沒找到就換。沒有分數，也不需要照片證明。
-                  </Text>
+                  <View style={{ marginTop: 24 }}>
+                    <Button label="懂了，去繞一下" onPress={back} />
+                  </View>
                   {__DEV__ && (
                     <View style={{ marginTop: 40, gap: 12 }}>
                       <Text style={s.eyebrow}>開發測試</Text>
@@ -636,6 +803,7 @@ export default function PocketApp() {
                         disabled={!!active}
                         onPress={() => {
                           setScreen("home");
+                          setAtHome(false);
                           void c.start(true);
                         }}
                       />
@@ -646,29 +814,7 @@ export default function PocketApp() {
             </View>
           </Enter>
         </ScrollView>
-      </Animated.View>
-      {isJourney && (
-        <View
-          style={{
-            position: "absolute",
-            right: 24,
-            bottom: 24,
-            shadowColor: C.ink,
-            shadowOpacity: 0.16,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 5 },
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="開啟相機"
-            onPress={() => setCamera(true)}
-            style={s.camera}
-          >
-            <CameraGlyph />
-          </Pressable>
-        </View>
-      )}
+      </EdgeBack>
       {camera && (
         <PocketCamera onClose={() => setCamera(false)} onSave={c.addPhoto} />
       )}
@@ -826,12 +972,16 @@ function Direction({
   const title = notice
     ? "先看看這條街"
     : routing
-      ? "正在找下一小段"
+      ? "帶著好奇，慢慢走"
       : corner
         ? corner.right
           ? "前面路口，往右看看"
           : "前面路口，往左看看"
-        : "先走，帶著目標看看";
+        : degrees === null
+          ? "先看看身邊的街景"
+          : relative !== null
+            ? "跟著箭頭，走一小段"
+            : `往${["北", "東北", "東", "東南", "南", "西南", "西", "西北"][Math.round(degrees / 45) % 8]}，走一小段`;
   return (
     <Pressable
       accessibilityRole="button"
@@ -840,19 +990,36 @@ function Direction({
         tapHaptic();
         onMap();
       }}
-      style={s.direction}
+      style={[
+        s.direction,
+        {
+          backgroundColor: "transparent",
+          borderRadius: 0,
+          borderBottomWidth: 1,
+          borderColor: C.line,
+          paddingHorizontal: 4,
+          marginVertical: 6,
+        },
+      ]}
     >
-      <Text
-        style={{
-          fontSize: 29,
-          color: C.ink,
-          transform: [{ rotate: `${relative ?? 0}deg` }],
-        }}
-      >
-        ↑
-      </Text>
+      {routing ? (
+        <WanderMotion small />
+      ) : (
+        <Text
+          style={{
+            fontSize: 29,
+            color: C.ink,
+            transform: [{ rotate: `${relative ?? 0}deg` }],
+          }}
+        >
+          {degrees === null || relative === null ? "↗" : "↑"}
+        </Text>
+      )}
       <View style={{ flex: 1 }}>
-        <Text style={s.directionTitle}>{title}</Text>
+        <Text style={[s.eyebrow, { marginBottom: 5 }]}>接下來，往這邊</Text>
+        <Text style={[s.directionTitle, { fontSize: 19, lineHeight: 27 }]}>
+          {title}
+        </Text>
         <Text style={s.directionSub}>
           {notice ||
             (closing

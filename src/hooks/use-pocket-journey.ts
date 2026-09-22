@@ -35,6 +35,7 @@ export function usePocketJourney() {
   const historyRef = useRef<PocketJourney[]>([]);
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [leg, setLeg] = useState<PocketLeg | null>(null);
   const legRef = useRef<PocketLeg | null>(null);
@@ -161,7 +162,9 @@ export function usePocketJourney() {
       }
       legRef.current = result;
       setLeg(result);
-      setNotice(result ? "" : "先沿可通行的街道看看，方向準備好會再提示。");
+      setNotice(
+        result ? "" : "這裡暫時沒有可用的步行方向，先在安全的地方看看。",
+      );
       if (result?.closing)
         update({
           ...latest,
@@ -253,6 +256,7 @@ export function usePocketJourney() {
     const j = current.current;
     if (!j || j.phase === "finished" || finishLock.current) return;
     finishLock.current = true;
+    setFinishing(true);
     generation.current++;
     const point = j.trace.at(-1) ?? j.origin;
     const arrived = j.endpoint && distance(point, j.endpoint.point) < 45;
@@ -284,6 +288,7 @@ export function usePocketJourney() {
       setError("票根還沒存好，請再按一次完成。");
     } finally {
       finishLock.current = false;
+      setFinishing(false);
     }
   }
   function discover(skip = false) {
@@ -473,6 +478,7 @@ export function usePocketJourney() {
     history,
     ready,
     starting,
+    finishing,
     now,
     leg,
     routing,

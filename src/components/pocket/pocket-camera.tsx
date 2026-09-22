@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, C, s } from "./pocket-ui";
+import { EdgeBack } from "./pocket-edge-back";
+import { WanderMotion } from "./pocket-motion";
 export default function PocketCamera({
   onClose,
   onSave,
@@ -63,147 +65,175 @@ export default function PocketCamera({
     }
   }
   return (
-    <Modal animationType="slide" onRequestClose={onClose}>
+    <Modal
+      animationType="slide"
+      onRequestClose={() => {
+        if (!lock.current) {
+          if (photo) setPhoto(null);
+          else onClose();
+        }
+      }}
+    >
       <SafeAreaView style={[s.screen, { backgroundColor: C.ink }]}>
-        <View style={[s.page, { flex: 1 }]}>
-          <View style={s.header}>
-            <Text style={[s.brand, { color: C.white }]}>留住這一眼</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="關閉相機"
-              onPress={onClose}
-              style={s.round}
-            >
-              <Text style={{ color: C.white, fontSize: 20 }}>×</Text>
-            </Pressable>
-          </View>
-          {permission?.granted ? (
-            <>
-              <View
-                style={{
-                  flex: 1,
-                  borderRadius: 24,
-                  overflow: "hidden",
-                  backgroundColor: "#111",
-                }}
-              >
-                {photo ? (
-                  <Image
-                    source={{ uri: photo }}
-                    style={{ width: "100%", height: "100%" }}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <CameraView
-                    ref={camera}
-                    style={{ flex: 1 }}
-                    facing={facing}
-                    onCameraReady={() => setReady(true)}
-                    onMountError={() =>
-                      setError("無法開啟相機，請確認權限後重試。")
-                    }
-                  />
-                )}
-              </View>
-              <Text
-                style={[
-                  s.body,
-                  { color: "#B4B7A9", textAlign: "center", marginVertical: 20 },
-                ]}
-              >
-                想留就拍。找到，不需要證明。
-              </Text>
-              {!!error && (
-                <Text style={{ color: "#FFB69C", marginBottom: 12 }}>
-                  {error}
-                </Text>
-              )}
-              {photo ? (
-                <View style={{ gap: 12 }}>
-                  <Button
-                    label={busy ? "儲存中…" : "留下這張"}
-                    onPress={() => void keep()}
-                    disabled={busy}
-                  />
-                  <Button
-                    label="再拍一次"
-                    onPress={() => setPhoto(null)}
-                    secondary
-                  />
-                </View>
-              ) : (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-around",
-                    paddingBottom: 20,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="切換鏡頭"
-                    onPress={() => {
-                      setReady(false);
-                      setFacing((v) => (v === "back" ? "front" : "back"));
-                    }}
-                    style={s.round}
-                  >
-                    <Text style={{ color: C.white, fontSize: 26 }}>↻</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="拍照"
-                    disabled={!ready || busy}
-                    onPress={() => void snap()}
-                    style={{
-                      height: 78,
-                      width: 78,
-                      borderRadius: 39,
-                      borderWidth: 5,
-                      borderColor: C.white,
-                      padding: 5,
-                      opacity: ready ? 1 : 0.4,
-                    }}
-                  >
-                    <View
-                      style={{
-                        flex: 1,
-                        borderRadius: 40,
-                        backgroundColor: C.white,
-                      }}
-                    />
-                  </Pressable>
-                  <View style={{ width: 44 }} />
-                </View>
-              )}
-            </>
-          ) : (
-            <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
-              <Text style={[s.title, { color: C.white }]}>
-                留一張，{"\n"}今天的意外。
-              </Text>
-              <Text style={[s.body, { color: "#BBBFB1" }]}>
-                照片只會存進你的這趟旅程。
-              </Text>
-              <Button
-                label={
-                  permission?.canAskAgain === false
-                    ? "開啟手機設定"
-                    : "允許使用相機"
+        <EdgeBack
+          onBack={
+            busy
+              ? undefined
+              : () => {
+                  if (photo) setPhoto(null);
+                  else onClose();
                 }
-                onPress={() => {
-                  if (permission?.canAskAgain === false)
-                    void Linking.openSettings();
-                  else void request();
-                }}
-              />
-              <Pressable onPress={onClose} style={s.link}>
-                <Text style={{ color: C.white }}>先不拍照</Text>
+          }
+        >
+          <View style={[s.page, { flex: 1 }]}>
+            <View style={s.header}>
+              <Text style={[s.brand, { color: C.white }]}>留住這一眼</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉相機"
+                disabled={busy}
+                onPress={onClose}
+                style={s.round}
+              >
+                <Text style={{ color: C.white, fontSize: 20 }}>×</Text>
               </Pressable>
             </View>
-          )}
-        </View>
+            {permission?.granted ? (
+              <>
+                <View
+                  style={{
+                    flex: 1,
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    backgroundColor: "#111",
+                  }}
+                >
+                  {photo ? (
+                    <Image
+                      source={{ uri: photo }}
+                      style={{ width: "100%", height: "100%" }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <CameraView
+                      ref={camera}
+                      style={{ flex: 1 }}
+                      facing={facing}
+                      onCameraReady={() => setReady(true)}
+                      onMountError={() =>
+                        setError("無法開啟相機，請確認權限後重試。")
+                      }
+                    />
+                  )}
+                </View>
+                {busy ? (
+                  <View style={{ alignItems: "center", marginVertical: 12 }}>
+                    <WanderMotion small />
+                  </View>
+                ) : (
+                  <Pressable
+                    disabled={busy}
+                    onPress={onClose}
+                    accessibilityRole="button"
+                    style={[s.link, { marginVertical: 8 }]}
+                  >
+                    <Text style={{ color: "#B4B7A9" }}>先不拍，繼續探索 →</Text>
+                  </Pressable>
+                )}
+                {!!error && (
+                  <Text style={{ color: "#FFB69C", marginBottom: 12 }}>
+                    {error}
+                  </Text>
+                )}
+                {photo ? (
+                  <View style={{ gap: 12 }}>
+                    <Button
+                      label="留下這張"
+                      onPress={() => void keep()}
+                      disabled={busy}
+                    />
+                    <Button
+                      label="再拍一次"
+                      disabled={busy}
+                      onPress={() => setPhoto(null)}
+                      secondary
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-around",
+                      paddingBottom: 20,
+                    }}
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="切換鏡頭"
+                      disabled={busy}
+                      onPress={() => {
+                        setReady(false);
+                        setFacing((v) => (v === "back" ? "front" : "back"));
+                      }}
+                      style={s.round}
+                    >
+                      <Text style={{ color: C.white, fontSize: 26 }}>↻</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="拍照"
+                      disabled={!ready || busy}
+                      onPress={() => void snap()}
+                      style={{
+                        height: 78,
+                        width: 78,
+                        borderRadius: 39,
+                        borderWidth: 5,
+                        borderColor: C.white,
+                        padding: 5,
+                        opacity: ready ? 1 : 0.4,
+                      }}
+                    >
+                      <View
+                        style={{
+                          flex: 1,
+                          borderRadius: 40,
+                          backgroundColor: C.white,
+                        }}
+                      />
+                    </Pressable>
+                    <View style={{ width: 44 }} />
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
+                <Text style={[s.title, { color: C.white }]}>
+                  留一張，{"\n"}今天的意外。
+                </Text>
+                <Text style={[s.body, { color: "#BBBFB1" }]}>
+                  照片只會存進你的這趟旅程。
+                </Text>
+                <Button
+                  label={
+                    permission?.canAskAgain === false
+                      ? "開啟手機設定"
+                      : "允許使用相機"
+                  }
+                  onPress={() => {
+                    if (permission?.canAskAgain === false)
+                      void Linking.openSettings();
+                    else void request();
+                  }}
+                />
+                <Pressable onPress={onClose} style={s.link}>
+                  <Text style={{ color: C.white }}>先不拍照</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </EdgeBack>
       </SafeAreaView>
     </Modal>
   );

@@ -6,9 +6,16 @@
 首頁是一張還沒發生故事的小票。正在找的內容只在探索紙條；Ticket 只印已完成發現。
 找到時紙條換頁、短震動；Emoji 留到完成頁的票根呈現。按鈕有縮放回饋，支援減少動態效果。
 
-本次 UI 調整：首頁與完成頁放大 Logo；首頁移除設定和多餘小字，改用兩個同形 CTA；導航移除品牌列和底部票根、縮小探索紙條、放大方向文字。左上返回與左側邊緣右滑保留進行中的旅程；「在這裡結束」才收好票根。
+本次 UI 調整：首頁以大 Logo、留白、繞行線條及兩個 CTA 組成，右上角提供精簡玩法說明。原生載入與等待使用 Skia 路徑動畫，支援減少動態效果。探索目標與「找到了」整合成主卡；方向提示是較輕的獨立路標，地圖可展開。拍照入口改為橫向「沿途留一張」，不使用右下角浮動按鈕。
+
+「找到了」立即記錄發現並開啟相機，略過拍照仍保留發現。相機採用 expo-camera 自訂介面，Expo Go 和正式 build 相同。探索中不允許滑回首頁；× 先開啟結束確認。收藏、詳情、分享、說明和相機有邊緣返回手勢。相機存檔時暫停返回，避免儲存被中斷。
+
+完成與詳情照片改成固定高度的堆疊，輕點翻閱；分享畫面提供封面縮圖選擇，選擇與控制列不會被拍進分享圖片。選中的照片成功載入後才可分享，零照片分享仍以票根為主。封面選擇保留於本次 App 工作階段。
 
 參考：
+- https://dribbble.com/shots/26772110-Travel-Journal-Mobile-App （留白與照片優先的回顧層級）
+- https://dribbble.com/shots/27263101-Travel-Mobile-App-UI-Vintage-Postcard-Journal-Retro （照片與紙張的收藏感）
+- https://recent.design/ （Godly 目前導向此設計選集；卡片、Typography 與動態方向）
 - https://dribbble.com/shots/26286190-Modern-Travel-Discovery-App-UI （簡洁探索介面與色彩；原頁一度有人機驗證，採搜尋可見資訊）
 - https://recent.design/i/eoyvn9b-expanding-card-transitions （Godly 現轉址 Recent；卡片操作回饋）
 
