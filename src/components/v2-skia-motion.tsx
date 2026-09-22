@@ -22,6 +22,14 @@ const SIGNAL = '#FF5A36';
 const PAPER = '#FFFDF7';
 const SOFT_SIGNAL = '#FFB29E';
 
+function homePath() {
+  const path = Skia.Path.Make();
+  path.moveTo(12, 84);
+  path.cubicTo(54, 18, 102, 132, 158, 60);
+  path.cubicTo(198, 8, 238, 104, 302, 34);
+  return path;
+}
+
 function routePath() {
   const path = Skia.Path.Make();
   path.moveTo(18, 62);
@@ -37,6 +45,62 @@ function closingPath() {
   path.cubicTo(42, 14, 62, 70, 88, 42);
   path.cubicTo(106, 22, 122, 38, 136, 30);
   return path;
+}
+
+export function V2HomeWanderMotion() {
+  const progress = useSharedValue(0);
+  const pulse = useSharedValue(0);
+  const path = useMemo(homePath, []);
+
+  useEffect(() => {
+    progress.value = 0;
+    pulse.value = 0;
+    progress.value = withRepeat(
+      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.cubic) }),
+      -1,
+      false
+    );
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 700 }),
+        withTiming(0, { duration: 700 })
+      ),
+      -1,
+      false
+    );
+    return () => {
+      cancelAnimation(progress);
+      cancelAnimation(pulse);
+    };
+  }, [progress, pulse]);
+
+  const dotRadius = useDerivedValue(() => 5 + pulse.value * 2);
+  const softOpacity = useDerivedValue(() => 0.18 + pulse.value * 0.14);
+
+  return (
+    <View pointerEvents="none" style={styles.homeWrap}>
+      <Canvas style={styles.homeCanvas}>
+        <Path
+          path={path}
+          color={SOFT_SIGNAL}
+          style="stroke"
+          strokeWidth={11}
+          strokeCap="round"
+          opacity={softOpacity}
+        />
+        <Path
+          path={path}
+          color={SIGNAL}
+          style="stroke"
+          strokeWidth={4}
+          strokeCap="round"
+          end={progress}
+        />
+        <Circle cx={12} cy={84} r={4} color={SIGNAL} />
+        <Circle cx={302} cy={34} r={dotRadius} color={SIGNAL} />
+      </Canvas>
+    </View>
+  );
 }
 
 export function V2RouteFormingMotion() {
@@ -258,6 +322,16 @@ export function V2FinishMark() {
 }
 
 const styles = StyleSheet.create({
+  homeWrap: {
+    width: '100%',
+    height: 118,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  homeCanvas: {
+    width: '100%',
+    height: 118,
+  },
   routeWrap: {
     width: 288,
     height: 88,
