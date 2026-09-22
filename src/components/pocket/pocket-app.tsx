@@ -27,6 +27,12 @@ import {
 } from "../../lib/navigation-engine";
 import { Button, C, Enter, s, Ticket, Trail } from "./pocket-ui";
 import { WanderMotion } from "./pocket-motion";
+import {
+  DetourBrand,
+  HomeDoodles,
+  HomeJourneyMotion,
+  HomeMoodStamp,
+} from "./pocket-home-art";
 import { EdgeBack } from "./pocket-edge-back";
 import { PhotoDeck } from "./pocket-photo-deck";
 import {
@@ -134,9 +140,7 @@ export default function PocketApp() {
           accessibilityLabel="返回首頁"
           onPress={goHome}
         >
-          <Text style={[s.brand, { fontSize: 34, lineHeight: 44 }]}>
-            DETOUR ↗
-          </Text>
+          <DetourBrand large />
         </Pressable>
       )}
       {title && (
@@ -165,7 +169,7 @@ export default function PocketApp() {
           { justifyContent: "center", alignItems: "center", gap: 20 },
         ]}
       >
-        <Text style={s.brand}>DETOUR ↗</Text>
+        <DetourBrand large />
         <WanderMotion />
         <Text style={[s.paperTitle, { fontSize: 30 }]}>
           {c.finishing ? "把這一點意外，收好。" : "意外，就從這裡開始。"}
@@ -192,23 +196,31 @@ export default function PocketApp() {
                   <View
                     style={{
                       flex: 1,
-                      minHeight: 310,
+                      minHeight: 405,
                       justifyContent: "center",
-                      paddingVertical: 16,
+                      paddingTop: 8,
+                      paddingBottom: 4,
+                      position: "relative",
                     }}
                   >
-                    <Text style={s.eyebrow}>約 10 分鐘 · 一人份的小探險</Text>
-                    <Text
-                      style={[
-                        s.title,
-                        { fontSize: 42, lineHeight: 53, marginTop: 18 },
-                      ]}
-                    >
-                      不知道{"\n"}要幹嘛
-                      <Text style={{ color: C.orange }}>？</Text>
-                    </Text>
-                    <View style={{ alignItems: "center", marginTop: 16 }}>
-                      <WanderMotion />
+                    <HomeDoodles />
+                    <View style={{ zIndex: 1 }}>
+                      <HomeMoodStamp />
+                      <Text
+                        style={[
+                          s.title,
+                          {
+                            fontSize: 43,
+                            lineHeight: 53,
+                            marginTop: 18,
+                            maxWidth: 280,
+                          },
+                        ]}
+                      >
+                        不知道{"\n"}要幹嘛
+                        <Text style={{ color: C.orange }}>？</Text>
+                      </Text>
+                      <HomeJourneyMotion />
                     </View>
                   </View>
                   {!!c.error && (
