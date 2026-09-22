@@ -1,10 +1,9 @@
-import { useEffect } from "react";
-import { Text, View } from "react-native";
-import { Canvas, Circle } from "@shopify/react-native-skia";
+import { useEffect, useMemo } from "react";
+import { View } from "react-native";
+import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import {
   cancelAnimation,
   Easing,
-  useDerivedValue,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -20,85 +19,80 @@ export function DirectionBeacon({
 }) {
   const reduce = useReducedMotion();
   const progress = useSharedValue(0);
+  const trail = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(18, 82);
+    p.cubicTo(17, 47, 36, 23, 67, 27);
+    p.cubicTo(99, 31, 111, 58, 96, 79);
+    p.cubicTo(82, 99, 55, 91, 48, 108);
+    return p;
+  }, []);
 
   useEffect(() => {
-    progress.value = reduce ? 0.45 : 0;
+    progress.value = reduce ? 0.68 : 0;
     if (!reduce) {
       progress.value = withRepeat(
         withTiming(1, {
-          duration: routing ? 950 : 1800,
+          duration: routing ? 1300 : 2200,
           easing: Easing.inOut(Easing.cubic),
         }),
         -1,
-        false,
+        true,
       );
     }
     return () => cancelAnimation(progress);
   }, [progress, reduce, routing]);
 
-  const pulseRadius = useDerivedValue(() => 43 + progress.value * 13);
-  const pulseOpacity = useDerivedValue(() => 0.34 * (1 - progress.value));
-  const coreRadius = useDerivedValue(() => 4.5 + progress.value * 1.8);
-
   return (
     <View
       accessible
       accessibilityLabel={
-        relative === null ? "方向正在準備" : "大方向指示"
+        relative === null ? "方向正在準備" : "目前的大方向"
       }
-      style={{ width: 126, height: 126, alignItems: "center", justifyContent: "center" }}
+      style={{
+        width: 126,
+        height: 126,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       <Canvas style={{ position: "absolute", width: 126, height: 126 }}>
-        <Circle
-          cx={63}
-          cy={63}
-          r={56}
-          color={C.line}
+        <Path
+          path={trail}
+          color="#E8E2D5"
           style="stroke"
-          strokeWidth={1.5}
+          strokeWidth={4}
+          strokeCap="round"
         />
-        <Circle
-          cx={63}
-          cy={63}
-          r={44}
-          color="#ECE7DA"
-          style="stroke"
-          strokeWidth={2}
-        />
-        <Circle
-          cx={63}
-          cy={63}
-          r={pulseRadius}
+        <Path
+          path={trail}
           color={C.orange}
-          opacity={pulseOpacity}
           style="stroke"
-          strokeWidth={2.5}
+          strokeWidth={5}
+          strokeCap="round"
+          end={progress}
+          opacity={0.9}
         />
-        <Circle cx={63} cy={8} r={2.5} color={C.muted} />
-        <Circle cx={118} cy={63} r={2.5} color={C.muted} />
-        <Circle cx={63} cy={118} r={2.5} color={C.muted} />
-        <Circle cx={8} cy={63} r={2.5} color={C.muted} />
-        <Circle cx={63} cy={63} r={coreRadius} color={C.orange} />
       </Canvas>
       <View
         style={{
-          width: 70,
-          height: 70,
+          width: 88,
+          height: 88,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ rotate: `${relative ?? 0}deg` }],
         }}
       >
-        <Text
-          style={{
-            color: routing ? C.muted : C.ink,
-            fontSize: 58,
-            lineHeight: 64,
-            fontWeight: "300",
-          }}
-        >
-          {relative === null ? "↗" : "↑"}
-        </Text>
+        <Canvas style={{ width: 88, height: 88 }}>
+          <Path
+            path="M20 38 L44 14 L68 38 M44 14 L44 72"
+            color={routing ? C.muted : C.ink}
+            style="stroke"
+            strokeWidth={7}
+            strokeCap="round"
+            strokeJoin="round"
+          />
+        </Canvas>
       </View>
     </View>
   );
