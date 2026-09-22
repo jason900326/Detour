@@ -141,7 +141,11 @@ export function Button({
         >
           {label}
         </Text>
-        {!small && <Text style={[s.buttonArrow, secondary && { color: C.orange }]}>↗</Text>}
+        {!small && (
+          <Text style={[s.buttonArrow, secondary && { color: C.orange }]}>
+            ↗
+          </Text>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -575,7 +579,12 @@ export const s = StyleSheet.create({
     alignItems: "center",
     marginVertical: 18,
   },
-  directionTitle: { fontSize: 22, lineHeight: 30, fontWeight: "800", color: C.ink },
+  directionTitle: {
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: "800",
+    color: C.ink,
+  },
   directionSub: { fontSize: 12, lineHeight: 19, color: C.muted, marginTop: 4 },
   link: {
     minHeight: 44,
