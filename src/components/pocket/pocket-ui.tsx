@@ -98,6 +98,8 @@ export function Button({
   secondary = false,
   disabled = false,
   small = false,
+  centered = false,
+  hideArrow = false,
   accessibilityLabel,
 }: {
   label: string;
@@ -105,6 +107,8 @@ export function Button({
   secondary?: boolean;
   disabled?: boolean;
   small?: boolean;
+  centered?: boolean;
+  hideArrow?: boolean;
   accessibilityLabel?: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -129,6 +133,7 @@ export function Button({
           s.button,
           secondary && s.secondary,
           small && s.small,
+          centered && { justifyContent: "center" },
           disabled && { opacity: 0.5 },
         ]}
       >
@@ -141,7 +146,7 @@ export function Button({
         >
           {label}
         </Text>
-        {!small && (
+        {!small && !hideArrow && (
           <Text style={[s.buttonArrow, secondary && { color: C.orange }]}>
             ↗
           </Text>
