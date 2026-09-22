@@ -72,6 +72,15 @@ function isDirectionDecision(turn: NavigationTurn | undefined) {
   );
 }
 
+function directionGlyph(turn: NavigationTurn | undefined, closing: boolean) {
+  if (turn === 'left') return '←';
+  if (turn === 'right') return '→';
+  if (turn === 'slight-left') return '↖';
+  if (turn === 'slight-right') return '↗';
+  if (turn === 'arrive') return '•';
+  return closing ? '↟' : '↑';
+}
+
 function routeRegion(point: { latitude: number; longitude: number } | null) {
   if (!point) return null;
   return {
@@ -328,6 +337,26 @@ function RoutePreview({
 
 function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   const [showSettings, setShowSettings] = useState(false);
+  const playPulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(playPulse, {
+          toValue: 1.025,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(playPulse, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [playPulse]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -339,55 +368,67 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
           onPress={() => setShowSettings(true)}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.settingsButtonText}>設定</Text>
+          <Text style={styles.settingsButtonText}>•••</Text>
         </Pressable>
       </View>
 
       <View style={styles.homeCenter}>
-        <View style={styles.homeQuestBadge}>
-          <Text style={styles.homeQuestBadgeText}>TODAY'S DETOUR</Text>
-        </View>
         <Text style={styles.homeTitle}>繞一下？</Text>
 
-        <V2HomeWanderMotion />
-
-        <View style={styles.homeMysteryCard}>
-          <View>
-            <Text style={styles.homeMysteryLabel}>DESTINATION</Text>
-            <Text style={styles.homeMysteryValue}>???</Text>
+        <View style={styles.homeWorld}>
+          <V2HomeWanderMotion />
+          <View style={styles.homeStartDot} />
+          <View style={styles.homeUnknownToken}>
+            <Text style={styles.homeUnknownSmall}>終點</Text>
+            <Text style={styles.homeUnknownText}>???</Text>
           </View>
-          <View style={styles.homeMysteryToken}>
-            <Text style={styles.homeMysteryTokenText}>?</Text>
-          </View>
+          <Text style={styles.homeWorldHint}>路會自己長出來</Text>
         </View>
 
-        <Pressable
-          accessibilityLabel="開始 Detour"
-          onPress={() => void controller.startJourney()}
-          style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
-        >
-          <View>
-            <Text style={styles.playButtonEyebrow}>START</Text>
+        <Animated.View style={{ transform: [{ scale: playPulse }] }}>
+          <Pressable
+            accessibilityLabel="開始 Detour"
+            onPress={() => void controller.startJourney()}
+            style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
+          >
             <Text style={styles.playButtonText}>出發</Text>
-          </View>
-          <View style={styles.playButtonIcon}>
-            <Text style={styles.playButtonArrow}>→</Text>
-          </View>
-        </Pressable>
+            <View style={styles.playButtonIcon}>
+              <Text style={styles.playButtonArrow}>→</Text>
+            </View>
+          </Pressable>
+        </Animated.View>
       </View>
 
       <View style={styles.homeBottom}>
         <Pressable
           onPress={controller.openHistory}
-          style={({ pressed }) => [styles.historyCardButton, pressed && styles.buttonPressed]}
+          style={({ pressed }) => [styles.passportStrip, pressed && styles.buttonPressed]}
         >
-          <View>
-            <Text style={styles.historyCardLabel}>遊戲紀錄</Text>
-            <Text style={styles.historyCardValue}>
-              {controller.passport.length > 0 ? `${controller.passport.length} 趟 Detour` : '第一趟還沒開始'}
+          <View style={styles.passportCopy}>
+            <Text style={styles.passportLabel}>我的 Detour</Text>
+            <Text style={styles.passportCount}>
+              {controller.passport.length > 0 ? `${controller.passport.length} 趟` : '還沒有紀錄'}
             </Text>
           </View>
-          <Text style={styles.historyCardArrow}>→</Text>
+          <View style={styles.passportStamps}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.passportStamp,
+                  index < Math.min(4, controller.passport.length) && styles.passportStampFilled,
+                ]}
+              >
+                <Text style={[
+                  styles.passportStampText,
+                  index < Math.min(4, controller.passport.length) && styles.passportStampTextFilled,
+                ]}>
+                  {index < controller.passport.length ? '✓' : '·'}
+                </Text>
+              </View>
+            ))}
+            <Text style={styles.passportArrow}>→</Text>
+          </View>
         </Pressable>
         {controller.errorMessage && <Text style={styles.errorText}>{controller.errorMessage}</Text>}
       </View>
@@ -408,15 +449,15 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
 
             <View style={styles.settingsRule} />
             <View style={styles.settingRow}>
-              <Text style={styles.settingName}>遊戲時間</Text>
+              <Text style={styles.settingName}>一趟多久</Text>
               <Text style={styles.settingValue}>約 10–15 分鐘</Text>
             </View>
             <View style={styles.settingRow}>
               <Text style={styles.settingName}>終點</Text>
-              <Text style={styles.settingValue}>保密</Text>
+              <Text style={styles.settingValue}>先保密</Text>
             </View>
             <View style={styles.settingRow}>
-              <Text style={styles.settingName}>計時器</Text>
+              <Text style={styles.settingName}>計時</Text>
               <Text style={styles.settingValue}>正向計時</Text>
             </View>
 
@@ -437,7 +478,6 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
     </SafeAreaView>
   );
 }
-
 function StartingPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   return (
     <SafeAreaView style={styles.safe}>
@@ -642,18 +682,25 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
       </View>
 
       <View style={styles.journeyDecision}>
-        {(closing || isDirectionDecision(beat?.turn)) ? (
-          <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-        ) : (
-          <Text style={styles.navigationIdle}>先往前走，抬頭看看。</Text>
-        )}
-        {controller.isPlanning ? (
+        <View style={styles.directionToken}>
+          <Text style={styles.directionTokenText}>{directionGlyph(beat?.turn, closing)}</Text>
+        </View>
+        <View style={styles.directionCopy}>
+          {(closing || isDirectionDecision(beat?.turn)) ? (
+            <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
+          ) : (
+            <Text style={styles.navigationIdle}>繼續直走</Text>
+          )}
           <Text style={styles.navigationSubHint}>
-            {closing ? '再走一小段，到了會告訴你。' : '先照這個方向走。'}
+            {controller.isPlanning
+              ? closing
+                ? '再走一小段，到了會告訴你'
+                : '先照這個方向走'
+              : !closing && !isDirectionDecision(beat?.turn)
+                ? '抬頭看看，下一個變化我會提醒你'
+                : ' '}
           </Text>
-        ) : !closing && !isDirectionDecision(beat?.turn) ? (
-          <Text style={styles.navigationSubHint}>下一個路口有變化時，我會提醒你。</Text>
-        ) : null}
+        </View>
       </View>
 
       <JourneyMap
@@ -696,7 +743,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             </View>
           </View>
         ) : controller.activeTarget ? (
-          <View style={styles.targetCard}>
+          <Animated.View entering={undefined} style={styles.targetCard}>
             <View style={styles.targetPaperTop}>
               <Text style={styles.targetPaperLabel}>路上找找看</Text>
               <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
@@ -710,7 +757,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
                 <Text style={styles.foundButtonText}>找到了</Text>
               </Pressable>
             </View>
-          </View>
+          </Animated.View>
         ) : (
           <View style={styles.waitingCard}>
             <Text style={styles.waitingTitle}>先走著。</Text>
@@ -1080,29 +1127,33 @@ const styles = StyleSheet.create({
   brand: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 2.4 },
   smallLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
   homeHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  settingsButton: { paddingHorizontal: 14, height: 38, borderRadius: 99, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
-  settingsButtonText: { color: COLORS.ink, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
+  settingsButton: { minWidth: 42, height: 36, paddingHorizontal: 12, borderRadius: 99, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  settingsButtonText: { color: COLORS.ink, fontSize: 14, fontWeight: '900', letterSpacing: 1.6 },
   homeCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  homeQuestBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: COLORS.paleSignal },
-  homeQuestBadgeText: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  homeTitle: { marginTop: 12, color: COLORS.ink, fontSize: 64, lineHeight: 70, fontWeight: '900', letterSpacing: -3.4 },
-  homeMysteryCard: { minHeight: 88, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', transform: [{ rotate: '-1deg' }] },
-  homeMysteryLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.6 },
-  homeMysteryValue: { marginTop: 4, color: COLORS.ink, fontSize: 31, fontWeight: '900', letterSpacing: 4 },
-  homeMysteryToken: { width: 48, height: 48, borderRadius: 18, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC7B8', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '7deg' }] },
-  homeMysteryTokenText: { color: COLORS.signal, fontSize: 25, fontWeight: '900' },
-  playButton: { marginTop: 14, minHeight: 86, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
-  playButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.92 },
-  playButtonEyebrow: { color: '#FFE5DE', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  playButtonText: { marginTop: 2, color: COLORS.paper, fontSize: 28, lineHeight: 32, fontWeight: '900' },
-  playButtonIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
-  playButtonArrow: { color: COLORS.signal, fontSize: 27, fontWeight: '900' },
+  homeTitle: { color: COLORS.ink, fontSize: 66, lineHeight: 72, fontWeight: '900', letterSpacing: -3.6 },
+  homeWorld: { height: 196, marginTop: 10, marginBottom: 8, justifyContent: 'center' },
+  homeStartDot: { position: 'absolute', left: 4, bottom: 48, width: 13, height: 13, borderRadius: 99, backgroundColor: COLORS.ink, borderWidth: 3, borderColor: COLORS.bone },
+  homeUnknownToken: { position: 'absolute', right: 4, top: 4, minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, alignItems: 'center', transform: [{ rotate: '4deg' }], shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  homeUnknownSmall: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  homeUnknownText: { marginTop: 2, color: COLORS.signal, fontSize: 25, fontWeight: '900', letterSpacing: 3 },
+  homeWorldHint: { position: 'absolute', left: 24, bottom: 12, color: COLORS.muted, fontSize: 11, fontWeight: '800' },
+  playButton: { minWidth: 210, alignSelf: 'flex-start', minHeight: 76, paddingLeft: 24, paddingRight: 10, borderRadius: 38, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  playButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
+  playButtonText: { color: COLORS.paper, fontSize: 29, fontWeight: '900', letterSpacing: -0.8 },
+  playButtonIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  playButtonArrow: { color: COLORS.signal, fontSize: 28, fontWeight: '900' },
   buttonPressed: { opacity: 0.72 },
   homeBottom: { paddingHorizontal: 24, paddingBottom: 20 },
-  historyCardButton: { minHeight: 76, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  historyCardLabel: { color: COLORS.signal, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
-  historyCardValue: { marginTop: 4, color: COLORS.ink, fontSize: 17, fontWeight: '900' },
-  historyCardArrow: { color: COLORS.ink, fontSize: 25, fontWeight: '900' },
+  passportStrip: { minHeight: 82, paddingHorizontal: 17, paddingVertical: 14, borderRadius: 20, backgroundColor: 'rgba(255,253,247,0.72)', borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  passportCopy: { flexShrink: 1 },
+  passportLabel: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.0 },
+  passportCount: { marginTop: 4, color: COLORS.ink, fontSize: 17, fontWeight: '900' },
+  passportStamps: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  passportStamp: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  passportStampFilled: { backgroundColor: COLORS.paleSignal, borderColor: COLORS.signal },
+  passportStampText: { color: COLORS.line, fontSize: 11, fontWeight: '900' },
+  passportStampTextFilled: { color: COLORS.signal },
+  passportArrow: { marginLeft: 6, color: COLORS.ink, fontSize: 22, fontWeight: '900' },
   settingsOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 20, justifyContent: 'flex-end', backgroundColor: 'rgba(22,19,15,0.36)' },
   settingsSheet: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 28, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: COLORS.paper },
   settingsSheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1148,15 +1199,18 @@ const styles = StyleSheet.create({
   discoveryTrail: { marginTop: 6, flexDirection: 'row', gap: 5 },
   discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: COLORS.line },
   discoveryDotFound: { width: 14, backgroundColor: COLORS.signal },
-  journeyDecision: { minHeight: 92, marginHorizontal: 18, marginBottom: 10, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, justifyContent: 'center' },
-  navigationIdle: { color: COLORS.ink, fontSize: 29, lineHeight: 35, fontWeight: '900', letterSpacing: -1.1 },
-  mapFrame: { height: 178, marginHorizontal: 18, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
+  journeyDecision: { minHeight: 106, marginHorizontal: 18, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  directionToken: { width: 70, height: 70, borderRadius: 24, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-3deg' }] },
+  directionTokenText: { color: COLORS.signal, fontSize: 42, lineHeight: 46, fontWeight: '900' },
+  directionCopy: { flex: 1, minWidth: 0 },
+  navigationIdle: { color: COLORS.ink, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
+  mapFrame: { height: 208, marginHorizontal: 18, overflow: 'hidden', borderRadius: 26, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
   mapCaption: { position: 'absolute', left: 12, top: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.88)' },
   mapCaptionText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
   journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
-  navigationHintText: { color: COLORS.ink, fontSize: 31, lineHeight: 37, fontWeight: '900', letterSpacing: -1.1 },
-  navigationSubHint: { marginTop: 6, color: COLORS.muted, fontSize: 12, lineHeight: 17, fontWeight: '800' },
-  targetCard: { marginTop: 10, padding: 20, borderRadius: 6, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  navigationHintText: { color: COLORS.ink, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -1.0 },
+  navigationSubHint: { marginTop: 5, color: COLORS.muted, fontSize: 11, lineHeight: 16, fontWeight: '800' },
+  targetCard: { marginTop: 12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16, borderRadius: 8, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: '#E1D8CB', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2, transform: [{ rotate: '0.7deg' }] },
   targetPaperTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   targetPaperLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },
   targetEmoji: { fontSize: 30 },
