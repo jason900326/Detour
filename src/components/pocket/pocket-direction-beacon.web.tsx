@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Animated, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { Animated, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { C, useReducedMotion } from "./pocket-ui";
 
 export function DirectionBeacon({
@@ -11,23 +11,23 @@ export function DirectionBeacon({
   routing?: boolean;
 }) {
   const reduce = useReducedMotion();
-  const opacity = useRef(new Animated.Value(0.25)).current;
+  const opacity = useRef(new Animated.Value(0.35)).current;
 
   useEffect(() => {
     if (reduce) {
-      opacity.setValue(0.25);
+      opacity.setValue(0.65);
       return;
     }
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
-          toValue: 0.55,
-          duration: routing ? 500 : 900,
+          toValue: 0.95,
+          duration: routing ? 650 : 1100,
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
-          toValue: 0.18,
-          duration: routing ? 500 : 900,
+          toValue: 0.35,
+          duration: routing ? 650 : 1100,
           useNativeDriver: true,
         }),
       ]),
@@ -40,58 +40,55 @@ export function DirectionBeacon({
     <View
       accessible
       accessibilityLabel={
-        relative === null ? "方向正在準備" : "大方向指示"
+        relative === null ? "方向正在準備" : "目前的大方向"
       }
-      style={{ width: 126, height: 126, alignItems: "center", justifyContent: "center" }}
+      style={{
+        width: 126,
+        height: 126,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       <Svg width={126} height={126} style={{ position: "absolute" }}>
-        <Circle cx={63} cy={63} r={56} fill="none" stroke={C.line} strokeWidth={1.5} />
-        <Circle cx={63} cy={63} r={44} fill="none" stroke="#ECE7DA" strokeWidth={2} />
-        <Circle cx={63} cy={8} r={2.5} fill={C.muted} />
-        <Circle cx={118} cy={63} r={2.5} fill={C.muted} />
-        <Circle cx={63} cy={118} r={2.5} fill={C.muted} />
-        <Circle cx={8} cy={63} r={2.5} fill={C.muted} />
+        <Path
+          d="M18 82 C17 47 36 23 67 27 C99 31 111 58 96 79 C82 99 55 91 48 108"
+          fill="none"
+          stroke="#E8E2D5"
+          strokeWidth={4}
+          strokeLinecap="round"
+        />
       </Svg>
-      <Animated.View
-        style={{
-          position: "absolute",
-          width: 94,
-          height: 94,
-          borderRadius: 47,
-          borderWidth: 2,
-          borderColor: C.orange,
-          opacity,
-        }}
-      />
+      <Animated.View style={{ position: "absolute", opacity }}>
+        <Svg width={126} height={126}>
+          <Path
+            d="M18 82 C17 47 36 23 67 27 C99 31 111 58 96 79 C82 99 55 91 48 108"
+            fill="none"
+            stroke={C.orange}
+            strokeWidth={5}
+            strokeLinecap="round"
+          />
+        </Svg>
+      </Animated.View>
       <View
         style={{
-          width: 70,
-          height: 70,
+          width: 88,
+          height: 88,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ rotate: `${relative ?? 0}deg` }],
         }}
       >
-        <Text
-          style={{
-            color: routing ? C.muted : C.ink,
-            fontSize: 58,
-            lineHeight: 64,
-            fontWeight: "300",
-          }}
-        >
-          {relative === null ? "↗" : "↑"}
-        </Text>
+        <Svg width={88} height={88}>
+          <Path
+            d="M20 38 L44 14 L68 38 M44 14 L44 72"
+            fill="none"
+            stroke={routing ? C.muted : C.ink}
+            strokeWidth={7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
       </View>
-      <View
-        style={{
-          position: "absolute",
-          width: 9,
-          height: 9,
-          borderRadius: 5,
-          backgroundColor: C.orange,
-        }}
-      />
     </View>
   );
 }
