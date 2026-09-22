@@ -117,25 +117,6 @@ function withTimeout<T>(
   });
 }
 
-function firstSuccessful<T>(promises: Promise<T>[]): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (promises.length === 0) {
-      reject(new Error('No route candidates'));
-      return;
-    }
-
-    let remaining = promises.length;
-    let lastError: unknown = new Error('No route candidates');
-
-    promises.forEach((promise) => {
-      promise.then(resolve, (error) => {
-        lastError = error;
-        remaining -= 1;
-        if (remaining === 0) reject(lastError);
-      });
-    });
-  });
-}
 
 
 async function resolveAreaLabel(
@@ -410,26 +391,35 @@ export function useV2DetourController() {
           // no previous bearing, no route overlap and no rubber-band constraint.
           // Start as soon as any valid walking route is available instead of
           // making the player wait for every candidate to settle.
-          const first = await withTimeout(
-            firstSuccessful(
-              destinations.map(async (destination) => {
-                const walkingRoute = await fetchWalkingRoute(
-                  origin,
-                  destination,
-                  5000,
-                  {
-                    purpose: 'interactive',
-                    context,
-                  }
-                );
-                return { destination, walkingRoute };
-              })
-            ),
-            6500,
-            '第一小段路線暫時沒有回應。'
-          );
+          let first: { destination: GeoPoint; walkingRoute: WalkingRoute } | null = null;
+          let lastRouteError: unknown = null;
+
+          for (const destination of destinations) {
+            try {
+              const walkingRoute = await fetchWalkingRoute(
+                origin,
+                destination,
+                4200,
+                {
+                  purpose: 'interactive',
+                  context,
+                }
+              );
+              first = { destination, walkingRoute };
+              break;
+            } catch (error) {
+              lastRouteError = error;
+            }
+          }
 
           if (requestId !== routeRequestRef.current) return false;
+          if (!first) {
+            throw (
+              lastRouteError instanceof Error
+                ? lastRouteError
+                : new Error('第一小段路線暫時沒有回應。')
+            );
+          }
 
           const option: V2RouteOption = {
             origin,
