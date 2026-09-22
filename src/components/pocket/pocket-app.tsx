@@ -365,6 +365,8 @@ export default function PocketApp() {
                         <View style={{ marginTop: 16 }}>
                           <Button
                             label="找到了"
+                            centered
+                            hideArrow
                             accessibilityLabel="找到了，開啟相機記錄"
                             onPress={() => {
                               c.discover();
