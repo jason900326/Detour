@@ -250,10 +250,12 @@ function JourneyMap({
   point,
   coordinates,
   caption = '只看下一小段',
+  overlay,
 }: {
   point: { latitude: number; longitude: number } | null;
   coordinates: { latitude: number; longitude: number }[];
   caption?: string;
+  overlay?: ReactNode;
 }) {
   const region = useMemo(() => routeRegion(point), [point]);
   if (!point || !region) return null;
@@ -291,6 +293,7 @@ function JourneyMap({
       <View pointerEvents="none" style={styles.mapCaption}>
         <Text style={styles.mapCaptionText}>{caption}</Text>
       </View>
+      {overlay}
     </View>
   );
 }
@@ -785,32 +788,39 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
         </View>
       </View>
 
-      <View style={styles.journeyDecision}>
-        <View style={styles.directionToken}>
-          <Text style={styles.directionTokenText}>{directionGlyph(beat?.turn, closing)}</Text>
-        </View>
-        <View style={styles.directionCopy}>
-          {(closing || isDirectionDecision(beat?.turn)) ? (
-            <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-          ) : (
-            <Text style={styles.navigationIdle}>繼續直走</Text>
-          )}
-          <Text style={styles.navigationSubHint}>
-            {controller.isPlanning
-              ? closing
-                ? '再走一小段，到了會告訴你'
-                : '先照這個方向走'
-              : !closing && !isDirectionDecision(beat?.turn)
-                ? '抬頭看看，下一個變化我會提醒你'
-                : ' '}
-          </Text>
-        </View>
-      </View>
-
       <JourneyMap
         point={controller.currentPoint}
         coordinates={controller.routeCoordinates}
-        caption={closing ? '最後一段 · 終點仍保密' : '只看下一小段'}
+        caption={closing ? '最後一段 · 終點仍保密' : 'EXPLORE MODE'}
+        overlay={
+          <View pointerEvents="none" style={styles.mapNavigationOverlay}>
+            <View style={styles.mapDirectionDial}>
+              <View style={styles.mapDirectionDialInner}>
+                <Text style={styles.mapDirectionGlyph}>{directionGlyph(beat?.turn, closing)}</Text>
+              </View>
+              <View style={styles.mapDirectionTick} />
+            </View>
+            <View style={styles.mapNavigationCopy}>
+              <Text style={styles.mapNavigationEyebrow}>
+                {closing ? 'FINAL STRETCH' : 'NEXT MOVE'}
+              </Text>
+              {(closing || isDirectionDecision(beat?.turn)) ? (
+                <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
+              ) : (
+                <Text style={styles.navigationIdle}>繼續直走</Text>
+              )}
+              <Text style={styles.navigationSubHint}>
+                {controller.isPlanning
+                  ? closing
+                    ? '再走一小段，到了會告訴你'
+                    : '先照這個方向走'
+                  : !closing && !isDirectionDecision(beat?.turn)
+                    ? '抬頭看看，下一個變化我會提醒你'
+                    : ' '}
+              </Text>
+            </View>
+          </View>
+        }
       />
 
       <View style={styles.journeyContent}>
@@ -1345,24 +1355,27 @@ const styles = StyleSheet.create({
   inlineError: { alignItems: 'center', maxWidth: 320 },
   retryButton: { marginTop: 14, borderWidth: 1, borderColor: COLORS.signal, borderRadius: 99, paddingHorizontal: 18, paddingVertical: 10 },
   retryButtonText: { color: COLORS.signal, fontSize: 13, fontWeight: '800' },
-  journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   journeyState: { marginTop: 3, color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.25 },
   journeyMeta: { minWidth: 88, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'flex-end' },
   elapsed: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   discoveryTrail: { marginTop: 6, flexDirection: 'row', gap: 5 },
   discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: COLORS.line },
   discoveryDotFound: { width: 14, backgroundColor: COLORS.signal },
-  journeyDecision: { minHeight: 106, marginHorizontal: 18, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  directionToken: { width: 70, height: 70, borderRadius: 24, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-3deg' }] },
-  directionTokenText: { color: COLORS.signal, fontSize: 42, lineHeight: 46, fontWeight: '900' },
-  directionCopy: { flex: 1, minWidth: 0 },
-  navigationIdle: { color: COLORS.ink, fontSize: 31, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
-  mapFrame: { height: 208, marginHorizontal: 18, overflow: 'hidden', borderRadius: 26, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
-  mapCaption: { position: 'absolute', left: 12, top: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.88)' },
-  mapCaptionText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
-  journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
-  navigationHintText: { color: COLORS.ink, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -1.0 },
-  navigationSubHint: { marginTop: 5, color: COLORS.muted, fontSize: 11, lineHeight: 16, fontWeight: '800' },
+  navigationIdle: { color: COLORS.ink, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -1.1 },
+  mapFrame: { height: 300, marginHorizontal: 18, overflow: 'hidden', borderRadius: 30, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
+  mapCaption: { position: 'absolute', left: 14, top: 14, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.90)' },
+  mapCaptionText: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  mapNavigationOverlay: { position: 'absolute', left: 14, right: 14, bottom: 14, minHeight: 108, paddingHorizontal: 13, paddingVertical: 12, borderRadius: 24, backgroundColor: 'rgba(255,253,247,0.94)', borderWidth: 1, borderColor: 'rgba(216,208,195,0.78)', flexDirection: 'row', alignItems: 'center', gap: 13, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  mapDirectionDial: { width: 76, height: 76, borderRadius: 38, backgroundColor: COLORS.bone, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  mapDirectionDialInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: COLORS.signal, alignItems: 'center', justifyContent: 'center' },
+  mapDirectionGlyph: { color: COLORS.paper, fontSize: 34, lineHeight: 39, fontWeight: '900' },
+  mapDirectionTick: { position: 'absolute', top: -3, width: 4, height: 12, borderRadius: 99, backgroundColor: COLORS.ink },
+  mapNavigationCopy: { flex: 1, minWidth: 0 },
+  mapNavigationEyebrow: { marginBottom: 3, color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
+  navigationHintText: { color: COLORS.ink, fontSize: 27, lineHeight: 31, fontWeight: '900', letterSpacing: -0.9 },
+  navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 10, lineHeight: 15, fontWeight: '800' },
   targetSignWrap: { marginTop: 12, alignItems: 'center' },
   targetSign: { width: '100%', minHeight: 128, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 18, borderRadius: 12, backgroundColor: COLORS.paper, borderWidth: 2, borderColor: COLORS.signal, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 9, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   targetSignTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
