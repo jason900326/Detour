@@ -743,7 +743,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
             </View>
           </View>
         ) : controller.activeTarget ? (
-          <Animated.View entering={undefined} style={styles.targetCard}>
+          <View style={styles.targetCard}>
             <View style={styles.targetPaperTop}>
               <Text style={styles.targetPaperLabel}>路上找找看</Text>
               <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
@@ -757,7 +757,7 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
                 <Text style={styles.foundButtonText}>找到了</Text>
               </Pressable>
             </View>
-          </Animated.View>
+          </View>
         ) : (
           <View style={styles.waitingCard}>
             <Text style={styles.waitingTitle}>先走著。</Text>
