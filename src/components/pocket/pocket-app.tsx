@@ -27,6 +27,7 @@ import {
 } from "../../lib/navigation-engine";
 import { Button, C, Enter, s, Ticket, Trail } from "./pocket-ui";
 import { WanderMotion } from "./pocket-motion";
+import { DirectionBeacon } from "./pocket-direction-beacon";
 import {
   DetourBrand,
   HomeDoodles,
@@ -283,12 +284,25 @@ export default function PocketApp() {
                           s.paper,
                           {
                             alignItems: "stretch",
-                            padding: 24,
-                            borderRadius: 28,
+                            padding: 18,
+                            borderRadius: 24,
+                            minHeight: 0,
+                            marginTop: 8,
+                            marginBottom: 12,
                           },
                         ]}
                       >
-                        <View style={[s.tape, { alignSelf: "center" }]} />
+                        <View
+                          style={[
+                            s.tape,
+                            {
+                              alignSelf: "center",
+                              width: 62,
+                              height: 18,
+                              top: -8,
+                            },
+                          ]}
+                        />
                         <View style={s.row}>
                           <Text style={[s.eyebrow, { color: "#756483" }]}>
                             這一眼的任務
@@ -297,43 +311,71 @@ export default function PocketApp() {
                             NO. {String(j.found.length + 1).padStart(2, "0")}
                           </Text>
                         </View>
-                        <Text
-                          style={{
-                            fontSize: 68,
-                            marginTop: 20,
-                            textAlign: "center",
-                          }}
-                        >
-                          {j.target.emoji}
-                        </Text>
-                        <Text
+                        <View
                           style={[
-                            s.paperTitle,
-                            { fontSize: 32, lineHeight: 42 },
+                            s.row,
+                            { alignItems: "center", marginTop: 14, gap: 14 },
                           ]}
                         >
-                          {j.target.title}
-                        </Text>
-                        <Text
-                          style={[
-                            s.paperHint,
-                            { alignSelf: "center", marginBottom: 24 },
-                          ]}
-                        >
-                          {j.target.hint}
-                        </Text>
-                        <Button
-                          label="找到了"
-                          accessibilityLabel="找到了，開啟相機記錄"
-                          onPress={() => {
-                            c.discover();
-                            setCamera(true);
-                          }}
-                        />
+                          <View
+                            style={{
+                              width: 76,
+                              height: 76,
+                              borderRadius: 22,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: "#F7F4EC99",
+                              borderWidth: 1,
+                              borderColor: "#D8CEE7",
+                              transform: [{ rotate: "-4deg" }],
+                            }}
+                          >
+                            <Text style={{ fontSize: 46 }}>{j.target.emoji}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                s.paperTitle,
+                                {
+                                  fontSize: 26,
+                                  lineHeight: 34,
+                                  textAlign: "left",
+                                  marginTop: 0,
+                                },
+                              ]}
+                            >
+                              {j.target.title}
+                            </Text>
+                            <Text
+                              style={[
+                                s.paperHint,
+                                {
+                                  textAlign: "left",
+                                  marginTop: 5,
+                                  maxWidth: "100%",
+                                  fontSize: 13,
+                                  lineHeight: 20,
+                                },
+                              ]}
+                            >
+                              {j.target.hint}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={{ marginTop: 16 }}>
+                          <Button
+                            label="找到了"
+                            accessibilityLabel="找到了，開啟相機記錄"
+                            onPress={() => {
+                              c.discover();
+                              setCamera(true);
+                            }}
+                          />
+                        </View>
                         <Pressable
                           accessibilityRole="button"
                           onPress={() => c.discover(true)}
-                          style={[s.link, { marginTop: 8 }]}
+                          style={[s.link, { minHeight: 38, marginTop: 2 }]}
                         >
                           <Text style={[s.linkText, { color: "#65546F" }]}>
                             ↻　換個目標
@@ -374,15 +416,8 @@ export default function PocketApp() {
                     closing={j.phase === "closing"}
                     routing={c.routing}
                     notice={c.notice}
-                    onMap={() => setMap((v) => !v)}
-                    map={map}
+                    onMap={() => setMap(true)}
                   />
-                  {map && (
-                    <PocketMap
-                      trace={j.trace}
-                      route={c.leg?.coordinates ?? []}
-                    />
-                  )}
                   {!!c.notice && !c.routing && (
                     <Pressable
                       accessibilityRole="button"
@@ -831,6 +866,74 @@ export default function PocketApp() {
         <PocketCamera onClose={() => setCamera(false)} onSave={c.addPhoto} />
       )}
       <Modal
+        visible={map}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMap(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "#24292166",
+          }}
+        >
+          <View
+            style={{
+              height: "70%",
+              backgroundColor: C.paper,
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              paddingHorizontal: 18,
+              paddingTop: 10,
+              paddingBottom: 24,
+              shadowColor: C.ink,
+              shadowOpacity: 0.18,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: -8 },
+            }}
+          >
+            <View
+              style={{
+                width: 42,
+                height: 5,
+                borderRadius: 3,
+                alignSelf: "center",
+                backgroundColor: C.line,
+                marginBottom: 10,
+              }}
+            />
+            <View style={[s.row, { marginBottom: 12 }]}>
+              <View>
+                <Text style={s.eyebrow}>現在的位置</Text>
+                <Text style={[s.sectionTitle, { marginVertical: 2 }]}>
+                  方向地圖
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉地圖"
+                hitSlop={8}
+                onPress={() => setMap(false)}
+                style={s.round}
+              >
+                <Text style={{ fontSize: 24, color: C.ink }}>×</Text>
+              </Pressable>
+            </View>
+            {j && (
+              <PocketMap
+                trace={j.trace}
+                route={c.leg?.coordinates ?? []}
+                style={{ flex: 1 }}
+              />
+            )}
+            <Text style={[s.muted, { textAlign: "center", marginTop: 10 }]}>
+              地圖只是參考；看到有意思的，繞過去也可以。
+            </Text>
+          </View>
+        </View>
+      </Modal>
+      <Modal
         visible={endSheet}
         transparent
         animationType="fade"
@@ -922,7 +1025,6 @@ function Direction({
   routing,
   notice,
   onMap,
-  map,
 }: {
   route: { latitude: number; longitude: number }[];
   trace: { latitude: number; longitude: number }[];
@@ -931,7 +1033,6 @@ function Direction({
   routing: boolean;
   notice: string;
   onMap: () => void;
-  map: boolean;
 }) {
   const point = trace.at(-1);
   const degrees =
@@ -984,7 +1085,7 @@ function Direction({
   const title = notice
     ? "先看看這條街"
     : routing
-      ? "帶著好奇，慢慢走"
+      ? "正在找一條舒服的方向"
       : corner
         ? corner.right
           ? "前面路口，往右看看"
@@ -992,12 +1093,12 @@ function Direction({
         : degrees === null
           ? "先看看身邊的街景"
           : relative !== null
-            ? "跟著箭頭，走一小段"
+            ? "跟著大箭頭，走一小段"
             : `往${["北", "東北", "東", "東南", "南", "西南", "西", "西北"][Math.round(degrees / 45) % 8]}，走一小段`;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={map ? "收起地圖" : "查看方向地圖"}
+      accessibilityLabel="查看方向地圖"
       onPress={() => {
         tapHaptic();
         onMap();
@@ -1005,41 +1106,54 @@ function Direction({
       style={[
         s.direction,
         {
-          backgroundColor: "transparent",
-          borderRadius: 0,
-          borderBottomWidth: 1,
-          borderColor: C.line,
-          paddingHorizontal: 4,
-          marginVertical: 6,
+          minHeight: 168,
+          backgroundColor: C.white,
+          borderRadius: 28,
+          borderWidth: 1,
+          borderColor: "#E4E0D5",
+          paddingVertical: 16,
+          paddingHorizontal: 15,
+          marginTop: 4,
+          marginBottom: 12,
+          gap: 12,
+          shadowColor: "#383B29",
+          shadowOpacity: 0.05,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 7 },
         },
       ]}
     >
-      {routing ? (
-        <WanderMotion small />
-      ) : (
+      <DirectionBeacon relative={relative} routing={routing} />
+      <View style={{ flex: 1, alignSelf: "stretch", justifyContent: "center" }}>
+        <Text style={[s.eyebrow, { marginBottom: 7 }]}>接下來，往這邊</Text>
         <Text
-          style={{
-            fontSize: 29,
-            color: C.ink,
-            transform: [{ rotate: `${relative ?? 0}deg` }],
-          }}
+          style={[
+            s.directionTitle,
+            { fontSize: 21, lineHeight: 29, paddingRight: 2 },
+          ]}
         >
-          {degrees === null || relative === null ? "↗" : "↑"}
-        </Text>
-      )}
-      <View style={{ flex: 1 }}>
-        <Text style={[s.eyebrow, { marginBottom: 5 }]}>接下來，往這邊</Text>
-        <Text style={[s.directionTitle, { fontSize: 19, lineHeight: 27 }]}>
           {title}
         </Text>
-        <Text style={s.directionSub}>
+        <Text style={[s.directionSub, { fontSize: 12.5, lineHeight: 19 }]}>
           {notice ||
             (closing
               ? "慢慢靠近一個可以停下的地方。"
-              : "看到有意思的，繞過去也可以。")}
+              : "不用走得很準；大方向對了，就繼續找。")}
         </Text>
+        <View
+          style={{
+            alignSelf: "flex-start",
+            marginTop: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: C.line,
+            paddingHorizontal: 11,
+            paddingVertical: 6,
+          }}
+        >
+          <Text style={[s.serial, { color: C.ink }]}>打開地圖 ↗</Text>
+        </View>
       </View>
-      <Text style={s.serial}>{map ? "收起" : "地圖"} ↗</Text>
     </Pressable>
   );
 }
