@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { View } from "react-native";
-import { Canvas, Path, Skia } from "@shopify/react-native-skia";
+import { Canvas, Circle, Path } from "@shopify/react-native-skia";
 import {
   cancelAnimation,
   Easing,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -19,29 +20,26 @@ export function DirectionBeacon({
 }) {
   const reduce = useReducedMotion();
   const progress = useSharedValue(0);
-  const trail = useMemo(() => {
-    const p = Skia.Path.Make();
-    p.moveTo(18, 82);
-    p.cubicTo(17, 47, 36, 23, 67, 27);
-    p.cubicTo(99, 31, 111, 58, 96, 79);
-    p.cubicTo(82, 99, 55, 91, 48, 108);
-    return p;
-  }, []);
 
   useEffect(() => {
-    progress.value = reduce ? 0.68 : 0;
+    progress.value = reduce ? 0.45 : 0;
     if (!reduce) {
       progress.value = withRepeat(
         withTiming(1, {
-          duration: routing ? 1300 : 2200,
+          duration: routing ? 1100 : 1900,
           easing: Easing.inOut(Easing.cubic),
         }),
         -1,
-        true,
+        false,
       );
     }
     return () => cancelAnimation(progress);
   }, [progress, reduce, routing]);
+
+  const outerRadius = useDerivedValue(() => 42 + progress.value * 16);
+  const outerOpacity = useDerivedValue(() => 0.28 * (1 - progress.value));
+  const innerRadius = useDerivedValue(() => 38 + progress.value * 5);
+  const innerOpacity = useDerivedValue(() => 0.16 + progress.value * 0.08);
 
   return (
     <View
@@ -57,35 +55,38 @@ export function DirectionBeacon({
       }}
     >
       <Canvas style={{ position: "absolute", width: 126, height: 126 }}>
-        <Path
-          path={trail}
-          color="#E8E2D5"
-          style="stroke"
-          strokeWidth={4}
-          strokeCap="round"
-        />
-        <Path
-          path={trail}
+        <Circle cx={63} cy={63} r={39} color="#F7E9E2" />
+        <Circle
+          cx={63}
+          cy={63}
+          r={innerRadius}
           color={C.orange}
+          opacity={innerOpacity}
           style="stroke"
-          strokeWidth={5}
-          strokeCap="round"
-          end={progress}
-          opacity={0.9}
+          strokeWidth={2.5}
+        />
+        <Circle
+          cx={63}
+          cy={63}
+          r={outerRadius}
+          color={C.orange}
+          opacity={outerOpacity}
+          style="stroke"
+          strokeWidth={2.5}
         />
       </Canvas>
       <View
         style={{
-          width: 88,
-          height: 88,
+          width: 86,
+          height: 86,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ rotate: `${relative ?? 0}deg` }],
         }}
       >
-        <Canvas style={{ width: 88, height: 88 }}>
+        <Canvas style={{ width: 86, height: 86 }}>
           <Path
-            path="M20 38 L44 14 L68 38 M44 14 L44 72"
+            path="M20 37 L43 14 L66 37 M43 14 L43 70"
             color={routing ? C.muted : C.ink}
             style="stroke"
             strokeWidth={7}
