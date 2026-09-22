@@ -1,23 +1,28 @@
 import MapView, { Polyline, Marker } from "react-native-maps";
-import { View } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import type { Point } from "../../lib/pocket-engine";
+
 export default function PocketMap({
   trace,
   route,
+  style,
 }: {
   trace: Point[];
   route: Point[];
+  style?: StyleProp<ViewStyle>;
 }) {
   const point = trace.at(-1);
   if (!point) return null;
   return (
     <View
-      style={{
-        height: 220,
-        borderRadius: 20,
-        overflow: "hidden",
-        marginBottom: 16,
-      }}
+      style={[
+        {
+          minHeight: 340,
+          borderRadius: 24,
+          overflow: "hidden",
+        },
+        style,
+      ]}
     >
       <MapView
         style={{ flex: 1 }}
