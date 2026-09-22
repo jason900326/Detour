@@ -1,0 +1,810 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  PanResponder,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import * as Sharing from "expo-sharing";
+import { captureRef } from "react-native-view-shot";
+import { usePocketJourney, tapHaptic } from "../../hooks/use-pocket-journey";
+import {
+  angle,
+  bearing,
+  distance,
+  type PocketJourney,
+} from "../../lib/pocket-engine";
+import {
+  guidanceBearingOnPolyline,
+  distanceToPolyline,
+} from "../../lib/navigation-engine";
+import { Button, C, Enter, HomeTicket, s, Ticket, Trail } from "./pocket-ui";
+import PocketMap from "./pocket-map";
+import PocketCamera from "./pocket-camera";
+
+type Screen = "home" | "history" | "detail" | "share" | "settings";
+export default function PocketApp() {
+  const c = usePocketJourney();
+  const [screen, setScreen] = useState<Screen>("home");
+  const [atHome, setAtHome] = useState(false);
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const [selected, setSelected] = useState<PocketJourney | null>(null);
+  const [camera, setCamera] = useState(false);
+  const [map, setMap] = useState(false);
+  const [endSheet, setEndSheet] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const shareRef = useRef<View>(null);
+  const j = c.journey;
+  const active = j && j.phase !== "finished";
+  const completed = j?.phase === "finished";
+  const displayed = selected ?? j;
+  const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
+  useEffect(() => {
+    if (completed) setCamera(false);
+  }, [completed]);
+  function goHome() {
+    c.home();
+    setSelected(null);
+    setScreen("home");
+    setMap(false);
+    setAtHome(true);
+    setCamera(false);
+  }
+  const isJourney = screen === "home" && active && !atHome;
+  const isCompletion = screen === "home" && completed && !atHome;
+  const swipeBack = PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_, g) =>
+      !!isJourney && !camera && !endSheet && g.x0 < 32 &&
+      g.dx > 12 && Math.abs(g.dy) < g.dx / 2,
+    onPanResponderMove: (_, g) => swipeX.setValue(Math.max(0, g.dx)),
+    onPanResponderRelease: (_, g) => {
+      if (g.dx > 90 || (g.dx > 35 && g.vx > 0.5)) goHome();
+      Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
+    },
+    onPanResponderTerminate: () =>
+      Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start(),
+  });
+  async function share() {
+    if (sharing) return;
+    setSharing(true);
+    setShareError("");
+    try {
+      if (Platform.OS !== "web" && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareRef, { format: "png", quality: 1 });
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          dialogTitle: "分享這一趟 Detour",
+        });
+      } else {
+        await Share.share({
+          message: `今天，去繞了一下。\n${displayed?.found.map((f) => f.emoji).join(" ")}\nDetour · 一點時間，一點意外。`,
+        });
+      }
+    } catch {
+      setShareError("分享沒有完成，可以再試一次。");
+    } finally {
+      setSharing(false);
+    }
+  }
+  const Header = ({ title, back }: { title?: string; back?: () => void }) => (
+    <View style={s.header}>
+      {back ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="返回"
+          onPress={back}
+          style={s.round}
+        >
+          <Text style={{ fontSize: 23, color: C.ink }}>←</Text>
+        </Pressable>
+      ) : (
+        <Pressable accessibilityRole="button" accessibilityLabel="返回首頁" onPress={goHome}>
+          <Text style={[s.brand, { fontSize: 34, lineHeight: 44 }]}>DETOUR ↗</Text>
+        </Pressable>
+      )}
+      {title && (
+        <Text style={{ fontSize: 15, fontWeight: "700", color: C.ink }}>
+          {title}
+        </Text>
+      )}
+      {back && <View style={{ width: 44 }} />}
+    </View>
+  );
+  if (!c.ready)
+    return (
+      <SafeAreaView
+        style={[
+          s.screen,
+          { justifyContent: "center", alignItems: "center", gap: 20 },
+        ]}
+      >
+        <Text style={s.brand}>DETOUR ↗</Text>
+        <ActivityIndicator color={C.orange} />
+      </SafeAreaView>
+    );
+  const pageKey = isJourney ? "journey" : isCompletion ? "completion" : screen;
+  return (
+    <SafeAreaView style={s.screen}>
+      <StatusBar style="dark" />
+      <Animated.View style={{ flex: 1, transform: [{ translateX: swipeX }] }} {...swipeBack.panHandlers}>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: isJourney ? 85 : 0 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Enter key={pageKey} style={{ flex: 1 }}>
+          <View style={[s.page, { flex: 1 }]}>
+            {screen === "home" && (!j || atHome) && (
+              <>
+                <Header />
+                <View>
+                  <Text style={[s.title, { fontSize: 30, lineHeight: 40 }]}>
+                    不知道要幹嘛
+                    <Text style={{ color: C.orange }}>？</Text>
+                  </Text>
+                </View>
+                <Enter delay={120}>
+                  <HomeTicket />
+                </Enter>
+                <View style={{ height: 12 }} />
+                {!!c.error && (
+                  <View style={s.error}>
+                    <Text style={s.errorText}>{c.error}</Text>
+                  </View>
+                )}
+                <Button
+                  label={c.starting ? "找一下你的位置…" : active ? "繼續這趟 ↗" : completed ? "看看這趟票根" : "繞一下？"}
+                  onPress={() => {
+                    setAtHome(false);
+                    if (!j) void c.start();
+                  }}
+                  disabled={c.starting}
+                />
+                <View style={{ marginTop: 12 }}>
+                  <Button secondary label="我的票根" onPress={() => setScreen("history")} />
+                </View>
+              </>
+            )}
+            {isJourney && j && (
+              <>
+                <View style={s.header}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="返回首頁，保留旅程"
+                    onPress={goHome}
+                    style={s.round}
+                  >
+                    <Text style={{ fontSize: 28, color: C.ink }}>←</Text>
+                  </Pressable>
+                  <View style={s.pill}>
+                    <Text style={s.pillText}>
+                      {j.demo
+                        ? "室內試玩"
+                        : j.phase === "closing"
+                          ? "慢慢收尾"
+                          : "小探險進行中"}
+                    </Text>
+                  </View>
+                  <Text style={s.serial}>
+                    {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
+                    {String(elapsed % 60).padStart(2, "0")}
+                  </Text>
+                </View>
+                {j.target ? (
+                  <Enter key={`${j.target.id}-${j.targetSince}`}>
+                    <View style={s.paper}>
+                      <View style={s.tape} />
+                      <Text style={[s.eyebrow, { color: "#8A7C99" }]}>
+                        這一小段，找找看
+                      </Text>
+                      <Text style={{ fontSize: 48, marginTop: 8 }}>
+                        {j.target.emoji}
+                      </Text>
+                      <Text style={s.paperTitle}>{j.target.title}</Text>
+                      <Text style={s.paperHint}>{j.target.hint}</Text>
+                    </View>
+                    <Button label="找到了" onPress={() => c.discover()} />
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => c.discover(true)}
+                      style={[s.link, { marginTop: 6 }]}
+                    >
+                      <Text style={s.linkText}>↻　換一個</Text>
+                    </Pressable>
+                  </Enter>
+                ) : (
+                  <Enter>
+                    <View
+                      style={[
+                        s.paper,
+                        { backgroundColor: C.green, minHeight: 200 },
+                      ]}
+                    >
+                      <View style={s.tape} />
+                      <Text style={{ fontSize: 64 }}>🌿</Text>
+                      <Text style={s.paperTitle}>
+                        差不多了，{"\n"}再走一小段。
+                      </Text>
+                      <Text style={s.paperHint}>
+                        沿途還有什麼，剛剛沒注意到？
+                      </Text>
+                    </View>
+                    {!j.closingTargetUsed && (
+                      <Button
+                        secondary
+                        label="再找一個小東西"
+                        onPress={c.extraDiscovery}
+                      />
+                    )}
+                  </Enter>
+                )}
+                <Direction
+                  route={c.leg?.coordinates ?? []}
+                  trace={j.trace}
+                  heading={c.heading}
+                  closing={j.phase === "closing"}
+                  routing={c.routing}
+                  notice={c.notice}
+                  onMap={() => setMap((v) => !v)}
+                  map={map}
+                />
+                {map && (
+                  <PocketMap trace={j.trace} route={c.leg?.coordinates ?? []} />
+                )}
+                {!!c.notice && !c.routing && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void c.routeNext()}
+                    style={s.link}
+                  >
+                    <Text style={s.linkText}>重新取得方向 ↻</Text>
+                  </Pressable>
+                )}
+                <Pressable accessibilityRole="button" onPress={() => setEndSheet(true)} style={s.link}>
+                  <Text style={s.linkText}>在這裡結束</Text>
+                </Pressable>
+                <View style={[s.row, { marginTop: 18 }]}>
+                  <View>
+                    <Text style={s.muted}>
+                      {j.photos.length
+                        ? `已留下 ${j.photos.length} 張照片`
+                        : "想留住這一眼？"}
+                    </Text>
+                    <Text style={s.muted}>拍照隨你，不用交作業。</Text>
+                  </View>
+                </View>
+                {!!c.error && (
+                  <View style={s.error}>
+                    <Text style={s.errorText}>{c.error}</Text>
+                    <Button
+                      secondary
+                      small
+                      label="再試著收好票根"
+                      onPress={() => void c.finish()}
+                    />
+                  </View>
+                )}
+                {j.demo && (
+                  <Button
+                    small
+                    secondary
+                    label="試玩：時間前進 2 分鐘"
+                    onPress={c.advanceDemo}
+                  />
+                )}
+              </>
+            )}
+            {isCompletion && j && (
+              <>
+                <Header />
+                <View style={{ marginTop: 15, marginBottom: 26 }}>
+                  <Text style={s.eyebrow}>這段路，原本不會發生。</Text>
+                  <Text style={[s.title, { marginTop: 12 }]}>
+                    繞了一下，{"\n"}帶回這些
+                    <Text style={{ color: C.orange }}>。</Text>
+                  </Text>
+                </View>
+                <Enter delay={100}>
+                  <Ticket journey={j} />
+                </Enter>
+                <Text style={[s.body, { marginTop: 25, textAlign: "center" }]}>
+                  這趟停在 {j.endpoint?.name ?? "街角"}。
+                </Text>
+                {j.photos.length > 0 && (
+                  <>
+                    <Text style={s.sectionTitle}>路上的幾眼</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 12 }}
+                    >
+                      {j.photos.map((uri) => (
+                        <Image
+                          key={uri}
+                          source={{ uri }}
+                          style={{ width: 150, height: 185, borderRadius: 10 }}
+                        />
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+                <Trail points={j.trace} height={105} />
+                <Text
+                  style={[s.muted, { textAlign: "center", marginBottom: 25 }]}
+                >
+                  {Math.max(
+                    1,
+                    Math.round(((j.finishedAt ?? c.now) - j.startedAt) / 60000),
+                  )}{" "}
+                  分鐘 · 已收進我的票根
+                </Text>
+                <Button
+                  label="分享這一趟"
+                  onPress={() => {
+                    setSelected(j);
+                    setScreen("share");
+                  }}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={goHome}
+                  style={[s.link, { marginTop: 10 }]}
+                >
+                  <Text style={s.linkText}>收好票根，回首頁</Text>
+                </Pressable>
+              </>
+            )}
+            {screen === "history" && (
+              <>
+                <Header title="我的票根" back={() => setScreen("home")} />
+                <Text style={[s.title, { marginTop: 17 }]}>
+                  繞過的，{"\n"}都留著。
+                </Text>
+                <Text style={[s.body, { marginTop: 12, marginBottom: 25 }]}>
+                  {c.history.length
+                    ? `${c.history.length} 段原本不會發生的時間。`
+                    : "第一張票，就從今天開始。"}
+                </Text>
+                {!c.history.length ? (
+                  <View style={s.empty}>
+                    <Text style={{ fontSize: 55 }}>🎟️</Text>
+                    <Text style={s.body}>還沒有票根，也還有好多意外。</Text>
+                    <Button
+                      label="去繞一下"
+                      onPress={() => setScreen("home")}
+                    />
+                  </View>
+                ) : (
+                  c.history.map((entry) => (
+                    <Pressable
+                      key={entry.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`查看 ${new Date(entry.startedAt).toLocaleDateString("zh-TW")} 的票根`}
+                      onPress={() => {
+                        setSelected(entry);
+                        setScreen("detail");
+                      }}
+                      style={s.historyCard}
+                    >
+                      <View style={s.row}>
+                        <View style={{ flex: 1, gap: 11 }}>
+                          <Text style={{ fontSize: 29 }}>
+                            {entry.found.length
+                              ? entry.found.map((f) => f.emoji).join(" ")
+                              : "一段留在路上的時間"}
+                          </Text>
+                          <Text style={s.muted}>
+                            {new Date(entry.startedAt).toLocaleDateString(
+                              "zh-TW",
+                            )}{" "}
+                            ·{" "}
+                            {entry.demo
+                              ? "室內試玩"
+                              : entry.area ||
+                                entry.endpoint?.name ||
+                                "城市的一角"}
+                          </Text>
+                        </View>
+                        {entry.photos[0] ? (
+                          <Image
+                            source={{ uri: entry.photos[0] }}
+                            style={{ width: 75, height: 86, borderRadius: 8 }}
+                          />
+                        ) : (
+                          <Text style={{ fontSize: 23, color: C.orange }}>
+                            ↗
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+            {screen === "detail" && displayed && (
+              <>
+                <Header title="一張舊票根" back={() => setScreen("history")} />
+                <Ticket journey={displayed} />
+                <Text style={s.sectionTitle}>
+                  {displayed.endpoint?.name ?? "城市的一角"}
+                </Text>
+                <Text style={s.body}>
+                  {new Date(displayed.startedAt).toLocaleString("zh-TW")}
+                </Text>
+                {displayed.photos.map((uri) => (
+                  <Image
+                    key={uri}
+                    source={{ uri }}
+                    style={[s.photo, { marginTop: 17 }]}
+                  />
+                ))}
+                <Text style={s.sectionTitle}>走過的路</Text>
+                <Trail points={displayed.trace} />
+                {displayed.found.map((f, i) => (
+                  <View
+                    key={`${f.id}-${i}`}
+                    style={[
+                      s.row,
+                      {
+                        paddingVertical: 13,
+                        borderBottomWidth: 1,
+                        borderColor: C.line,
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 26 }}>{f.emoji}</Text>
+                    <Text style={[s.body, { flex: 1, color: C.ink }]}>
+                      {f.title}
+                    </Text>
+                  </View>
+                ))}
+                <View style={{ height: 25 }} />
+                <Button label="分享這一趟" onPress={() => setScreen("share")} />
+              </>
+            )}
+            {screen === "share" && displayed && (
+              <>
+                <Header
+                  title="把這一點意外分享出去"
+                  back={() =>
+                    setScreen(
+                      completed && displayed.id === j?.id ? "home" : "detail",
+                    )
+                  }
+                />
+                <View
+                  ref={shareRef}
+                  collapsable={false}
+                  style={{
+                    backgroundColor: C.paper,
+                    padding: 20,
+                    borderRadius: 8,
+                  }}
+                >
+                  {displayed.photos[0] ? (
+                    <>
+                      <Image
+                        source={{ uri: displayed.photos[0] }}
+                        style={[s.photo, { borderRadius: 3 }]}
+                      />
+                      <Text
+                        style={[s.brand, { marginTop: 21, marginBottom: 9 }]}
+                      >
+                        DETOUR ↗
+                      </Text>
+                      <Text style={{ fontSize: 33, marginVertical: 10 }}>
+                        {displayed.found.map((f) => f.emoji).join(" ")}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 23,
+                          fontWeight: "800",
+                          color: C.ink,
+                        }}
+                      >
+                        今天，去繞了一下。
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text
+                        style={[
+                          s.title,
+                          { fontSize: 32, lineHeight: 42, marginBottom: 22 },
+                        ]}
+                      >
+                        沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                      </Text>
+                      <Ticket journey={displayed} />
+                    </>
+                  )}
+                  <Trail
+                    points={displayed.trace}
+                    height={displayed.photos[0] ? 70 : 130}
+                  />
+                  <View style={s.row}>
+                    <Text style={s.muted}>
+                      {new Date(displayed.startedAt).toLocaleDateString(
+                        "zh-TW",
+                      )}
+                    </Text>
+                    <Text style={s.muted}>一點時間，一點意外。</Text>
+                  </View>
+                </View>
+                <View style={{ height: 24 }} />
+                <Button
+                  label={sharing ? "準備分享中…" : "分享圖片"}
+                  onPress={() => void share()}
+                  disabled={sharing}
+                />
+                {!!shareError && <Text style={s.errorText}>{shareError}</Text>}
+                <Text style={[s.muted, { textAlign: "center", marginTop: 12 }]}>
+                  照片、發現，還有你繞過的那段路。
+                </Text>
+              </>
+            )}
+            {screen === "settings" && (
+              <>
+                <Header title="關於這一小段路" back={() => setScreen("home")} />
+                <Text style={[s.title, { marginVertical: 20 }]}>
+                  隨時出發。{"\n"}隨時停下。
+                </Text>
+                <Text style={s.sectionTitle}>你留下的，只屬於你</Text>
+                <Text style={s.body}>
+                  票根和照片儲存在這台裝置。定位用來記錄路線，並向 OpenStreetMap
+                  相關服務取得附近街道與步行方向。
+                </Text>
+                <Text style={s.sectionTitle}>走你能安全走的路</Text>
+                <Text style={s.body}>
+                  地圖可能不完整。遇到封閉道路或不舒服的地方，換個方向就好。
+                </Text>
+                <Text style={s.sectionTitle}>約 10 分鐘的小探險</Text>
+                <Text style={s.body}>
+                  找到就按，沒找到就換。沒有分數，也不需要照片證明。
+                </Text>
+                {__DEV__ && (
+                  <View style={{ marginTop: 40, gap: 12 }}>
+                    <Text style={s.eyebrow}>開發測試</Text>
+                    <Button
+                      secondary
+                      label="室內試玩（不使用定位）"
+                      disabled={!!active}
+                      onPress={() => {
+                        setScreen("home");
+                        void c.start(true);
+                      }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </Enter>
+      </ScrollView>
+      </Animated.View>
+      {isJourney && (
+        <View
+          style={{
+            position: "absolute",
+            right: 24,
+            bottom: 24,
+            shadowColor: C.ink,
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 5 },
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="開啟相機"
+            onPress={() => setCamera(true)}
+            style={s.camera}
+          >
+            <CameraGlyph />
+          </Pressable>
+        </View>
+      )}
+      {camera && (
+        <PocketCamera onClose={() => setCamera(false)} onSave={c.addPhoto} />
+      )}
+      <Modal
+        visible={endSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEndSheet(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "#24292155",
+          }}
+        >
+          <View
+            style={{
+              padding: 28,
+              paddingBottom: 45,
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              backgroundColor: C.paper,
+              gap: 15,
+            }}
+          >
+            <Text style={s.sectionTitle}>想在這裡停下來？</Text>
+            <Text style={[s.body, { marginBottom: 12 }]}>
+              找到的東西，都會留在這張票上。{"\n"}
+              先到安全、能停留的地方再收好票根。
+            </Text>
+            <Button
+              label="在這裡收好票根"
+              onPress={() => {
+                setEndSheet(false);
+                void c.finish();
+              }}
+            />
+            <Button
+              secondary
+              label="再繞一下"
+              onPress={() => setEndSheet(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+function CameraGlyph() {
+  return (
+    <View
+      style={{
+        width: 25,
+        height: 19,
+        borderColor: C.white,
+        borderWidth: 1.8,
+        borderRadius: 5,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <View
+        style={{
+          position: "absolute",
+          top: -5,
+          left: 5,
+          width: 10,
+          height: 4,
+          borderTopLeftRadius: 2,
+          borderTopRightRadius: 2,
+          backgroundColor: C.white,
+        }}
+      />
+      <View
+        style={{
+          width: 9,
+          height: 9,
+          borderColor: C.white,
+          borderWidth: 1.5,
+          borderRadius: 5,
+        }}
+      />
+    </View>
+  );
+}
+function Direction({
+  route,
+  trace,
+  heading,
+  closing,
+  routing,
+  notice,
+  onMap,
+  map,
+}: {
+  route: { latitude: number; longitude: number }[];
+  trace: { latitude: number; longitude: number }[];
+  heading: number | null;
+  closing: boolean;
+  routing: boolean;
+  notice: string;
+  onMap: () => void;
+  map: boolean;
+}) {
+  const point = trace.at(-1);
+  const degrees =
+    point && route.length > 1 ? guidanceBearingOnPolyline(point, route) : null;
+  const relative =
+    degrees !== null && heading !== null ? angle(degrees, heading) : null;
+  let corner: { key: string; right: boolean } | null = null;
+  if (point && route.length > 2) {
+    let nearest = 0,
+      best = Infinity;
+    for (let i = 0; i < route.length - 1; i++) {
+      const d = distanceToPolyline(point, [route[i], route[i + 1]]);
+      if (d < best) {
+        best = d;
+        nearest = i;
+      }
+    }
+    let meters = distance(point, route[nearest + 1]);
+    for (let i = nearest + 1; i < route.length - 1 && meters < 45; i++) {
+      if (
+        distance(route[i - 1], route[i]) > 5 &&
+        distance(route[i], route[i + 1]) > 5
+      ) {
+        const turn = angle(
+          bearing(route[i], route[i + 1]),
+          bearing(route[i - 1], route[i]),
+        );
+        if (Math.abs(turn) > 40 && Math.abs(turn) < 130) {
+          corner = {
+            key:
+              route[i].latitude.toFixed(5) +
+              "," +
+              route[i].longitude.toFixed(5),
+            right: turn > 0,
+          };
+          break;
+        }
+      }
+      meters += distance(route[i], route[i + 1]);
+    }
+  }
+  const seenTurns = useRef(new Set<string>());
+  const cornerKey = corner?.key;
+  useEffect(() => {
+    if (cornerKey && !seenTurns.current.has(cornerKey)) {
+      seenTurns.current.add(cornerKey);
+      tapHaptic();
+    }
+  }, [cornerKey]);
+  const title = notice
+    ? "先看看這條街"
+    : routing
+      ? "正在找下一小段"
+      : corner
+        ? corner.right
+          ? "前面路口，往右看看"
+          : "前面路口，往左看看"
+        : "先走，帶著目標看看";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={map ? "收起地圖" : "查看方向地圖"}
+      onPress={() => {
+        tapHaptic();
+        onMap();
+      }}
+      style={s.direction}
+    >
+      <Text
+        style={{
+          fontSize: 29,
+          color: C.ink,
+          transform: [{ rotate: `${relative ?? 0}deg` }],
+        }}
+      >
+        ↑
+      </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={s.directionTitle}>{title}</Text>
+        <Text style={s.directionSub}>
+          {notice ||
+            (closing
+              ? "慢慢靠近一個可以停下的地方。"
+              : "看到有意思的，繞過去也可以。")}
+        </Text>
+      </View>
+      <Text style={s.serial}>{map ? "收起" : "地圖"} ↗</Text>
+    </Pressable>
+  );
+}

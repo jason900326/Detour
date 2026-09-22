@@ -1,3 +1,5 @@
+> **2026-09-22 更新：下文為 V1 歷史基線。** 新版 Playtest 以 `docs/V2_PLAYTEST_SPEC.md` 與 `docs/POCKET_PLAYTEST.md` 為準，取消時間／Mood 選擇、強制拍照與預定終點。
+
 # Detour — 產品定位與發展基礎
 
 > 狀態：ACTIVE / 目前產品決策基準

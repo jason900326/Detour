@@ -45,3 +45,7 @@ example
 /android
 
 *.log
+
+# Local playtest outputs
+.playtest-bundle/
+artifacts/

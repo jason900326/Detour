@@ -47,6 +47,20 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "讓你在 DETOUR 旅程中拍下沿途發現。",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "讓 DETOUR 記錄路線，並從目前位置安排下一小段探索。"
+        }
       ]
     ],
     "experiments": {
