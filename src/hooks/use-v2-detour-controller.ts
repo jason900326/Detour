@@ -379,6 +379,54 @@ export function useV2DetourController() {
               journeyAnchorRef.current
             );
 
+        const isFirstExplorationRoute =
+          purpose === 'exploration' &&
+          !fixedDestination &&
+          previousRouteCoordinatesRef.current.length === 0 &&
+          previousBearingRef.current === null;
+
+        if (isFirstExplorationRoute) {
+          // There is nothing to compare against on the very first segment:
+          // no previous bearing, no route overlap and no rubber-band constraint.
+          // Start as soon as any valid walking route is available instead of
+          // making the player wait for every candidate to settle.
+          const first = await withTimeout(
+            Promise.any(
+              destinations.map(async (destination) => {
+                const walkingRoute = await fetchWalkingRoute(
+                  origin,
+                  destination,
+                  5000,
+                  {
+                    purpose: 'interactive',
+                    context,
+                  }
+                );
+                return { destination, walkingRoute };
+              })
+            ),
+            6500,
+            '第一小段路線暫時沒有回應。'
+          );
+
+          if (requestId !== routeRequestRef.current) return false;
+
+          const option: V2RouteOption = {
+            origin,
+            destination: first.destination,
+            walkingRoute: first.walkingRoute,
+            navigationRoute: buildNavigationRouteFromPolyline({
+              coordinates: first.walkingRoute.coordinates,
+              totalDistanceMeters: first.walkingRoute.distanceMeters,
+              durationSeconds: first.walkingRoute.durationSeconds,
+            }),
+            purpose,
+          };
+
+          registerRoute(option);
+          return true;
+        }
+
         const results = await Promise.allSettled(
           destinations.map((destination) =>
             fetchWalkingRoute(origin, destination, 9000, {
