@@ -118,6 +118,7 @@ function withTimeout<T>(
 }
 
 
+
 async function resolveAreaLabel(
   point: GeoPoint | null,
   mode: V2PlaytestMode
@@ -378,6 +379,63 @@ export function useV2DetourController() {
               previousBearingRef.current,
               journeyAnchorRef.current
             );
+
+        const isFirstExplorationRoute =
+          purpose === 'exploration' &&
+          !fixedDestination &&
+          previousRouteCoordinatesRef.current.length === 0 &&
+          previousBearingRef.current === null;
+
+        if (isFirstExplorationRoute) {
+          // There is nothing to compare against on the very first segment:
+          // no previous bearing, no route overlap and no rubber-band constraint.
+          // Start as soon as any valid walking route is available instead of
+          // making the player wait for every candidate to settle.
+          let first: { destination: GeoPoint; walkingRoute: WalkingRoute } | null = null;
+          let lastRouteError: unknown = null;
+
+          for (const destination of destinations) {
+            try {
+              const walkingRoute = await fetchWalkingRoute(
+                origin,
+                destination,
+                4200,
+                {
+                  purpose: 'interactive',
+                  context,
+                }
+              );
+              first = { destination, walkingRoute };
+              break;
+            } catch (error) {
+              lastRouteError = error;
+            }
+          }
+
+          if (requestId !== routeRequestRef.current) return false;
+          if (!first) {
+            throw (
+              lastRouteError instanceof Error
+                ? lastRouteError
+                : new Error('第一小段路線暫時沒有回應。')
+            );
+          }
+
+          const option: V2RouteOption = {
+            origin,
+            destination: first.destination,
+            walkingRoute: first.walkingRoute,
+            navigationRoute: buildNavigationRouteFromPolyline({
+              coordinates: first.walkingRoute.coordinates,
+              totalDistanceMeters: first.walkingRoute.distanceMeters,
+              durationSeconds: first.walkingRoute.durationSeconds,
+            }),
+            purpose,
+          };
+
+          registerRoute(option);
+          return true;
+        }
 
         const results = await Promise.allSettled(
           destinations.map((destination) =>
@@ -763,7 +821,29 @@ export function useV2DetourController() {
       if (phaseRef.current !== 'exploration' && phaseRef.current !== 'closing') return;
 
       const route = routeStateRef.current;
-      if (!route || routePlanningRef.current) return;
+      if (!route) {
+        // The player is allowed to start moving before GPS/routing has settled.
+        // As soon as the first usable live location arrives, form the first
+        // short segment in the background instead of blocking the start gate.
+        if (
+          phaseRef.current === 'exploration' &&
+          !routePlanningRef.current
+        ) {
+          if (!journeyAnchorRef.current) {
+            journeyAnchorRef.current = point;
+          }
+          if (traceRef.current.length === 0 && trustedForJourney) {
+            traceRef.current = [point];
+            setTrace([point]);
+            lastTrustedTracePointRef.current = point;
+            lastTrustedTraceTimestampRef.current = location.timestamp;
+          }
+          void refreshEnvironmentHints(point);
+          void planShortRoute(point, 'exploration');
+        }
+        return;
+      }
+      if (routePlanningRef.current) return;
 
       const beat = route.navigationRoute.beats[route.beatIndex];
       if (!beat) return;
@@ -840,7 +920,7 @@ export function useV2DetourController() {
       // the player's actual location.
       void planShortRoute(point, 'exploration');
     },
-    [finishJourney, planShortRoute]
+    [finishJourney, planShortRoute, refreshEnvironmentHints]
   );
 
   const startWatchers = useCallback(async () => {
@@ -991,47 +1071,35 @@ export function useV2DetourController() {
         return;
       }
 
-      const location = await withTimeout(
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        }),
-        10000,
-        '定位逾時，請確認定位服務後再試一次。'
-      );
-      if (!isUsableV2StartAccuracy(location.coords.accuracy)) {
-        throw new Error('目前定位精度還不夠。請移到較開闊的位置後再試一次。');
-      }
-
-      const point: GeoPoint = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
-      currentPointRef.current = point;
-      journeyAnchorRef.current = point;
-      lastPointRef.current = point;
-      lastTrustedTracePointRef.current = point;
-      lastTrustedTraceTimestampRef.current = location.timestamp;
-      traceRef.current = [point];
-      setCurrentPoint(point);
-      setTrace([point]);
-      setLightContext(getLightContext(point));
+      // Starting must be instant. The first GPS fix and first walking route
+      // are background enhancements, not a gate before the player may move.
       startedAtRef.current = Date.now();
       setPhaseSafe('exploration');
       chooseNextTarget(null);
-      void refreshEnvironmentHints(point);
+      setStatusMessage('先往前走，抬頭看看。有需要轉彎時，我再叫你。');
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
       const watchersStarted = await startWatchers();
       if (!watchersStarted) {
-        setPhaseSafe('home');
+        // Do not eject the player back to Home. They can keep exploring and
+        // retry location/routing from the Journey UI.
+        setErrorMessage('定位還沒接上。你可以先往前走，再按「重新安排」。');
         return;
       }
-      const routed = await planShortRoute(point, 'exploration');
-      if (!routed) {
-        stopWatchers();
-        setPhaseSafe('home');
-        return;
+
+      // A cached fix can make the map appear almost immediately, but it is
+      // optional. Poor/stale cached data must never block the journey.
+      try {
+        const cachedLocation = await Location.getLastKnownPositionAsync();
+        if (
+          cachedLocation &&
+          isUsableV2StartAccuracy(cachedLocation.coords.accuracy)
+        ) {
+          handleLocationUpdate(cachedLocation);
+        }
+      } catch {
+        // Live watcher will supply the first point when iOS has one ready.
       }
-      setStatusMessage('沿這段路找找看。');
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (error) {
       stopWatchers();
       setErrorMessage(error instanceof Error ? error.message : '目前位置讀取失敗。');
@@ -1040,6 +1108,7 @@ export function useV2DetourController() {
   }, [
     chooseNextTarget,
     planShortRoute,
+    handleLocationUpdate,
     refreshEnvironmentHints,
     setPhaseSafe,
     setPlaytestModeSafe,
