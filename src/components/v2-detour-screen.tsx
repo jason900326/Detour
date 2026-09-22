@@ -22,6 +22,7 @@ import {
   V2ClosingConverge,
   V2DiscoveryBurst,
   V2FinishMark,
+  V2HomeWanderMotion,
   V2RouteFormingMotion,
 } from './v2-skia-motion';
 
@@ -338,7 +339,7 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
           onPress={() => setShowSettings(true)}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.settingsButtonText}>⚙</Text>
+          <Text style={styles.settingsButtonText}>設定</Text>
         </Pressable>
       </View>
 
@@ -348,12 +349,16 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
         </View>
         <Text style={styles.homeTitle}>繞一下？</Text>
 
+        <V2HomeWanderMotion />
+
         <View style={styles.homeMysteryCard}>
           <View>
             <Text style={styles.homeMysteryLabel}>DESTINATION</Text>
             <Text style={styles.homeMysteryValue}>???</Text>
           </View>
-          <Text style={styles.homeMysteryEmoji}>↗</Text>
+          <View style={styles.homeMysteryToken}>
+            <Text style={styles.homeMysteryTokenText}>?</Text>
+          </View>
         </View>
 
         <Pressable
@@ -1075,22 +1080,23 @@ const styles = StyleSheet.create({
   brand: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 2.4 },
   smallLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
   homeHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  settingsButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
-  settingsButtonText: { color: COLORS.paper, fontSize: 18, fontWeight: '900' },
+  settingsButton: { paddingHorizontal: 14, height: 38, borderRadius: 99, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
+  settingsButtonText: { color: COLORS.ink, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
   homeCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
   homeQuestBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: COLORS.paleSignal },
   homeQuestBadgeText: { color: COLORS.signal, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   homeTitle: { marginTop: 12, color: COLORS.ink, fontSize: 64, lineHeight: 70, fontWeight: '900', letterSpacing: -3.4 },
-  homeMysteryCard: { marginTop: 24, minHeight: 108, paddingHorizontal: 20, paddingVertical: 16, borderRadius: 22, backgroundColor: COLORS.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  homeMysteryLabel: { color: '#9D958A', fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
-  homeMysteryValue: { marginTop: 5, color: COLORS.paper, fontSize: 34, fontWeight: '900', letterSpacing: 4 },
-  homeMysteryEmoji: { color: COLORS.signal, fontSize: 46, lineHeight: 50, fontWeight: '900' },
-  playButton: { marginTop: 14, minHeight: 94, paddingHorizontal: 20, paddingVertical: 15, borderRadius: 22, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 7 }, elevation: 3 },
-  playButtonPressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
-  playButtonEyebrow: { color: '#FFE1D8', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
-  playButtonText: { marginTop: 2, color: COLORS.paper, fontSize: 30, lineHeight: 34, fontWeight: '900' },
-  playButtonIcon: { width: 56, height: 56, borderRadius: 18, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
-  playButtonArrow: { color: COLORS.paper, fontSize: 27, fontWeight: '900' },
+  homeMysteryCard: { minHeight: 88, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', transform: [{ rotate: '-1deg' }] },
+  homeMysteryLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.6 },
+  homeMysteryValue: { marginTop: 4, color: COLORS.ink, fontSize: 31, fontWeight: '900', letterSpacing: 4 },
+  homeMysteryToken: { width: 48, height: 48, borderRadius: 18, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC7B8', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '7deg' }] },
+  homeMysteryTokenText: { color: COLORS.signal, fontSize: 25, fontWeight: '900' },
+  playButton: { marginTop: 14, minHeight: 86, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  playButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.92 },
+  playButtonEyebrow: { color: '#FFE5DE', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  playButtonText: { marginTop: 2, color: COLORS.paper, fontSize: 28, lineHeight: 32, fontWeight: '900' },
+  playButtonIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  playButtonArrow: { color: COLORS.signal, fontSize: 27, fontWeight: '900' },
   buttonPressed: { opacity: 0.72 },
   homeBottom: { paddingHorizontal: 24, paddingBottom: 20 },
   historyCardButton: { minHeight: 76, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1108,8 +1114,8 @@ const styles = StyleSheet.create({
   settingRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE8DE' },
   settingName: { color: COLORS.ink, fontSize: 14, fontWeight: '900' },
   settingValue: { color: COLORS.muted, fontSize: 13, fontWeight: '800' },
-  settingsTestButton: { marginTop: 18, minHeight: 54, paddingHorizontal: 16, borderRadius: 16, backgroundColor: COLORS.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  settingsTestText: { color: COLORS.paper, fontSize: 14, fontWeight: '900' },
+  settingsTestButton: { marginTop: 18, minHeight: 54, paddingHorizontal: 16, borderRadius: 16, backgroundColor: COLORS.paleSignal, borderWidth: 1, borderColor: '#FFC8B8', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  settingsTestText: { color: COLORS.ink, fontSize: 14, fontWeight: '900' },
   settingsTestArrow: { color: COLORS.signal, fontSize: 22, fontWeight: '900' },
   errorText: { marginTop: 10, color: '#B13D2C', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   startingHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1137,10 +1143,10 @@ const styles = StyleSheet.create({
   retryButtonText: { color: COLORS.signal, fontSize: 13, fontWeight: '800' },
   journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   journeyState: { marginTop: 3, color: COLORS.signal, fontSize: 9, fontWeight: '900', letterSpacing: 1.25 },
-  journeyMeta: { minWidth: 88, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 14, backgroundColor: COLORS.ink, alignItems: 'flex-end' },
-  elapsed: { color: COLORS.paper, fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  journeyMeta: { minWidth: 88, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'flex-end' },
+  elapsed: { color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   discoveryTrail: { marginTop: 6, flexDirection: 'row', gap: 5 },
-  discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: '#514A42' },
+  discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: COLORS.line },
   discoveryDotFound: { width: 14, backgroundColor: COLORS.signal },
   journeyDecision: { minHeight: 92, marginHorizontal: 18, marginBottom: 10, paddingHorizontal: 18, paddingVertical: 14, borderRadius: 20, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, justifyContent: 'center' },
   navigationIdle: { color: COLORS.ink, fontSize: 29, lineHeight: 35, fontWeight: '900', letterSpacing: -1.1 },
