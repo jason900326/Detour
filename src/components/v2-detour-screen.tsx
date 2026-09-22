@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Image,
+  PanResponder,
   Pressable,
   ScrollView,
   StatusBar,
@@ -325,6 +326,78 @@ function RoutePreview({
   );
 }
 
+function SwipeToStart({
+  onStart,
+}: {
+  onStart: () => void;
+}) {
+  const dragX = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(300);
+  const knobSize = 58;
+  const maxX = Math.max(0, trackWidth - knobSize - 10);
+
+  const reset = () => {
+    Animated.spring(dragX, {
+      toValue: 0,
+      speed: 28,
+      bounciness: 3,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 5 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderMove: (_, gesture) => {
+          dragX.setValue(Math.min(maxX, Math.max(0, gesture.dx)));
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx >= maxX * 0.72 || gesture.vx > 0.85) {
+            Animated.timing(dragX, {
+              toValue: maxX,
+              duration: 140,
+              useNativeDriver: true,
+            }).start(() => {
+              onStart();
+              dragX.setValue(0);
+            });
+            return;
+          }
+          reset();
+        },
+        onPanResponderTerminate: reset,
+      }),
+    [dragX, maxX, onStart]
+  );
+
+  return (
+    <View
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel="滑動開始 Detour"
+      accessibilityHint="向右滑動開始這趟探索"
+      onAccessibilityTap={onStart}
+      onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+      style={styles.swipeTrack}
+      {...panResponder.panHandlers}
+    >
+      <Text style={styles.swipeHint}>向右滑，出去繞一下</Text>
+      <Text style={styles.swipeDestination}>???</Text>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.swipeKnob,
+          { transform: [{ translateX: dragX }] },
+        ]}
+      >
+        <Text style={styles.swipeArrow}>→</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
   return (
     <SafeAreaView style={styles.safe}>
@@ -337,18 +410,15 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
       </View>
 
       <View style={styles.homeCenter}>
-        <Text style={styles.homeKicker}>不知道要幹嘛？</Text>
-        <Text style={styles.homeTitle}>去繞一下</Text>
-        <Text style={styles.homeSubline}>帶你走一段平常不會走的路，{`\n`}一路注意平常不會注意的東西。</Text>
-        <Pressable
-          accessibilityLabel="去繞一下"
-          onPress={() => void controller.startJourney()}
-          style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.startButtonText}>去繞一下</Text>
-          <Text style={styles.startButtonArrow}>→</Text>
-        </Pressable>
-        <Text style={styles.homeTime}>約 10 分鐘</Text>
+        <Text style={styles.homeKicker}>一小段未知路線</Text>
+        <Text style={styles.homeTitle}>繞一下？</Text>
+        <Text style={styles.homeSubline}>終點先保密。你只需要走下一小段，{ `\n` }順便找一個平常會錯過的東西。</Text>
+        <SwipeToStart onStart={() => void controller.startJourney()} />
+        <View style={styles.homePromiseRow}>
+          <Text style={styles.homeTime}>約 10–15 分鐘</Text>
+          <Text style={styles.homePromiseDot}>·</Text>
+          <Text style={styles.homeTime}>不用選路線</Text>
+        </View>
         <Pressable
           accessibilityLabel="室內測試"
           onPress={controller.startIndoorJourney}
@@ -361,7 +431,7 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
 
       <View style={styles.homeBottom}>
         <View style={styles.homeAccent} />
-        <Text style={styles.homeFootnote}>不知道這次會找什麼，也不知道最後會停在哪裡。</Text>
+        <Text style={styles.homeFootnote}>你不會先知道終點。走著走著，它才會出現。</Text>
         {controller.errorMessage && <Text style={styles.errorText}>{controller.errorMessage}</Text>}
       </View>
     </SafeAreaView>
@@ -377,10 +447,13 @@ function StartingPanel({ controller }: { controller: ReturnType<typeof useV2Deto
         <Text style={styles.smallLabel}>PLAYTEST BUILD</Text>
       </View>
       <View style={styles.startingContent}>
-        <V2Ticket serial={controller.ticketSerial} emojiTrail={controller.emojiTrail} />
+        <View style={styles.startingMystery}>
+          <Text style={styles.startingMysteryLabel}>DESTINATION</Text>
+          <Text style={styles.startingMysteryMark}>???</Text>
+        </View>
         <V2RouteFormingMotion />
-        <Text style={styles.startingTitle}>這趟路正在形成。</Text>
-        <Text style={styles.startingCopy}>{controller.statusMessage || '正在找一條適合先走的小段。'}</Text>
+        <Text style={styles.startingTitle}>先走第一小段。</Text>
+        <Text style={styles.startingCopy}>{controller.statusMessage || '路線正在形成。終點晚一點再告訴你。'}</Text>
         {controller.isPlanning && <View style={styles.loadingDot} />}
         {controller.errorMessage && (
           <View style={styles.inlineError}>
@@ -552,29 +625,45 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
           <Text style={styles.brand}>DETOUR</Text>
           <Text style={styles.journeyState}>{closing ? '差不多了' : '正在形成'}</Text>
         </View>
-        <Text style={styles.elapsed}>{elapsedLabel(controller.elapsedSeconds)}</Text>
+        <View style={styles.journeyMeta}>
+          <Text style={styles.elapsed}>{elapsedLabel(controller.elapsedSeconds)}</Text>
+          <View style={styles.discoveryTrail} accessibilityLabel={`已找到 ${controller.discoveries} 個`}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.discoveryDot,
+                  index < Math.min(4, controller.discoveries) && styles.discoveryDotFound,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.journeyDecision}>
+        {(closing || isDirectionDecision(beat?.turn)) ? (
+          <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
+        ) : (
+          <Text style={styles.navigationIdle}>先往前走，抬頭看看。</Text>
+        )}
+        {controller.isPlanning ? (
+          <Text style={styles.navigationSubHint}>
+            {closing ? '正在找一個適合停下來的位置' : '下一小段正在形成'}
+          </Text>
+        ) : !closing && !isDirectionDecision(beat?.turn) ? (
+          <Text style={styles.navigationSubHint}>有需要轉彎時，我再叫你。</Text>
+        ) : null}
       </View>
 
       <JourneyMap
         point={controller.currentPoint}
         coordinates={controller.routeCoordinates}
-        caption={closing ? '最後一段' : '只看下一小段'}
+        caption={closing ? '最後一段 · 終點仍保密' : '只看下一小段'}
       />
 
       <View style={styles.journeyContent}>
         <V2DiscoveryBurst trigger={controller.discoveries} />
-        <View style={styles.navigationHint}>
-          {(closing || isDirectionDecision(beat?.turn)) && (
-            <Text style={styles.navigationHintText}>{navigationCopy(beat?.turn, closing)}</Text>
-          )}
-          {controller.isPlanning ? (
-            <Text style={styles.navigationSubHint}>
-              {closing ? '正在找一個適合停下來的位置' : '下一小段正在形成'}
-            </Text>
-          ) : !closing && !isDirectionDecision(beat?.turn) ? (
-            <Text style={styles.navigationSubHint}>先看四周，不用一直盯地圖</Text>
-          ) : null}
-        </View>
 
         {closing ? (
           <View style={styles.closingCard}>
@@ -608,7 +697,8 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
           </View>
         ) : controller.activeTarget ? (
           <View style={styles.targetCard}>
-            <View style={styles.targetEmojiBubble}>
+            <View style={styles.targetPaperTop}>
+              <Text style={styles.targetPaperLabel}>路上找找看</Text>
               <Text style={styles.targetEmoji}>{controller.activeTarget.emoji}</Text>
             </View>
             <Text style={styles.targetTitle}>{controller.activeTarget.title}</Text>
@@ -631,14 +721,22 @@ function JourneyPanel({ controller }: { controller: ReturnType<typeof useV2Detou
         <IndoorPlaytestControls controller={controller} />
 
         <View style={styles.journeyBottomRow}>
-          <Pressable
-            accessibilityLabel="想留就拍"
-            onPress={controller.openCamera}
-            style={({ pressed }) => [styles.cameraButton, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.cameraButtonIcon}>拍照</Text>
-            <Text style={styles.cameraButtonText}>想留就拍</Text>
-          </Pressable>
+          <View style={styles.cameraCluster}>
+            <Pressable
+              accessibilityLabel="想留就拍"
+              onPress={controller.openCamera}
+              style={({ pressed }) => [styles.cameraButton, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.cameraButtonIcon}>＋</Text>
+              <Text style={styles.cameraButtonText}>想留就拍</Text>
+            </Pressable>
+            {controller.photos.length > 0 && (
+              <Image
+                source={{ uri: controller.photos[controller.photos.length - 1].uri }}
+                style={styles.livePhotoThumb}
+              />
+            )}
+          </View>
           <View style={styles.ticketMiniWrap}>
             <Text style={styles.ticketMiniLabel}>票上</Text>
             <Text style={styles.ticketMiniEmoji}>{controller.emojiTrail.join(' ') || '—'}</Text>
@@ -985,14 +1083,18 @@ const styles = StyleSheet.create({
   historyButton: { borderWidth: 1, borderColor: COLORS.line, borderRadius: 99, paddingHorizontal: 14, paddingVertical: 8 },
   historyButtonText: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   homeCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
-  homeKicker: { color: COLORS.signal, fontSize: 15, fontWeight: '800', letterSpacing: 1.2 },
-  homeTitle: { marginTop: 10, color: COLORS.ink, fontSize: 56, lineHeight: 64, fontWeight: '900', letterSpacing: -2.5 },
-  homeSubline: { marginTop: 20, color: COLORS.muted, fontSize: 15, lineHeight: 24, textAlign: 'center' },
-  startButton: { marginTop: 34, minWidth: 230, borderRadius: 22, paddingVertical: 19, paddingHorizontal: 22, backgroundColor: COLORS.signal, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  homeKicker: { color: COLORS.signal, fontSize: 12, fontWeight: '900', letterSpacing: 1.8 },
+  homeTitle: { marginTop: 8, color: COLORS.ink, fontSize: 58, lineHeight: 66, fontWeight: '900', letterSpacing: -3 },
+  homeSubline: { marginTop: 16, maxWidth: 330, color: COLORS.muted, fontSize: 14, lineHeight: 22, textAlign: 'center' },
+  swipeTrack: { width: '100%', maxWidth: 340, height: 68, marginTop: 34, padding: 5, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.ink, justifyContent: 'center' },
+  swipeHint: { position: 'absolute', left: 76, right: 54, color: '#D8D0C3', fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  swipeDestination: { position: 'absolute', right: 16, color: '#6F675D', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  swipeKnob: { width: 58, height: 58, borderRadius: 18, backgroundColor: COLORS.signal, alignItems: 'center', justifyContent: 'center' },
+  swipeArrow: { color: COLORS.paper, fontSize: 26, fontWeight: '900' },
   buttonPressed: { opacity: 0.72 },
-  startButtonText: { color: COLORS.paper, fontSize: 20, fontWeight: '900' },
-  startButtonArrow: { color: COLORS.paper, fontSize: 25, fontWeight: '800' },
-  homeTime: { marginTop: 12, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  homePromiseRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  homePromiseDot: { color: COLORS.line, fontSize: 13, fontWeight: '900' },
+  homeTime: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
   homeTestButton: { marginTop: 20, minWidth: 230, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: COLORS.line, backgroundColor: 'rgba(255,253,247,0.56)', alignItems: 'center' },
   homeTestLabel: { color: COLORS.ink, fontSize: 13, fontWeight: '900' },
   homeTestCopy: { marginTop: 3, color: COLORS.muted, fontSize: 10, fontWeight: '700' },
@@ -1002,6 +1104,9 @@ const styles = StyleSheet.create({
   errorText: { marginTop: 10, color: '#B13D2C', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   startingHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   startingContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  startingMystery: { width: 150, height: 104, borderRadius: 28, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-2deg' }] },
+  startingMysteryLabel: { color: '#9F968A', fontSize: 9, fontWeight: '900', letterSpacing: 1.8 },
+  startingMysteryMark: { marginTop: 7, color: COLORS.signal, fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: 5 },
   ticket: { width: '100%', maxWidth: 350, minHeight: 212, padding: 22, borderRadius: 4, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   ticketCompact: { minHeight: 0, padding: 16 },
   ticketTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -1020,20 +1125,26 @@ const styles = StyleSheet.create({
   inlineError: { alignItems: 'center', maxWidth: 320 },
   retryButton: { marginTop: 14, borderWidth: 1, borderColor: COLORS.signal, borderRadius: 99, paddingHorizontal: 18, paddingVertical: 10 },
   retryButtonText: { color: COLORS.signal, fontSize: 13, fontWeight: '800' },
-  journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  journeyHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   journeyState: { marginTop: 3, color: COLORS.muted, fontSize: 11, fontWeight: '700' },
-  elapsed: { color: COLORS.ink, fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  mapFrame: { height: 170, marginHorizontal: 14, overflow: 'hidden', borderRadius: 22, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
+  journeyMeta: { alignItems: 'flex-end' },
+  elapsed: { color: COLORS.ink, fontSize: 19, fontWeight: '900', letterSpacing: 1 },
+  discoveryTrail: { marginTop: 6, flexDirection: 'row', gap: 5 },
+  discoveryDot: { width: 5, height: 5, borderRadius: 99, backgroundColor: COLORS.line },
+  discoveryDotFound: { width: 12, backgroundColor: COLORS.signal },
+  journeyDecision: { minHeight: 66, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 10, justifyContent: 'center' },
+  navigationIdle: { color: COLORS.ink, fontSize: 22, lineHeight: 28, fontWeight: '900', letterSpacing: -0.6 },
+  mapFrame: { height: 112, marginHorizontal: 18, overflow: 'hidden', borderRadius: 18, backgroundColor: COLORS.map, borderWidth: 1, borderColor: COLORS.line },
   mapCaption: { position: 'absolute', left: 12, top: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,253,247,0.88)' },
   mapCaptionText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
-  journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 14 },
-  navigationHint: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
-  navigationHintText: { color: COLORS.ink, fontSize: 16, fontWeight: '900' },
-  navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 11, fontWeight: '600' },
-  targetCard: { marginTop: 12, padding: 18, borderRadius: 24, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center' },
-  targetEmojiBubble: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.paleSignal, alignItems: 'center', justifyContent: 'center' },
-  targetEmoji: { fontSize: 34 },
-  targetTitle: { marginTop: 12, color: COLORS.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  journeyContent: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  navigationHintText: { color: COLORS.ink, fontSize: 26, lineHeight: 31, fontWeight: '900', letterSpacing: -0.8 },
+  navigationSubHint: { marginTop: 4, color: COLORS.muted, fontSize: 11, fontWeight: '700' },
+  targetCard: { marginTop: 10, padding: 20, borderRadius: 6, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  targetPaperTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  targetPaperLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },
+  targetEmoji: { fontSize: 30 },
+  targetTitle: { marginTop: 20, color: COLORS.signal, fontSize: 25, lineHeight: 32, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
   targetActions: { width: '100%', marginTop: 18, flexDirection: 'row', gap: 10 },
   replaceButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   replaceButtonText: { color: COLORS.muted, fontSize: 14, fontWeight: '800' },
@@ -1073,9 +1184,11 @@ const styles = StyleSheet.create({
   indoorButtonText: { color: COLORS.ink, fontSize: 10, fontWeight: '900', textAlign: 'center' },
   indoorButtonPrimaryText: { color: COLORS.paper, fontSize: 10, fontWeight: '900', textAlign: 'center' },
   journeyBottomRow: { marginTop: 12, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cameraCluster: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cameraButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line },
-  cameraButtonIcon: { color: COLORS.signal, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
+  cameraButtonIcon: { width: 22, height: 22, borderRadius: 8, overflow: 'hidden', color: COLORS.paper, backgroundColor: COLORS.signal, fontSize: 16, lineHeight: 22, fontWeight: '900', textAlign: 'center' },
   cameraButtonText: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
+  livePhotoThumb: { width: 40, height: 40, borderRadius: 11, backgroundColor: COLORS.line, borderWidth: 2, borderColor: COLORS.paper },
   ticketMiniWrap: { alignItems: 'flex-end', maxWidth: '65%' },
   ticketMiniLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
   ticketMiniEmoji: { marginTop: 2, color: COLORS.ink, fontSize: 17, letterSpacing: 2 },
