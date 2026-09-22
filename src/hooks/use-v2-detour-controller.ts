@@ -117,6 +117,26 @@ function withTimeout<T>(
   });
 }
 
+function firstSuccessful<T>(promises: Promise<T>[]): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (promises.length === 0) {
+      reject(new Error('No route candidates'));
+      return;
+    }
+
+    let remaining = promises.length;
+    let lastError: unknown = new Error('No route candidates');
+
+    promises.forEach((promise) => {
+      promise.then(resolve, (error) => {
+        lastError = error;
+        remaining -= 1;
+        if (remaining === 0) reject(lastError);
+      });
+    });
+  });
+}
+
 
 async function resolveAreaLabel(
   point: GeoPoint | null,
@@ -391,7 +411,7 @@ export function useV2DetourController() {
           // Start as soon as any valid walking route is available instead of
           // making the player wait for every candidate to settle.
           const first = await withTimeout(
-            Promise.any(
+            firstSuccessful(
               destinations.map(async (destination) => {
                 const walkingRoute = await fetchWalkingRoute(
                   origin,
