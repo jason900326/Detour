@@ -548,22 +548,46 @@ function HomePanel({ controller }: { controller: ReturnType<typeof useV2DetourCo
 }
 
 function StartingPanel({ controller }: { controller: ReturnType<typeof useV2DetourController> }) {
+  const launch = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    launch.setValue(0);
+    Animated.timing(launch, {
+      toValue: 1,
+      duration: 520,
+      useNativeDriver: true,
+    }).start();
+  }, [launch]);
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.startingHeader}>
         <Text style={styles.brand}>DETOUR</Text>
-        <Text style={styles.smallLabel}>GET READY</Text>
+        <Text style={styles.smallLabel}>GO</Text>
       </View>
-      <View style={styles.startingContent}>
-        <View style={styles.startingMystery}>
-          <Text style={styles.startingMysteryLabel}>DESTINATION</Text>
-          <Text style={styles.startingMysteryMark}>???</Text>
+      <Animated.View
+        style={[
+          styles.startingContent,
+          {
+            opacity: launch,
+            transform: [
+              {
+                scale: launch.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.94, 1],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.launchArrow}>
+          <Text style={styles.launchArrowText}>↗</Text>
         </View>
         <V2RouteFormingMotion />
-        <Text style={styles.startingTitle}>準備出發。</Text>
-        <Text style={styles.startingCopy}>先抬頭看看四周。第一個方向馬上給你。</Text>
-        {controller.isPlanning && <View style={styles.loadingDot} />}
+        <Text style={styles.startingTitle}>出發。</Text>
+        <Text style={styles.startingCopy}>第一個方向出現後，就照著走。</Text>
         {controller.errorMessage && (
           <View style={styles.inlineError}>
             <Text style={styles.errorText}>{controller.errorMessage}</Text>
@@ -575,7 +599,7 @@ function StartingPanel({ controller }: { controller: ReturnType<typeof useV2Deto
             </Pressable>
           </View>
         )}
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -1301,9 +1325,8 @@ const styles = StyleSheet.create({
   errorText: { marginTop: 10, color: '#B13D2C', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   startingHeader: { paddingHorizontal: 22, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   startingContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  startingMystery: { width: 150, height: 104, borderRadius: 28, backgroundColor: COLORS.paper, borderWidth: 1.5, borderColor: COLORS.signal, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-2deg' }] },
-  startingMysteryLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.8 },
-  startingMysteryMark: { marginTop: 7, color: COLORS.signal, fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: 5 },
+  launchArrow: { width: 104, height: 104, borderRadius: 52, backgroundColor: COLORS.signal, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-4deg' }], shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  launchArrowText: { color: COLORS.paper, fontSize: 55, lineHeight: 62, fontWeight: '900' },
   ticket: { width: '100%', maxWidth: 350, minHeight: 212, padding: 22, borderRadius: 4, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   ticketCompact: { minHeight: 0, padding: 16 },
   ticketTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
