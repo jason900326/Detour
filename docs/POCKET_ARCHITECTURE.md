@@ -44,17 +44,62 @@ It owns:
 
 Analytics failure is intentionally isolated from journey persistence. A telemetry write or sync failure must not change whether a journey can start, continue or finish.
 
-## Pure engine responsibilities
+## Content and pure engine responsibilities
 
-`src/lib/pocket-engine.ts` owns product rules that should stay testable without React Native or network access:
+`src/lib/pocket-content.ts` owns discovery content and content selection. It contains:
 
-- discovery catalogue
+- the discovery catalogue
+- content metadata such as tags, weak environment hints, daylight/weather availability and Experience suitability
+- the lightweight Experience catalogue
 - difficulty selection
+- Experience-aware filtering and weighting
+- deterministic weighted selection with injectable randomness
+
+`src/lib/pocket-engine.ts` owns Journey rules that should stay testable without React Native or network access:
+
+- Journey state types
 - phase timing
 - GPS trace acceptance
 - short-empty-journey discard rule
+- re-exports of the content API for existing Pocket imports
 
-Future discovery/content rules should stay here, or move to a sibling `pocket-discoveries.ts` if the catalogue becomes large enough to make the engine difficult to scan. UI components should never choose discovery difficulty themselves.
+UI components never choose discovery difficulty or directly special-case themed content.
+
+### Experience model
+
+Experiences are content lenses over the same Journey engine, not parallel game modes.
+
+The active content catalogue currently contains:
+
+- `core` — implicit default; no user choice is required
+- `night` — development-only proof that a themed pool can change observation style without changing routing, ticket, camera, history or sharing
+
+Normal `start()` means `core`. Old saved journeys with no `experienceId` are also interpreted as `core`.
+
+The Night Experience is reachable only from the `__DEV__` help/test section. The production home screen remains an immediate-start surface and does not ask for a mode, duration, mood, party size or theme.
+
+### Adding a future pack
+
+A future curated pack should normally require only:
+
+1. Add an `ExperienceId` and one `DetourExperience` configuration.
+2. Add or annotate discoveries with tags / `suitableFor` / optional availability metadata.
+3. Add focused selection tests.
+4. Expose the Experience through an optional secondary entry only when the product is ready.
+
+Do not fork `usePocketJourney()`, routing, completion, ticket, camera or share flows for a themed pack.
+
+### Existing discovery migration
+
+No storage migration is required for the current content refactor.
+
+- Existing discovery IDs are unchanged.
+- New metadata fields are optional.
+- The old single `environment` field remains supported as a compatibility shape while new content uses `environments`.
+- Existing saved journeys do not have `experienceId`; undefined resolves to `core`.
+- Saved `found` / `target` records continue to render because the user-visible discovery fields are unchanged.
+
+If the legacy single-environment compatibility field is removed later, that should be a separate storage/schema migration after active old journeys have aged out or are explicitly normalized.
 
 ## Routing
 
@@ -100,13 +145,17 @@ For each shown discovery, Pocket records only:
 - discovery ID
 - difficulty and kind
 - coarse environment
+- Experience ID
 - shown time
 - found / skipped / unresolved result
 - seconds visible
 - elapsed journey position
 - discovery index
+- whether the same discovery has already appeared in that Journey
 
 Aggregates expose shown/found/skip rates, average/median resolution time, environment performance and journey-position performance.
+
+`aggregateDiscoveryQuality()` additionally exposes per-discovery descriptive signals: shown count, found/skip rate, median observation time, environment breakdown and repeat exposure. It intentionally does not rank or auto-remove discoveries. Completion percentage is not treated as the objective; a discovery can be valuable because it creates attention and curiosity rather than because it is instantly easy.
 
 At finish, only route-quality ratios/counts are added. Raw coordinates are never included in telemetry payloads.
 
@@ -141,6 +190,7 @@ Ticket/photo storage remains on-device. The playtest backend accepts additive Po
 - `src/components/pocket/**`
 - `src/hooks/use-pocket-journey.ts`
 - `src/lib/pocket-engine.ts`
+- `src/lib/pocket-content.ts`
 - `src/lib/pocket-routing.ts`
 - `src/lib/navigation-engine.ts`
 - `src/lib/routing-engine.ts`
@@ -183,3 +233,8 @@ Do not delete this uncertain group opportunistically while changing Pocket behav
 ## Validation contract
 
 Before merging Pocket architecture changes, run `npm run lint`, `npm run typecheck` and `npm test`. The repository quality workflow also bundles the iOS app so screen extraction cannot silently introduce a module-resolution failure.
+
+
+## Monetization boundary
+
+Experience architecture does not imply monetization. Core remains immediate and free in the current product thesis. Product hypotheses, candidate future packs and explicit anti-patterns live in [MONETIZATION_HYPOTHESES.md](./MONETIZATION_HYPOTHESES.md). There is no purchase, subscription, entitlement, currency, energy or premium-badge implementation in Pocket.
