@@ -12,6 +12,7 @@ import {
   guidanceBearingOnPolyline,
 } from "../../../lib/navigation-engine";
 import { playPocketFeedback } from "../../../lib/pocket-feedback";
+import type { MissionActionType } from "../../../lib/pocket-mission-grammar";
 import { Button, C, Enter, PHOTO_ASPECT, s } from "../pocket-ui";
 import { DirectionBeacon } from "../pocket-direction-beacon";
 
@@ -371,11 +372,7 @@ export function PocketJourneyScreen({
   );
 }
 
-function missionEyebrow(actionType: PocketJourney["target"] extends infer T
-  ? T extends { actionType?: infer A }
-    ? A
-    : never
-  : never) {
+function missionEyebrow(actionType: MissionActionType | undefined) {
   switch (actionType) {
     case "compare":
       return "比一比";
