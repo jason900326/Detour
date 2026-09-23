@@ -226,6 +226,8 @@ function experiencePreferredPool(
   return themed.length ? themed : candidates;
 }
 
+const RECENT_DISCOVERY_COOLDOWN = 12;
+
 function applyMissionMixEligibility(
   candidates: Discovery[],
   context: DiscoveryContext,
@@ -236,6 +238,12 @@ function applyMissionMixEligibility(
     const quick = next.filter((discovery) => discovery.role === "quick");
     if (quick.length) next = quick;
   }
+
+  const cooldownIds = new Set(
+    context.recentlySeenIds.slice(-RECENT_DISCOVERY_COOLDOWN),
+  );
+  const fresh = next.filter((discovery) => !cooldownIds.has(discovery.id));
+  if (fresh.length) next = fresh;
 
   if (context.recentActionTypes.at(-1) === "stop_and_observe") {
     const nonStop = next.filter(
