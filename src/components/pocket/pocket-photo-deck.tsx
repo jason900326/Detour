@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
-import { C, Enter, s } from "./pocket-ui";
+import { C, Enter, PHOTO_ASPECT, s } from "./pocket-ui";
 
 export function PhotoDeck({
   photos,
@@ -88,11 +88,13 @@ export function PhotoDeck({
             >
               <Image
                 source={{ uri: photos[selected] }}
-                resizeMode="cover"
+                resizeMode="contain"
                 style={{
-                  width: "100%",
-                  aspectRatio: compact ? 1.55 : 1.15,
+                  width: compact ? "70%" : "100%",
+                  aspectRatio: PHOTO_ASPECT,
                   borderRadius: 6,
+                  alignSelf: "center",
+                  backgroundColor: C.white,
                 }}
               />
               {!compact && (
