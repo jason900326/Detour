@@ -81,7 +81,12 @@ export const DISCOVERY_ROAM_METERS = 35;
 export function shouldRevealNextDiscovery(
   journey: Pick<
     PocketJourney,
-    "phase" | "target" | "nextDiscoveryAt" | "nextDiscoveryFrom" | "trace"
+    | "phase"
+    | "target"
+    | "nextDiscoveryAt"
+    | "nextDiscoveryFrom"
+    | "trace"
+    | "demo"
   >,
   now: number,
 ) {
@@ -92,6 +97,8 @@ export function shouldRevealNextDiscovery(
     now < journey.nextDiscoveryAt
   )
     return false;
+
+  if (journey.demo) return true;
 
   const waitedLongEnough =
     now - journey.nextDiscoveryAt >=
