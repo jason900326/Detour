@@ -245,6 +245,18 @@ function applyMissionMixEligibility(
   const fresh = next.filter((discovery) => !cooldownIds.has(discovery.id));
   if (fresh.length) next = fresh;
 
+  const previousAction =
+    context.previousDiscovery?.actionType ?? context.recentActionTypes.at(-1);
+  if (
+    context.previousDiscovery?.result !== "skipped" &&
+    previousAction
+  ) {
+    const differentAction = next.filter(
+      (discovery) => discovery.actionType !== previousAction,
+    );
+    if (differentAction.length) next = differentAction;
+  }
+
   if (context.recentActionTypes.at(-1) === "stop_and_observe") {
     const nonStop = next.filter(
       (discovery) => discovery.actionType !== "stop_and_observe",
