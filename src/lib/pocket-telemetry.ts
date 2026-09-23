@@ -117,6 +117,7 @@ export function beginPocketTelemetryRun(input: {
 }) {
   return enqueue(async () => {
     const runs = await loadRuns();
+    if (runs.some((run) => run.id === input.id)) return;
     const next: PocketTelemetryRun = {
       ...input,
       status: "active",
@@ -235,6 +236,7 @@ export function finalizePocketTelemetryRun(input: {
   photoCount: number;
   foundCount: number;
   routeQuality: PocketRouteQualityMetrics;
+  actualDurationSeconds: number;
 }) {
   return enqueue(async () => {
     const runs = await loadRuns();
@@ -249,7 +251,7 @@ export function finalizePocketTelemetryRun(input: {
       foundCount: input.foundCount,
       actualDurationSeconds: Math.max(
         0,
-        Math.round((input.completedAt - current.startedAt) / 1000),
+        Math.round(input.actualDurationSeconds),
       ),
       routeQuality: {
         ...input.routeQuality,
