@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { phaseAt } from "./pocket-engine.ts";
 import {
   chooseDiscovery,
   DISCOVERIES,
-  phaseAt,
-} from "./pocket-engine.ts";
+} from "./pocket-content.ts";
 import {
   isImmediatePocketUTurn,
   rankPocketPlaces,

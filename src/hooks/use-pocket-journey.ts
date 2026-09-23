@@ -5,13 +5,18 @@ import * as FileSystem from "expo-file-system/legacy";
 import { playPocketFeedback } from "../lib/pocket-feedback";
 import {
   appendFix,
-  chooseDiscovery,
   distance,
   phaseAt,
   shouldDiscardShortEmptyJourney,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
+import {
+  chooseDiscovery,
+  getExperience,
+  type Environment,
+  type ExperienceId,
+} from "../lib/pocket-content";
 import {
   nearbyPlaces,
   planLeg,
@@ -63,6 +68,21 @@ export function usePocketJourney() {
   const finishLock = useRef(false);
   const actionAt = useRef(0);
   const appState = useRef(AppState.currentState);
+  function discoveryContext(
+    experienceId: ExperienceId | undefined,
+    environment: Environment,
+  ) {
+    const experience = getExperience(experienceId);
+    const hour = new Date().getHours();
+    return {
+      environment,
+      experienceId: experience.id,
+      daylight:
+        experience.availability?.daylight ??
+        (hour >= 18 || hour < 6 ? ("night" as const) : ("day" as const)),
+    };
+  }
+
   const enqueue = (task: () => Promise<void>) => {
     saveQueue.current = saveQueue.current
       .then(task)
@@ -102,6 +122,7 @@ export function usePocketJourney() {
       id: resumed.id,
       startedAt: resumed.startedAt,
       devMode: !!resumed.demo,
+      experienceId: resumed.experienceId ?? "core",
     });
     if (resumed.target) {
       void recordPocketDiscoveryShown({
@@ -111,6 +132,10 @@ export function usePocketJourney() {
         shownAt: resumed.targetSince,
         journeyStartedAt: resumed.startedAt,
         discoveryIndex: Math.max(1, resumed.seen.length),
+        experienceId: resumed.experienceId ?? "core",
+        repeatExposure: resumed.seen
+          .slice(0, -1)
+          .includes(resumed.target.id),
       });
     }
     generation.current++;
@@ -149,7 +174,7 @@ export function usePocketJourney() {
     setRecoverableJourney(null);
     current.current = null;
     setJourney(null);
-    await start();
+    await start(false, saved?.experienceId ?? "core");
   }
 
   function toggleFavorite(id: string) {
@@ -325,7 +350,10 @@ export function usePocketJourney() {
       }
     }
   }
-  async function start(demo = false) {
+  async function start(
+    demo = false,
+    experienceId: ExperienceId = "core",
+  ) {
     if (startLock.current) return;
     startLock.current = true;
     setStarting(true);
@@ -365,7 +393,11 @@ export function usePocketJourney() {
         };
       }
       const time = Date.now();
-      const target = chooseDiscovery([], []);
+      const target = chooseDiscovery(
+        [],
+        [],
+        discoveryContext(experienceId, "street"),
+      );
       const next: PocketJourney = {
         id: `${time}`,
         startedAt: time,
@@ -379,6 +411,7 @@ export function usePocketJourney() {
         phase: "exploration",
         closingTargetUsed: false,
         demo,
+        experienceId,
         lastActiveAt: time,
       };
       generation.current++;
@@ -392,6 +425,7 @@ export function usePocketJourney() {
         id: next.id,
         startedAt: next.startedAt,
         devMode: !!next.demo,
+        experienceId: next.experienceId ?? "core",
       });
       void recordPocketDiscoveryShown({
         journeyId: next.id,
@@ -400,6 +434,8 @@ export function usePocketJourney() {
         shownAt: time,
         journeyStartedAt: time,
         discoveryIndex: 1,
+        experienceId: next.experienceId ?? "core",
+        repeatExposure: false,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
@@ -541,10 +577,11 @@ export function usePocketJourney() {
         : chooseDiscovery(
             found,
             j.seen,
-            environment,
+            discoveryContext(j.experienceId, environment),
             Math.random,
             phase === "closing" || skip,
           );
+    const repeatExposure = target ? j.seen.includes(target.id) : false;
     const nextSeen = target ? [...j.seen, target.id] : j.seen;
     update({
       ...j,
@@ -562,6 +599,8 @@ export function usePocketJourney() {
         shownAt: time,
         journeyStartedAt: j.startedAt,
         discoveryIndex: nextSeen.length,
+        experienceId: j.experienceId ?? "core",
+        repeatExposure,
       });
     }
     if (!skip) playPocketFeedback("discovery");
@@ -574,11 +613,12 @@ export function usePocketJourney() {
     const target = chooseDiscovery(
       j.found,
       j.seen,
-      "street",
+      discoveryContext(j.experienceId, "street"),
       Math.random,
       true,
     );
     const time = Date.now();
+    const repeatExposure = j.seen.includes(target.id);
     const nextSeen = [...j.seen, target.id];
     update({
       ...j,
@@ -594,6 +634,8 @@ export function usePocketJourney() {
       shownAt: time,
       journeyStartedAt: j.startedAt,
       discoveryIndex: nextSeen.length,
+      experienceId: j.experienceId ?? "core",
+      repeatExposure,
     });
   }
   const active = journey !== null && journey.phase !== "finished";

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateDiscoveryTelemetry } from "./pocket-telemetry-core.ts";
+import {
+  aggregateDiscoveryQuality,
+  aggregateDiscoveryTelemetry,
+} from "./pocket-telemetry-core.ts";
 
 const row = (overrides = {}) => ({
   discoveryId: "door",
@@ -53,4 +56,41 @@ test("unresolved shown targets count as shown without inventing an outcome", () 
   assert.equal(summary.foundCount, 0);
   assert.equal(summary.skippedCount, 0);
   assert.equal(summary.averageSecondsVisible, null);
+});
+
+
+test("discovery quality exposes repeat exposure and environment breakdown without ranking content", () => {
+  const quality = aggregateDiscoveryQuality([
+    row({
+      discoveryId: "reflection",
+      environment: "street",
+      repeatExposure: false,
+      secondsVisible: 18,
+    }),
+    row({
+      discoveryId: "reflection",
+      environment: "commercial",
+      repeatExposure: true,
+      result: "skipped",
+      secondsVisible: 42,
+    }),
+    row({
+      discoveryId: "door",
+      environment: "street",
+      repeatExposure: false,
+      secondsVisible: 15,
+    }),
+  ]);
+
+  assert.equal(quality.reflection.shown, 2);
+  assert.equal(quality.reflection.foundRate, 0.5);
+  assert.equal(quality.reflection.skipRate, 0.5);
+  assert.equal(quality.reflection.medianSeconds, 30);
+  assert.equal(quality.reflection.repeatExposure.count, 1);
+  assert.equal(quality.reflection.repeatExposure.rate, 0.5);
+  assert.equal(quality.reflection.environmentBreakdown.street.shownCount, 1);
+  assert.equal(
+    "score" in quality.reflection || "ranking" in quality.reflection,
+    false,
+  );
 });

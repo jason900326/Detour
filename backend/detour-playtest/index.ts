@@ -106,6 +106,8 @@ function normalizePocket(body: any) {
         secondsVisible: finiteNumber(item?.secondsVisible),
         journeyElapsedSeconds: finiteNumber(item?.journeyElapsedSeconds),
         discoveryIndex: int(item?.discoveryIndex),
+        experienceId: text(item?.experienceId, 30),
+        repeatExposure: bool(item?.repeatExposure) ?? false,
       }))
     : [];
 

@@ -341,6 +341,11 @@ export default function PocketApp() {
                     setAtHome(false);
                     void c.start(true);
                   }}
+                  onNightExperience={() => {
+                    setScreen("home");
+                    setAtHome(false);
+                    void c.start(false, "night");
+                  }}
                 />
               )}
             </View>

@@ -1,7 +1,8 @@
 import type {
   Difficulty,
   Environment,
-} from "./pocket-engine";
+  ExperienceId,
+} from "./pocket-content";
 
 export type PocketDiscoveryResult = "found" | "skipped" | null;
 
@@ -15,6 +16,8 @@ export type PocketDiscoveryObservation = {
   secondsVisible: number | null;
   journeyElapsedSeconds: number;
   discoveryIndex: number;
+  experienceId?: ExperienceId;
+  repeatExposure?: boolean;
 };
 
 export type DiscoveryAggregate = {
@@ -30,6 +33,19 @@ export type DiscoveryAggregate = {
 export type PocketDiscoverySummary = DiscoveryAggregate & {
   byEnvironment: Record<string, DiscoveryAggregate>;
   byJourneyPosition: Record<string, DiscoveryAggregate>;
+};
+
+export type DiscoveryQualitySignal = {
+  discoveryId: string;
+  shown: number;
+  foundRate: number;
+  skipRate: number;
+  medianSeconds: number | null;
+  environmentBreakdown: Record<string, DiscoveryAggregate>;
+  repeatExposure: {
+    count: number;
+    rate: number;
+  };
 };
 
 function roundedRatio(value: number) {
@@ -114,4 +130,47 @@ export function aggregateDiscoveryTelemetry(
       (observation) => String(observation.discoveryIndex),
     ),
   };
+}
+
+
+/**
+ * Content-quality signals intentionally stay descriptive. A high completion
+ * percentage alone does not mean a discovery is good: Detour is trying to
+ * create attention and curiosity, not optimize every prompt to be trivial.
+ */
+export function aggregateDiscoveryQuality(
+  observations: PocketDiscoveryObservation[],
+): Record<string, DiscoveryQualitySignal> {
+  const buckets: Record<string, PocketDiscoveryObservation[]> = {};
+  for (const observation of observations) {
+    (buckets[observation.discoveryId] ??= []).push(observation);
+  }
+
+  return Object.fromEntries(
+    Object.entries(buckets).map(([discoveryId, rows]) => {
+      const overall = aggregate(rows);
+      const repeated = rows.filter(
+        (observation) => observation.repeatExposure === true,
+      ).length;
+
+      return [
+        discoveryId,
+        {
+          discoveryId,
+          shown: overall.shownCount,
+          foundRate: overall.foundRate,
+          skipRate: overall.skipRate,
+          medianSeconds: overall.medianSecondsVisible,
+          environmentBreakdown: grouped(
+            rows,
+            (observation) => observation.environment,
+          ),
+          repeatExposure: {
+            count: repeated,
+            rate: rows.length ? roundedRatio(repeated / rows.length) : 0,
+          },
+        },
+      ];
+    }),
+  );
 }
