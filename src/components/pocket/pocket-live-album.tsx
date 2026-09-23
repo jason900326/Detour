@@ -129,7 +129,7 @@ export function PocketLiveAlbum({
                     accessibilityLabel={`放大檢視第 ${index + 1} 張照片`}
                     onPress={() => setSelected(uri)}
                     style={{
-                      width: "31.5%",
+                      width: "31%",
                     }}
                   >
                     <Image
