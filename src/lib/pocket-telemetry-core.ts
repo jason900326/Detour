@@ -2,7 +2,7 @@ import type {
   Difficulty,
   Environment,
   ExperienceId,
-} from "./pocket-engine";
+} from "./pocket-content";
 
 export type PocketDiscoveryResult = "found" | "skipped" | null;
 
