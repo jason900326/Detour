@@ -4,6 +4,7 @@ import {
   phaseAt,
   appendFix,
   shouldDiscardShortEmptyJourney,
+  shouldRevealNextDiscovery,
 } from "./pocket-engine.ts";
 
 test("four early finds close gently without finishing; hard time cap always finishes", () => {
@@ -49,5 +50,73 @@ test("short empty exits do not create souvenir tickets", () => {
   assert.equal(
     shouldDiscardShortEmptyJourney({ ...base, photos: ["photo.jpg"] }, 20_000),
     false,
+  );
+});
+
+
+test("successful discovery waits before revealing the next paper", () => {
+  const from = { latitude: 25, longitude: 121 };
+  const base = {
+    phase: "exploration",
+    target: null,
+    nextDiscoveryAt: 30_000,
+    nextDiscoveryFrom: from,
+    trace: [from],
+    demo: false,
+  };
+
+  assert.equal(shouldRevealNextDiscovery(base, 29_999), false);
+  assert.equal(shouldRevealNextDiscovery(base, 45_000), false);
+  assert.equal(shouldRevealNextDiscovery(base, 65_000), true);
+});
+
+test("walking about 35 meters reveals the next paper after the minimum gap", () => {
+  const from = { latitude: 25, longitude: 121 };
+  const moved = { latitude: 25.00036, longitude: 121 };
+  const journey = {
+    phase: "exploration",
+    target: null,
+    nextDiscoveryAt: 30_000,
+    nextDiscoveryFrom: from,
+    trace: [from, moved],
+    demo: false,
+  };
+
+  assert.equal(shouldRevealNextDiscovery(journey, 30_000), true);
+});
+
+test("roaming never reveals a second paper while one is already active", () => {
+  const point = { latitude: 25, longitude: 121 };
+  assert.equal(
+    shouldRevealNextDiscovery(
+      {
+        phase: "exploration",
+        target: { id: "active" },
+        nextDiscoveryAt: 1,
+        nextDiscoveryFrom: point,
+        trace: [point],
+        demo: false,
+      },
+      100_000,
+    ),
+    false,
+  );
+});
+
+test("indoor demo can reveal after its shortened timer without movement", () => {
+  const point = { latitude: 25, longitude: 121 };
+  assert.equal(
+    shouldRevealNextDiscovery(
+      {
+        phase: "exploration",
+        target: null,
+        nextDiscoveryAt: 3_000,
+        nextDiscoveryFrom: point,
+        trace: [point],
+        demo: true,
+      },
+      3_000,
+    ),
+    true,
   );
 });
