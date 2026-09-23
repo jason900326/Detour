@@ -68,6 +68,10 @@ export default function PocketApp() {
     : undefined;
   const currentCover = useRef(cover);
   currentCover.current = cover;
+  const shareThumbs =
+    displayed && cover
+      ? displayed.photos.filter((uri) => uri !== cover).slice(0, 4)
+      : [];
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
   useEffect(() => {
     if (completed) setCamera(false);
@@ -500,48 +504,37 @@ export default function PocketApp() {
               {isCompletion && j && (
                 <>
                   <Header />
-                  <View style={{ marginTop: 15, marginBottom: 26 }}>
-                    <Text style={s.eyebrow}>這段路，原本不會發生。</Text>
-                    <Text style={[s.title, { marginTop: 12 }]}>
+                  <View style={{ marginTop: 2, marginBottom: 16 }}>
+                    <Text
+                      style={[
+                        s.title,
+                        { fontSize: 40, lineHeight: 49, marginTop: 0 },
+                      ]}
+                    >
                       繞了一下，{"\n"}帶回這些
                       <Text style={{ color: C.orange }}>。</Text>
                     </Text>
                   </View>
-                  <Enter delay={100}>
-                    <Ticket journey={j} />
+                  <Enter delay={80}>
+                    <Ticket journey={j} receipt />
                   </Enter>
-                  <Text
-                    style={[s.body, { marginTop: 25, textAlign: "center" }]}
-                  >
-                    這趟停在 {j.endpoint?.name ?? "街角"}。
-                  </Text>
-                  <PhotoDeck key={j.id} photos={j.photos} />
-                  <Trail points={j.trace} height={105} />
-                  <Text
-                    style={[s.muted, { textAlign: "center", marginBottom: 25 }]}
-                  >
-                    {Math.max(
-                      1,
-                      Math.round(
-                        ((j.finishedAt ?? c.now) - j.startedAt) / 60000,
-                      ),
-                    )}{" "}
-                    分鐘 · 已收進我的票根
-                  </Text>
-                  <Button
-                    label="分享這一趟"
-                    onPress={() => {
-                      setSelected(j);
-                      setShareOrigin("home");
-                      setLoadedCover("");
-                      setCoverError(false);
-                      setScreen("share");
-                    }}
-                  />
+                  <PhotoDeck key={j.id} photos={j.photos} compact />
+                  <View style={{ marginTop: j.photos.length ? 10 : 20 }}>
+                    <Button
+                      label="分享這一趟"
+                      onPress={() => {
+                        setSelected(j);
+                        setShareOrigin("home");
+                        setLoadedCover("");
+                        setCoverError(false);
+                        setScreen("share");
+                      }}
+                    />
+                  </View>
                   <Pressable
                     accessibilityRole="button"
                     onPress={goHome}
-                    style={[s.link, { marginTop: 10 }]}
+                    style={[s.link, { marginTop: 6 }]}
                   >
                     <Text style={s.linkText}>收好票根，回首頁</Text>
                   </Pressable>
@@ -730,8 +723,8 @@ export default function PocketApp() {
                     collapsable={false}
                     style={{
                       backgroundColor: C.paper,
-                      padding: 20,
-                      borderRadius: 8,
+                      padding: 18,
+                      borderRadius: 18,
                     }}
                   >
                     {cover ? (
@@ -739,6 +732,7 @@ export default function PocketApp() {
                         <Image
                           key={cover}
                           source={{ uri: cover }}
+                          resizeMode="cover"
                           onLoad={() => {
                             if (currentCover.current !== cover) return;
                             setLoadedCover(cover);
@@ -748,44 +742,91 @@ export default function PocketApp() {
                             if (currentCover.current === cover)
                               setCoverError(true);
                           }}
-                          style={[s.photo, { borderRadius: 3 }]}
+                          style={{
+                            width: "100%",
+                            aspectRatio: 4 / 5,
+                            borderRadius: 14,
+                            backgroundColor: C.line,
+                          }}
                         />
+                        <View style={{ marginTop: 16, marginBottom: 6 }}>
+                          <DetourBrand />
+                        </View>
                         <Text
-                          style={[s.brand, { marginTop: 21, marginBottom: 9 }]}
+                          style={{
+                            fontSize: 27,
+                            marginTop: 8,
+                            marginBottom: 7,
+                          }}
                         >
-                          DETOUR ↗
-                        </Text>
-                        <Text style={{ fontSize: 33, marginVertical: 10 }}>
                           {displayed.found.map((f) => f.emoji).join(" ")}
                         </Text>
                         <Text
                           style={{
-                            fontSize: 23,
+                            fontSize: 24,
+                            lineHeight: 32,
                             fontWeight: "800",
                             color: C.ink,
                           }}
                         >
                           沒有目的地。卻遇見了這個。
                         </Text>
+                        {!!shareThumbs.length && (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              gap: 8,
+                              marginTop: 15,
+                            }}
+                          >
+                            {shareThumbs.map((uri) => (
+                              <Image
+                                key={uri}
+                                source={{ uri }}
+                                resizeMode="cover"
+                                style={{
+                                  flex: 1,
+                                  aspectRatio: 1,
+                                  borderRadius: 10,
+                                  backgroundColor: C.line,
+                                }}
+                              />
+                            ))}
+                            {Array.from(
+                              { length: Math.max(0, 4 - shareThumbs.length) },
+                              (_, index) => (
+                                <View
+                                  key={`share-spacer-${index}`}
+                                  style={{ flex: 1, aspectRatio: 1 }}
+                                />
+                              ),
+                            )}
+                          </View>
+                        )}
                       </>
                     ) : (
                       <>
+                        <DetourBrand />
                         <Text
                           style={[
                             s.title,
-                            { fontSize: 32, lineHeight: 42, marginBottom: 22 },
+                            {
+                              fontSize: 30,
+                              lineHeight: 39,
+                              marginTop: 18,
+                              marginBottom: 18,
+                            },
                           ]}
                         >
                           沒有特別去哪，{"\n"}卻帶回了一點什麼。
                         </Text>
-                        <Ticket journey={displayed} />
+                        <Ticket journey={displayed} compact />
                       </>
                     )}
-                    <Trail
-                      points={displayed.trace}
-                      height={displayed.photos[0] ? 70 : 130}
-                    />
-                    <View style={s.row}>
+                    <View style={{ marginTop: 12 }}>
+                      <Trail points={displayed.trace} height={62} framed />
+                    </View>
+                    <View style={[s.row, { marginTop: 12 }]}>
                       <Text style={s.muted}>
                         {new Date(displayed.startedAt).toLocaleDateString(
                           "zh-TW",
@@ -795,11 +836,6 @@ export default function PocketApp() {
                     </View>
                   </View>
                   <View style={{ height: 24 }} />
-                  {sharing && (
-                    <View style={{ alignItems: "center" }}>
-                      <WanderMotion small />
-                    </View>
-                  )}
                   <Button
                     label="分享這一趟"
                     onPress={() => void share()}
