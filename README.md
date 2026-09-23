@@ -172,6 +172,7 @@ Detour 目前是 **active playtest / experimental product**。
 - [docs/V2_PLAYTEST_SPEC.md](docs/V2_PLAYTEST_SPEC.md) — V2 Journey / playtest 詳細規格。
 - [docs/POCKET_PLAYTEST.md](docs/POCKET_PLAYTEST.md) — Pocket UI、互動與真機測試注意事項。
 - [docs/POCKET_ARCHITECTURE.md](docs/POCKET_ARCHITECTURE.md) — 現行 Pocket 架構、storage、routing、analytics 與 privacy boundaries。
+- [docs/DISCOVERY_SELECTION.md](docs/DISCOVERY_SELECTION.md) — discovery 候選生成、ranking、decision log、重播與 playtest tuning。
 - [docs/POCKET_FEEDBACK_SHARE.md](docs/POCKET_FEEDBACK_SHARE.md) — haptic、audio 與分享輸出的實作說明。
 
 未來 monetization 方向目前只是一份產品假設，沒有付費實作；相關原則記錄在 [docs/MONETIZATION_HYPOTHESES.md](docs/MONETIZATION_HYPOTHESES.md)。
