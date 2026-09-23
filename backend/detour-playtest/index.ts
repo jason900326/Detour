@@ -69,6 +69,73 @@ function textArray(
     .map((item) => item.slice(0, 80));
 }
 
+function finiteNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function safeJson(value: unknown, fallback: unknown) {
+  if (!value || typeof value !== "object") return fallback;
+  return value;
+}
+
+function normalizePocket(body: any) {
+  const testerId = text(body?.testerId, 40);
+  const run = body?.run ?? {};
+  const localRunId = text(run.id, 80);
+  const status = text(run.status, 30);
+  const startedAt = finiteNumber(run.startedAt);
+
+  if (!testerId || !localRunId || !status || startedAt === null) {
+    return null;
+  }
+
+  const routeQuality =
+    safeJson(run.routeQuality, {}) as Record<string, unknown>;
+  const discoveries = Array.isArray(run.discoveries)
+    ? run.discoveries.slice(0, 40).map((item: any) => ({
+        discoveryId: text(item?.discoveryId, 80),
+        difficulty: text(item?.difficulty, 20),
+        kind: text(item?.kind, 20),
+        environment: text(item?.environment, 20),
+        shownAt: finiteNumber(item?.shownAt),
+        result:
+          item?.result === "found" || item?.result === "skipped"
+            ? item.result
+            : null,
+        secondsVisible: finiteNumber(item?.secondsVisible),
+        journeyElapsedSeconds: finiteNumber(item?.journeyElapsedSeconds),
+        discoveryIndex: int(item?.discoveryIndex),
+      }))
+    : [];
+
+  const durationSeconds = int(run.actualDurationSeconds);
+  return {
+    tester_id: testerId,
+    local_run_id: localRunId,
+    created_at: new Date(startedAt).toISOString(),
+    status,
+    dev_mode: bool(run.devMode) ?? false,
+    minutes: Math.max(1, Math.round((durationSeconds ?? 600) / 60)),
+    mood_id: "pocket-v2",
+    actual_duration_minutes:
+      durationSeconds === null
+        ? null
+        : Math.max(0, Math.round(durationSeconds / 60)),
+    reroute_count: int(run.rerouteCount) ?? int(routeQuality.rerouteCount) ?? 0,
+    photo_count: int(run.photoCount),
+    completed_at:
+      finiteNumber(run.completedAt) === null
+        ? null
+        : new Date(Number(run.completedAt)).toISOString(),
+    app_version: text(body?.appVersion, 40),
+    pocket_discoveries: discoveries,
+    discovery_summary: safeJson(run.discoverySummary, {}),
+    route_quality: routeQuality,
+    pocket_swap_count: int(run.swapCount) ?? 0,
+  };
+}
+
 function normalize(body: any) {
   const testerId =
     text(body?.testerId, 40);
@@ -200,7 +267,10 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    if (body?.mode !== "sync-run") {
+    if (
+      body?.mode !== "sync-run" &&
+      body?.mode !== "sync-pocket-run"
+    ) {
       return json(
         { error: "UNKNOWN_MODE" },
         400,
@@ -208,7 +278,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const row =
-      normalize(body);
+      body?.mode === "sync-pocket-run"
+        ? normalizePocket(body)
+        : normalize(body);
 
     if (!row) {
       return json(
