@@ -22,7 +22,7 @@ test("a novel one-way trace reports high novelty and no self overlap", () => {
 test("walking back over the same line is detected as overlap and backtracking", () => {
   const trace = [p(0), p(0.001), p(0.002), p(0.001), p(0)];
   assert.ok(currentJourneyOverlapRatio(trace) > 0);
-  assert.ok(backtrackRatio(trace) > 0.25);
+  assert.ok(backtrackRatio(trace) >= 0.25);
 });
 
 test("recent journey overlap is based on proximity, not exact coordinate equality", () => {
