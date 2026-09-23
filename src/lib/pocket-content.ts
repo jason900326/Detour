@@ -707,7 +707,7 @@ export const DISCOVERIES: Discovery[] = [
     id: "night-silhouette-object",
     emoji: "◼️",
     title: "找一個被光勾出輪廓的物件。",
-    hint: "找固定物件，不追人或動物。",
+    hint: "只看路邊的固定物件。",
     difficulty: "hard",
     kind: "detail",
     direction: "distance",
