@@ -226,6 +226,27 @@ function experiencePreferredPool(
   return themed.length ? themed : candidates;
 }
 
+function applyMissionMixEligibility(
+  candidates: Discovery[],
+  context: DiscoveryContext,
+) {
+  let next = candidates;
+
+  if (context.discoveryIndex <= 1) {
+    const quick = next.filter((discovery) => discovery.role === "quick");
+    if (quick.length) next = quick;
+  }
+
+  if (context.recentActionTypes.at(-1) === "stop_and_observe") {
+    const nonStop = next.filter(
+      (discovery) => discovery.actionType !== "stop_and_observe",
+    );
+    if (nonStop.length) next = nonStop;
+  }
+
+  return next;
+}
+
 /**
  * Stage 1: decide which curated discoveries are eligible for this moment.
  *
@@ -255,18 +276,7 @@ export function generateDiscoveryCandidates(
     (discovery) => discovery.difficulty === policy.target,
   );
   ideal = experiencePreferredPool(ideal, context.experienceId);
-
-  if (context.discoveryIndex <= 1) {
-    const quick = ideal.filter((discovery) => discovery.role === "quick");
-    if (quick.length) ideal = quick;
-  }
-
-  if (context.recentActionTypes.at(-1) === "stop_and_observe") {
-    const nonStop = ideal.filter(
-      (discovery) => discovery.actionType !== "stop_and_observe",
-    );
-    if (nonStop.length) ideal = nonStop;
-  }
+  ideal = applyMissionMixEligibility(ideal, context);
 
   if (ideal.length) {
     return {
@@ -279,6 +289,7 @@ export function generateDiscoveryCandidates(
 
   let fallback = available.filter((discovery) => discovery.difficulty !== "hard");
   fallback = experiencePreferredPool(fallback, context.experienceId);
+  fallback = applyMissionMixEligibility(fallback, context);
 
   if (fallback.length) {
     return {
@@ -431,12 +442,17 @@ export function scoreDiscoveryCandidate(
   const performance = context.performanceById?.[discovery.id];
 
   const base = 1;
+  const suitability = discovery.environmentSuitability;
   const environment =
-    environments.length === 0
-      ? 0
-      : environments.includes(context.environment)
-        ? 0.35
-        : -0.08;
+    suitability?.inappropriate?.includes(context.environment)
+      ? -0.62
+      : suitability?.preferred?.includes(context.environment)
+        ? 0.4
+        : environments.length === 0
+          ? 0
+          : environments.includes(context.environment)
+            ? 0.35
+            : -0.08;
   const difficulty =
     discovery.difficulty === targetDifficulty
       ? 0.55
