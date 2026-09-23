@@ -88,6 +88,9 @@ function normalizeScoreBreakdown(value: any) {
     recency: finiteNumber(value?.recency),
     performance: finiteNumber(value?.performance),
     experience: finiteNumber(value?.experience),
+    directionVariety: finiteNumber(value?.directionVariety),
+    actionVariety: finiteNumber(value?.actionVariety),
+    rhythm: finiteNumber(value?.rhythm),
     phase: finiteNumber(value?.phase),
     total: finiteNumber(value?.total),
   };
@@ -133,6 +136,18 @@ function normalizePocketSelection(value: any) {
       recentlyFoundIds: textArray(
         value?.context?.recentlyFoundIds,
         12,
+      ),
+      recentDirections: textArray(
+        value?.context?.recentDirections,
+        8,
+      ),
+      recentActionTypes: textArray(
+        value?.context?.recentActionTypes,
+        8,
+      ),
+      recentRoles: textArray(
+        value?.context?.recentRoles,
+        8,
       ),
       quickFindStreak: int(value?.context?.quickFindStreak) ?? 0,
     },
