@@ -49,12 +49,19 @@ export type PocketDiscoverySummary = DiscoveryAggregate & {
   byEnvironment: Record<string, DiscoveryAggregate>;
   byJourneyPosition: Record<string, DiscoveryAggregate>;
   byActionType: Record<string, DiscoveryAggregate>;
+  actionSequence: string[];
   roaming: {
     count: number;
     averageSeconds: number | null;
     medianSeconds: number | null;
     averageMeters: number | null;
     revealReasonCounts: Record<string, number>;
+    samples: Array<{
+      discoveryIndex: number;
+      seconds: number;
+      meters: number | null;
+      reason?: DiscoveryRevealReason;
+    }>;
   };
 };
 
@@ -217,6 +224,9 @@ export function aggregateDiscoveryTelemetry(
       observations,
       (observation) => observation.actionType ?? "unknown",
     ),
+    actionSequence: observations.map(
+      (observation) => observation.actionType ?? "unknown",
+    ),
     roaming: {
       count: roaming.length,
       averageSeconds: roamSeconds.length
@@ -237,6 +247,16 @@ export function aggregateDiscoveryTelemetry(
           ) / 10
         : null,
       revealReasonCounts,
+      samples: roaming.map((observation) => ({
+        discoveryIndex: observation.discoveryIndex,
+        seconds: Math.round(observation.roamGapSeconds! * 10) / 10,
+        meters:
+          typeof observation.roamGapMeters === "number" &&
+          Number.isFinite(observation.roamGapMeters)
+            ? Math.round(observation.roamGapMeters * 10) / 10
+            : null,
+        reason: observation.roamRevealReason,
+      })),
     },
   };
 }
