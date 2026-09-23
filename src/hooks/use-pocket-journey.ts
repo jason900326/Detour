@@ -77,8 +77,17 @@ export function usePocketJourney() {
           readStored<PassportEntry[]>("@detour/passport/v1"),
         ]);
         if (!alive) return;
+        const cleanedSaved = (saved ?? []).filter(
+          (entry) =>
+            !shouldDiscardShortEmptyJourney(
+              entry,
+              entry.finishedAt ?? Date.now(),
+            ),
+        );
+        if (cleanedSaved.length !== (saved ?? []).length)
+          await writeStored(HISTORY, cleanedSaved);
         const imported: PocketJourney[] = (legacy ?? [])
-          .filter((e) => e.id && !(saved ?? []).some((p) => p.id === e.id))
+          .filter((e) => e.id && !cleanedSaved.some((p) => p.id === e.id))
           .map((e) => ({
             id: e.id,
             startedAt: Date.parse(e.startedAt ?? e.completedAt),
@@ -98,7 +107,7 @@ export function usePocketJourney() {
                 ? { name: e.sceneName, point: e.scenePoint }
                 : undefined,
           }));
-        historyRef.current = [...(saved ?? []), ...imported].sort(
+        historyRef.current = [...cleanedSaved, ...imported].sort(
           (a, b) => b.startedAt - a.startedAt,
         );
         setHistory(historyRef.current);
