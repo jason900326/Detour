@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { sharePhotos, shareRoute } from "./pocket-share.ts";
 
+test("share selection handles every 0–5 photo count without resizing assumptions", () => {
+  const photos = ["a", "b", "c", "d", "e"];
+  for (let count = 0; count <= 5; count++) {
+    assert.deepEqual(sharePhotos(photos.slice(0, count)), photos.slice(0, count));
+  }
+  assert.deepEqual(sharePhotos(["a", "b"], "b"), ["b", "a"]);
+  assert.deepEqual(sharePhotos(["a", "b", "c", "d"], "d"), ["d", "a", "b", "c"]);
+});
+
 test("cover selection retains up to four distinct memories without duplication", () => {
   assert.deepEqual(sharePhotos([], "missing"), []);
   assert.deepEqual(sharePhotos(["a"]), ["a"]);
