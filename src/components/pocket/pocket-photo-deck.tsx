@@ -25,7 +25,7 @@ export function PhotoDeck({
             s.sectionTitle,
             {
               marginVertical: 0,
-              fontSize: compact ? 18 : s.sectionTitle.fontSize,
+              fontSize: compact ? 18 : 21,
             },
           ]}
         >
