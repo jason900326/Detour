@@ -4,9 +4,11 @@ import { DETOUR_BUILD_VERSION } from "./build-info";
 import type {
   Discovery,
   Environment,
+  ExperienceId,
 } from "./pocket-engine";
 import type { PocketRouteQualityMetrics } from "./pocket-route-quality";
 import {
+  aggregateDiscoveryQuality,
   aggregateDiscoveryTelemetry,
   type PocketDiscoveryObservation,
 } from "./pocket-telemetry-core";
@@ -32,6 +34,7 @@ export type PocketTelemetryRun = {
   completedAt?: number;
   status: PocketTelemetryStatus;
   devMode: boolean;
+  experienceId?: ExperienceId;
   discoveries: PocketDiscoveryObservation[];
   swapCount: number;
   rerouteCount: number;
@@ -55,7 +58,10 @@ function isObservation(value: unknown): value is PocketDiscoveryObservation {
     (value.secondsVisible === null ||
       typeof value.secondsVisible === "number") &&
     typeof value.journeyElapsedSeconds === "number" &&
-    typeof value.discoveryIndex === "number"
+    typeof value.discoveryIndex === "number" &&
+    (value.experienceId === undefined || isString(value.experienceId)) &&
+    (value.repeatExposure === undefined ||
+      typeof value.repeatExposure === "boolean")
   );
 }
 
@@ -66,6 +72,7 @@ function isRun(value: unknown): value is PocketTelemetryRun {
     typeof value.startedAt === "number" &&
     isString(value.status) &&
     typeof value.devMode === "boolean" &&
+    (value.experienceId === undefined || isString(value.experienceId)) &&
     Array.isArray(value.discoveries) &&
     value.discoveries.every(isObservation) &&
     typeof value.swapCount === "number" &&
@@ -114,12 +121,14 @@ export function beginPocketTelemetryRun(input: {
   id: string;
   startedAt: number;
   devMode: boolean;
+  experienceId?: ExperienceId;
 }) {
   return enqueue(async () => {
     const runs = await loadRuns();
     if (runs.some((run) => run.id === input.id)) return;
     const next: PocketTelemetryRun = {
       ...input,
+      experienceId: input.experienceId ?? "core",
       status: "active",
       discoveries: [],
       swapCount: 0,
@@ -139,6 +148,8 @@ export function recordPocketDiscoveryShown(input: {
   shownAt: number;
   journeyStartedAt: number;
   discoveryIndex: number;
+  experienceId?: ExperienceId;
+  repeatExposure?: boolean;
 }) {
   return mutateRun(input.journeyId, (run) => {
     if (
@@ -162,6 +173,8 @@ export function recordPocketDiscoveryShown(input: {
         Math.round((input.shownAt - input.journeyStartedAt) / 100) / 10,
       ),
       discoveryIndex: input.discoveryIndex,
+      experienceId: input.experienceId ?? run.experienceId ?? "core",
+      repeatExposure: input.repeatExposure ?? false,
     };
 
     return {
@@ -219,7 +232,10 @@ async function syncPocketRun(run: PocketTelemetryRun) {
         testerId,
         run: {
           ...run,
-          discoverySummary: aggregateDiscoveryTelemetry(run.discoveries),
+          discoverySummary: {
+            aggregate: aggregateDiscoveryTelemetry(run.discoveries),
+            quality: aggregateDiscoveryQuality(run.discoveries),
+          },
         },
       },
       5000,
