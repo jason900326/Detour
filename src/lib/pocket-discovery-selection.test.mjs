@@ -669,3 +669,75 @@ test("first mission favors quick, easy, immediately readable content", () => {
     ["quick"],
   );
 });
+
+
+test("a successful mission avoids repeating the same action when alternatives exist", () => {
+  const find = discovery({
+    id: "find",
+    difficulty: "medium",
+    actionType: "find_one",
+    direction: "eye_level",
+    role: "observation",
+  });
+  const compare = discovery({
+    id: "compare",
+    difficulty: "medium",
+    actionType: "compare",
+    direction: "around",
+    role: "observation",
+  });
+  const generated = generateDiscoveryCandidates(
+    [find, compare],
+    context({
+      discoveryIndex: 3,
+      previousDiscovery: {
+        id: "previous",
+        kind: "feature",
+        difficulty: "easy",
+        result: "found",
+        secondsVisible: 40,
+        actionType: "find_one",
+      },
+      recentActionTypes: ["find_one"],
+    }),
+    0.8,
+  );
+
+  assert.deepEqual(
+    generated.candidates.map((candidate) => candidate.id),
+    ["compare"],
+  );
+});
+
+test("skip recovery may keep the same simple action type", () => {
+  const findA = discovery({
+    id: "find-a",
+    difficulty: "easy",
+    actionType: "find_one",
+    role: "quick",
+  });
+  const findB = discovery({
+    id: "find-b",
+    difficulty: "easy",
+    actionType: "find_one",
+    role: "quick",
+  });
+  const generated = generateDiscoveryCandidates(
+    [findA, findB],
+    context({
+      discoveryIndex: 3,
+      previousDiscovery: {
+        id: "previous",
+        kind: "feature",
+        difficulty: "medium",
+        result: "skipped",
+        secondsVisible: 20,
+        actionType: "find_one",
+      },
+      recentActionTypes: ["find_one"],
+    }),
+    0.8,
+  );
+
+  assert.equal(generated.candidates.length, 2);
+});
