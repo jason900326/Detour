@@ -39,7 +39,6 @@ export default function PocketCamera({
     try {
       const p = await camera.current?.takePictureAsync({
         quality: 0.9,
-        shutterSound: true,
       });
       if (p) setPhoto(p.uri);
     } catch {
