@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   phaseAt,
   appendFix,
+  nextDiscoveryRevealReason,
   shouldDiscardShortEmptyJourney,
   shouldRevealNextDiscovery,
 } from "./pocket-engine.ts";
@@ -68,6 +69,7 @@ test("successful discovery waits before revealing the next paper", () => {
   assert.equal(shouldRevealNextDiscovery(base, 29_999), false);
   assert.equal(shouldRevealNextDiscovery(base, 45_000), false);
   assert.equal(shouldRevealNextDiscovery(base, 65_000), true);
+  assert.equal(nextDiscoveryRevealReason(base, 65_000), "timeout");
 });
 
 test("walking about 35 meters reveals the next paper after the minimum gap", () => {
@@ -83,6 +85,7 @@ test("walking about 35 meters reveals the next paper after the minimum gap", () 
   };
 
   assert.equal(shouldRevealNextDiscovery(journey, 30_000), true);
+  assert.equal(nextDiscoveryRevealReason(journey, 30_000), "distance");
 });
 
 test("roaming never reveals a second paper while one is already active", () => {
@@ -118,5 +121,19 @@ test("indoor demo can reveal after its shortened timer without movement", () => 
       3_000,
     ),
     true,
+  );
+  assert.equal(
+    nextDiscoveryRevealReason(
+      {
+        phase: "exploration",
+        target: null,
+        nextDiscoveryAt: 3_000,
+        nextDiscoveryFrom: point,
+        trace: [point],
+        demo: true,
+      },
+      3_000,
+    ),
+    "demo",
   );
 });
