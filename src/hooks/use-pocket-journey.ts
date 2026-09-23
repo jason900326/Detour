@@ -23,6 +23,14 @@ import {
   remainingDistanceOnPolyline,
 } from "../lib/navigation-engine";
 import { readStored, removeStored, writeStored } from "../lib/storage";
+import { computePocketRouteQuality } from "../lib/pocket-route-quality";
+import {
+  beginPocketTelemetryRun,
+  finalizePocketTelemetryRun,
+  recordPocketDiscoveryShown,
+  recordPocketReroute,
+  resolvePocketDiscovery,
+} from "../lib/pocket-telemetry";
 import type { PassportEntry } from "../lib/app-model";
 
 const ACTIVE = "@detour/pocket/active/v2";
@@ -90,6 +98,21 @@ export function usePocketJourney() {
     if (!saved) return;
     const time = Date.now();
     const resumed = resumeValue(saved, time);
+    void beginPocketTelemetryRun({
+      id: resumed.id,
+      startedAt: resumed.startedAt,
+      devMode: !!resumed.demo,
+    });
+    if (resumed.target) {
+      void recordPocketDiscoveryShown({
+        journeyId: resumed.id,
+        target: resumed.target,
+        environment: legRef.current?.destination.environment ?? "street",
+        shownAt: resumed.targetSince,
+        journeyStartedAt: resumed.startedAt,
+        discoveryIndex: Math.max(1, resumed.seen.length),
+      });
+    }
     generation.current++;
     lastFix.current = time;
     current.current = resumed;
@@ -100,7 +123,27 @@ export function usePocketJourney() {
   }
 
   async function restartRecovered() {
+    const saved = recoverableJourney;
     generation.current++;
+    if (saved) {
+      const completedAt = Date.now();
+      void finalizePocketTelemetryRun({
+        journeyId: saved.id,
+        status: "discarded",
+        completedAt,
+        photoCount: saved.photos.length,
+        foundCount: saved.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (completedAt - saved.startedAt) / 1000,
+        ),
+        routeQuality: computePocketRouteQuality(
+          saved.trace,
+          historyRef.current.slice(0, 2).map((entry) => entry.trace),
+          0,
+        ),
+      });
+    }
     await saveQueue.current;
     await removeStored(ACTIVE);
     setRecoverableJourney(null);
@@ -204,13 +247,24 @@ export function usePocketJourney() {
     };
   }, []);
 
-  async function routeNext() {
+  type RouteReason =
+    | "initial"
+    | "advance"
+    | "discovery"
+    | "closing"
+    | "off-route"
+    | "retry"
+    | "refresh";
+
+  async function routeNext(reason: RouteReason = "retry") {
     if (planning.current) {
       rerun.current = true;
       return;
     }
     const j = current.current;
     if (!j || j.phase === "finished" || j.demo) return;
+    if (reason === "off-route" || reason === "retry")
+      void recordPocketReroute(j.id);
     planning.current = true;
     setRouting(true);
     lastPlan.current = Date.now();
@@ -267,7 +321,7 @@ export function usePocketJourney() {
       setRouting(false);
       if (rerun.current) {
         rerun.current = false;
-        void routeNext();
+        void routeNext("refresh");
       }
     }
   }
@@ -334,6 +388,19 @@ export function usePocketJourney() {
       setNotice("");
       update(next);
       setNow(time);
+      void beginPocketTelemetryRun({
+        id: next.id,
+        startedAt: next.startedAt,
+        devMode: !!next.demo,
+      });
+      void recordPocketDiscoveryShown({
+        journeyId: next.id,
+        target,
+        environment: "street",
+        shownAt: time,
+        journeyStartedAt: time,
+        discoveryIndex: 1,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
     } finally {
@@ -348,6 +415,23 @@ export function usePocketJourney() {
 
     if (shouldDiscardShortEmptyJourney(j)) {
       generation.current++;
+      const completedAt = Date.now();
+      void finalizePocketTelemetryRun({
+        journeyId: j.id,
+        status: "discarded",
+        completedAt,
+        photoCount: j.photos.length,
+        foundCount: j.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (completedAt - j.startedAt) / 1000,
+        ),
+        routeQuality: computePocketRouteQuality(
+          j.trace,
+          historyRef.current.slice(0, 2).map((entry) => entry.trace),
+          0,
+        ),
+      });
       try {
         await saveQueue.current;
         await removeStored(ACTIVE);
@@ -392,6 +476,25 @@ export function usePocketJourney() {
       setJourney(done);
       legRef.current = null;
       setLeg(null);
+      void finalizePocketTelemetryRun({
+        journeyId: done.id,
+        status: "completed",
+        completedAt: done.finishedAt!,
+        photoCount: done.photos.length,
+        foundCount: done.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (done.finishedAt! - done.startedAt) / 1000,
+        ),
+        routeQuality: computePocketRouteQuality(
+          done.trace,
+          historyRef.current
+            .filter((entry) => entry.id !== done.id)
+            .slice(0, 2)
+            .map((entry) => entry.trace),
+          0,
+        ),
+      });
       playPocketFeedback("completion");
     } catch {
       setError("票根還沒存好，請再按一次完成。");
@@ -406,6 +509,12 @@ export function usePocketJourney() {
     const j = current.current;
     if (!j?.target || j.phase === "finished") return false;
     const time = Date.now();
+    void resolvePocketDiscovery({
+      journeyId: j.id,
+      discoveryIndex: Math.max(1, j.seen.length),
+      result: skip ? "skipped" : "found",
+      resolvedAt: time,
+    });
     const found = skip
       ? j.found
       : [
@@ -436,16 +545,27 @@ export function usePocketJourney() {
             Math.random,
             phase === "closing" || skip,
           );
+    const nextSeen = target ? [...j.seen, target.id] : j.seen;
     update({
       ...j,
       found,
       phase,
       target,
       targetSince: time,
-      seen: target ? [...j.seen, target.id] : j.seen,
+      seen: nextSeen,
     });
+    if (target) {
+      void recordPocketDiscoveryShown({
+        journeyId: j.id,
+        target,
+        environment,
+        shownAt: time,
+        journeyStartedAt: j.startedAt,
+        discoveryIndex: nextSeen.length,
+      });
+    }
     if (!skip) playPocketFeedback("discovery");
-    if (!skip) void routeNext();
+    if (!skip) void routeNext("discovery");
     return true;
   }
   function extraDiscovery() {
@@ -458,12 +578,22 @@ export function usePocketJourney() {
       Math.random,
       true,
     );
+    const time = Date.now();
+    const nextSeen = [...j.seen, target.id];
     update({
       ...j,
       target,
-      targetSince: Date.now(),
-      seen: [...j.seen, target.id],
+      targetSince: time,
+      seen: nextSeen,
       closingTargetUsed: true,
+    });
+    void recordPocketDiscoveryShown({
+      journeyId: j.id,
+      target,
+      environment: legRef.current?.destination.environment ?? "street",
+      shownAt: time,
+      journeyStartedAt: j.startedAt,
+      discoveryIndex: nextSeen.length,
     });
   }
   const active = journey !== null && journey.phase !== "finished";
@@ -486,7 +616,7 @@ export function usePocketJourney() {
       }
       if (next === "closing" && j.phase === "exploration") {
         update({ ...j, phase: "closing", target: null });
-        void routeNext();
+        void routeNext("closing");
       }
       if (
         j.phase === "closing" &&
@@ -494,7 +624,7 @@ export function usePocketJourney() {
         !j.endpoint &&
         time - lastPlan.current > 30000
       )
-        void routeNext();
+        void routeNext("closing");
       if (
         time - j.startedAt >= 570000 &&
         j.phase === "closing" &&
@@ -562,15 +692,18 @@ export function usePocketJourney() {
           update({ ...j, trace });
         }
         const route = legRef.current;
-        if (
-          trace !== j.trace &&
-          Date.now() - lastPlan.current > 20000 &&
-          (!route ||
-            distanceToPolyline(fix.coords, route.coordinates) > 40 ||
-            (!route.closing &&
-              remainingDistanceOnPolyline(fix.coords, route.coordinates) < 25))
-        )
-          void routeNext();
+        if (trace !== j.trace && Date.now() - lastPlan.current > 20000) {
+          const offRoute =
+            !!route && distanceToPolyline(fix.coords, route.coordinates) > 40;
+          const nearLegEnd =
+            !!route &&
+            !route.closing &&
+            remainingDistanceOnPolyline(fix.coords, route.coordinates) < 25;
+          if (!route || offRoute || nearLegEnd)
+            void routeNext(
+              offRoute ? "off-route" : nearLegEnd ? "advance" : "retry",
+            );
+        }
       },
     )
       .then((w) => {
@@ -587,7 +720,7 @@ export function usePocketJourney() {
         else compass = w;
       })
       .catch(() => {});
-    void routeNext();
+    void routeNext("initial");
     return () => {
       disposed = true;
       watcher?.remove();
@@ -635,7 +768,7 @@ export function usePocketJourney() {
     finish,
     addPhoto,
     home,
-    routeNext,
+    routeNext: () => routeNext("retry"),
     advanceDemo,
   };
 }

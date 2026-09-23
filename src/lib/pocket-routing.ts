@@ -1,10 +1,8 @@
+import { distance, type Environment, type Point } from "./pocket-engine";
 import {
-  angle,
-  bearing,
-  distance,
-  type Environment,
-  type Point,
-} from "./pocket-engine";
+  isImmediatePocketUTurn,
+  rankPocketPlaces,
+} from "./pocket-routing-policy";
 import { fetchWalkingRoute } from "./routing-engine";
 import { distanceToPolyline } from "./navigation-engine";
 import { DETOUR_API_CONFIG } from "./app-config";
@@ -95,55 +93,7 @@ export async function nearbyPlaces(point: Point): Promise<LocalPlace[]> {
   }
 }
 
-export function rankPlaces(
-  places: LocalPlace[],
-  current: Point,
-  origin: Point,
-  trace: Point[],
-  closing: boolean,
-  elapsed: number,
-  random = Math.random,
-) {
-  const previous = trace.length > 2 ? trace[trace.length - 3] : undefined;
-  const heading =
-    previous && distance(previous, current) > 8
-      ? bearing(previous, current)
-      : undefined;
-  return places
-    .filter(
-      (p) =>
-        distance(current, p.point) > 45 &&
-        distance(current, p.point) < (closing ? 400 : 650) &&
-        (!closing || p.stop),
-    )
-    .map((p) => {
-      const turn =
-        heading === undefined
-          ? 0
-          : Math.abs(angle(bearing(current, p.point), heading));
-      const repeated = trace
-        .slice(0, -3)
-        .some((t) => distance(t, p.point) < 35);
-      const rubberBand = Math.max(
-        0,
-        distance(origin, p.point) - (elapsed > 300 ? 350 : 500),
-      );
-      return {
-        place: p,
-        score:
-          (closing
-            ? distance(current, p.point)
-            : Math.abs(distance(current, p.point) - 150)) +
-          (turn > 120 ? 600 : turn * 0.3) +
-          (repeated ? 450 : 0) +
-          rubberBand * 2 +
-          random() * 40,
-      };
-    })
-    .sort((a, b) => a.score - b.score)
-    .map((p) => p.place);
-}
-
+export const rankPlaces = rankPocketPlaces;
 export async function planLeg(args: {
   current: Point;
   origin: Point;
@@ -152,7 +102,9 @@ export async function planLeg(args: {
   elapsed: number;
   places: LocalPlace[];
   recentRoutes?: Point[][];
-}): Promise<PocketLeg | null> {
+},
+fetchRoute: typeof fetchWalkingRoute = fetchWalkingRoute,
+): Promise<PocketLeg | null> {
   const candidates = rankPlaces(
     args.places,
     args.current,
@@ -163,7 +115,7 @@ export async function planLeg(args: {
   );
   for (const destination of candidates.slice(0, 3)) {
     try {
-      const fetched = await fetchWalkingRoute(
+      const fetched = await fetchRoute(
         args.current,
         destination.point,
         4500,
@@ -208,15 +160,7 @@ export async function planLeg(args: {
       );
       const previous =
         args.trace.length > 2 ? args.trace[args.trace.length - 3] : undefined;
-      if (
-        ahead &&
-        previous &&
-        distance(previous, args.current) > 8 &&
-        Math.abs(
-          angle(bearing(args.current, ahead), bearing(previous, args.current)),
-        ) > 125
-      )
-        continue;
+      if (isImmediatePocketUTurn(previous, args.current, ahead)) continue;
       const samples = route.coordinates.filter(
         (p) => distance(p, args.current) > 40,
       );
