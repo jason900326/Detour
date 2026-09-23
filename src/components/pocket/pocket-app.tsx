@@ -897,70 +897,61 @@ export default function PocketApp() {
                   >
                     {cover ? (
                       <>
-                        <Image
-                          key={cover}
-                          source={{ uri: cover }}
-                          resizeMode="contain"
-                          onLoad={() => {
-                            if (currentCover.current !== cover) return;
-                            setLoadedCover(cover);
-                            setCoverError(false);
-                          }}
-                          onError={() => {
-                            if (currentCover.current === cover)
-                              setCoverError(true);
-                          }}
-                          style={{
-                            width: showShareRoute ? "68%" : "78%",
-                            aspectRatio: PHOTO_ASPECT,
-                            alignSelf: "center",
-                            borderRadius: 12,
-                            backgroundColor: C.white,
-                          }}
-                        />
-                        <View style={{ marginTop: 10, marginBottom: 2 }}>
-                          <DetourBrand />
-                        </View>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 10,
-                            marginTop: 2,
-                          }}
-                        >
-                          <Text
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
+                        <View style={{ position: "relative" }}>
+                          <Image
+                            key={cover}
+                            source={{ uri: cover }}
+                            resizeMode="contain"
+                            onLoad={() => {
+                              if (currentCover.current !== cover) return;
+                              setLoadedCover(cover);
+                              setCoverError(false);
+                            }}
+                            onError={() => {
+                              if (currentCover.current === cover)
+                                setCoverError(true);
+                            }}
                             style={{
-                              flex: 1,
-                              fontSize: 24,
-                              lineHeight: 30,
+                              width: showShareRoute ? "66%" : "74%",
+                              aspectRatio: PHOTO_ASPECT,
+                              alignSelf: "center",
+                              borderRadius: 12,
+                              backgroundColor: C.white,
+                            }}
+                          />
+                          <View
+                            style={{
+                              position: "absolute",
+                              right: 8,
+                              top: 8,
+                              borderRadius: 999,
+                              backgroundColor: "#F7F3EAEE",
+                              paddingHorizontal: 8,
+                              paddingVertical: 5,
+                              borderWidth: 1,
+                              borderColor: "#E7E1D6",
                             }}
                           >
-                            {displayed.found.map((f) => f.emoji).join(" ")}
-                          </Text>
+                            <Text
+                              style={{
+                                fontFamily: mono,
+                                fontSize: 9,
+                                color: C.ink,
+                                letterSpacing: 0.8,
+                              }}
+                            >
+                              № {displayed.id.slice(-5)}
+                            </Text>
+                          </View>
                         </View>
-                        <Text
-                          numberOfLines={2}
-                          adjustsFontSizeToFit
-                          style={{
-                            fontSize: 21,
-                            lineHeight: 27,
-                            fontWeight: "800",
-                            color: C.ink,
-                            marginTop: 2,
-                          }}
-                        >
-                          沒有目的地。卻遇見了這個。
-                        </Text>
+
                         {!!shareThumbs.length && (
                           <View
                             style={{
                               flexDirection: "row",
                               justifyContent: "center",
                               gap: 7,
-                              marginTop: 9,
+                              marginTop: 8,
                             }}
                           >
                             {shareThumbs.map((uri) => (
@@ -969,20 +960,93 @@ export default function PocketApp() {
                                 source={{ uri }}
                                 resizeMode="contain"
                                 style={{
-                                  width: "19%",
+                                  width: "18%",
                                   aspectRatio: PHOTO_ASPECT,
                                   borderRadius: 8,
                                   backgroundColor: C.white,
+                                  borderWidth: 1,
+                                  borderColor: "#E6E1D6",
                                 }}
                               />
                             ))}
                           </View>
                         )}
+
+                        <View
+                          style={{
+                            marginTop: 10,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            paddingHorizontal: 2,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: mono,
+                              fontSize: 9,
+                              color: C.muted,
+                              letterSpacing: 0.9,
+                            }}
+                          >
+                            FIELD NOTE · {new Date(
+                              displayed.startedAt,
+                            ).toLocaleDateString("zh-TW", {
+                              month: "2-digit",
+                              day: "2-digit",
+                            })}
+                          </Text>
+                          <View
+                            style={{
+                              width: 42,
+                              height: 1,
+                              backgroundColor: C.orange,
+                              transform: [{ rotate: "-7deg" }],
+                            }}
+                          />
+                        </View>
+
                         {showShareRoute && canShareRoute && (
-                          <View style={{ marginTop: 8 }}>
-                            <Trail points={displayed.trace} height={46} framed />
+                          <View style={{ marginTop: 7 }}>
+                            <Trail points={displayed.trace} height={42} framed />
                           </View>
                         )}
+
+                        <View
+                          style={{
+                            marginTop: "auto",
+                            borderTopWidth: 1,
+                            borderStyle: "dashed",
+                            borderColor: C.line,
+                            paddingTop: 10,
+                          }}
+                        >
+                          <DetourBrand />
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={{
+                              fontSize: 22,
+                              lineHeight: 28,
+                              marginTop: 8,
+                            }}
+                          >
+                            {displayed.found.map((f) => f.emoji).join(" ")}
+                          </Text>
+                          <Text
+                            numberOfLines={2}
+                            adjustsFontSizeToFit
+                            style={{
+                              fontSize: 21,
+                              lineHeight: 27,
+                              fontWeight: "800",
+                              color: C.ink,
+                              marginTop: 2,
+                            }}
+                          >
+                            沒有目的地。卻遇見了這個。
+                          </Text>
+                        </View>
                       </>
                     ) : (
                       <>
