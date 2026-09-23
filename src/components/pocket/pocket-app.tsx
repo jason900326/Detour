@@ -80,6 +80,7 @@ export default function PocketApp() {
   const [album, setAlbum] = useState(false);
   const [map, setMap] = useState(false);
   const [endSheet, setEndSheet] = useState(false);
+  const [deleteSheet, setDeleteSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState("");
   const shareRef = useRef<View>(null);
@@ -87,6 +88,11 @@ export default function PocketApp() {
   const active = j && j.phase !== "finished";
   const completed = j?.phase === "finished";
   const displayed = selected ?? j;
+  const displayedFavorite = displayed
+    ? (c.history.find((entry) => entry.id === displayed.id)?.favorite ??
+      displayed.favorite ??
+      false)
+    : false;
   const cover = displayed
     ? (covers[displayed.id] ?? displayed.photos[0])
     : undefined;
@@ -267,27 +273,102 @@ export default function PocketApp() {
                       <HomeJourneyMotion />
                     </View>
                   </View>
+                  {c.recoverableJourney && (
+                    <Enter>
+                      <View
+                        style={{
+                          marginBottom: 16,
+                          padding: 18,
+                          borderRadius: 22,
+                          borderWidth: 1,
+                          borderColor: "#E5DED0",
+                          backgroundColor: C.white,
+                          shadowColor: "#383B29",
+                          shadowOpacity: 0.05,
+                          shadowRadius: 14,
+                          shadowOffset: { width: 0, height: 7 },
+                        }}
+                      >
+                        <View style={[s.row, { alignItems: "flex-start" }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[s.eyebrow, { color: C.orange }]}>
+                              上次還停在路上
+                            </Text>
+                            <Text
+                              style={{
+                                color: C.ink,
+                                fontSize: 22,
+                                lineHeight: 30,
+                                fontWeight: "800",
+                                marginTop: 7,
+                                letterSpacing: -0.5,
+                              }}
+                            >
+                              要接著走，還是重新來一趟？
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 28 }}>↻</Text>
+                        </View>
+                        <Text style={[s.muted, { marginTop: 10, marginBottom: 14 }]}>
+                          {new Date(
+                            c.recoverableJourney.startedAt,
+                          ).toLocaleString("zh-TW", {
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" · "}
+                          {c.recoverableJourney.found.length} 個發現
+                          {" · "}
+                          {c.recoverableJourney.photos.length} 張照片
+                        </Text>
+                        <View style={{ gap: 9 }}>
+                          <Button
+                            small
+                            label="繼續這趟"
+                            onPress={() => {
+                              c.resumeRecovered();
+                              setAtHome(false);
+                            }}
+                          />
+                          <Button
+                            small
+                            secondary
+                            label="重新開始"
+                            disabled={c.starting}
+                            onPress={() => {
+                              setAtHome(false);
+                              void c.restartRecovered();
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </Enter>
+                  )}
                   {!!c.error && (
                     <View style={s.error}>
                       <Text style={s.errorText}>{c.error}</Text>
                     </View>
                   )}
-                  <Button
-                    label={
-                      c.starting
-                        ? "找位置中…"
-                        : active
-                          ? "繼續這趟 ↗"
-                          : completed
-                            ? "看看這趟票根"
-                            : "繞一下？"
-                    }
-                    onPress={() => {
-                      setAtHome(false);
-                      if (!j) void c.start();
-                    }}
-                    disabled={c.starting}
-                  />
+                  {!c.recoverableJourney && (
+                    <Button
+                      label={
+                        c.starting
+                          ? "找位置中…"
+                          : active
+                            ? "繼續這趟 ↗"
+                            : completed
+                              ? "看看這趟票根"
+                              : "繞一下？"
+                      }
+                      onPress={() => {
+                        setAtHome(false);
+                        if (!j) void c.start();
+                      }}
+                      disabled={c.starting}
+                    />
+                  )}
                   <View style={{ marginTop: 14, marginBottom: 16 }}>
                     <Button
                       secondary
@@ -741,6 +822,79 @@ export default function PocketApp() {
                     title="一張舊票根"
                     back={() => setScreen("history")}
                   />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "flex-end",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        displayedFavorite ? "從最愛移除" : "加入最愛"
+                      }
+                      accessibilityState={{ selected: displayedFavorite }}
+                      onPress={() => void c.toggleFavorite(displayed.id)}
+                      style={{
+                        minHeight: 40,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: displayedFavorite ? C.orange : C.line,
+                        backgroundColor: displayedFavorite ? "#FBE8DF" : C.white,
+                        paddingHorizontal: 13,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: displayedFavorite ? C.orange : C.muted,
+                          fontSize: 15,
+                        }}
+                      >
+                        {displayedFavorite ? "♥" : "♡"}
+                      </Text>
+                      <Text
+                        style={{
+                          color: displayedFavorite ? C.orange : C.ink,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {displayedFavorite ? "已收藏" : "加到最愛"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="更多票根操作"
+                      onPress={() => setDeleteSheet(true)}
+                      style={[
+                        s.round,
+                        {
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: C.white,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: C.ink,
+                          fontSize: 18,
+                          lineHeight: 20,
+                          marginTop: -6,
+                          letterSpacing: 1,
+                        }}
+                      >
+                        •••
+                      </Text>
+                    </Pressable>
+                  </View>
                   <Ticket journey={displayed} />
                   <Text style={s.sectionTitle}>
                     {displayed.endpoint?.name ?? "城市的一角"}
@@ -991,6 +1145,73 @@ export default function PocketApp() {
             <Text style={[s.muted, { textAlign: "center", marginTop: 10 }]}>
               地圖只是參考；看到有意思的，繞過去也可以。
             </Text>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={deleteSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteSheet(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "#24292155",
+          }}
+        >
+          <View
+            style={{
+              padding: 28,
+              paddingBottom: 45,
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              backgroundColor: C.paper,
+              gap: 14,
+            }}
+          >
+            <Text style={s.sectionTitle}>刪掉這張票根？</Text>
+            <Text style={[s.body, { marginBottom: 8 }]}>
+              這趟記錄和 Detour 裡保存的照片會一起刪除。這個動作不能復原。
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="確認刪除這張票根"
+              onPress={() => {
+                const id = displayed?.id;
+                if (!id) return;
+                setDeleteSheet(false);
+                setSelected(null);
+                setScreen("history");
+                void c.deleteHistory(id);
+              }}
+              style={{
+                minHeight: 58,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: "#D9A18C",
+                backgroundColor: "#F9E5D9",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 20,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#964B32",
+                  fontSize: 17,
+                  fontWeight: "800",
+                }}
+              >
+                刪除這張票根
+              </Text>
+            </Pressable>
+            <Button
+              secondary
+              label="先留著"
+              onPress={() => setDeleteSheet(false)}
+            />
           </View>
         </View>
       </Modal>
