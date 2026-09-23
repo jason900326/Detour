@@ -141,8 +141,8 @@ export default function PocketCamera({
               <>
                 <View
                   style={{
-                    flex: 1,
                     width: "100%",
+                    aspectRatio: 4 / 5,
                     borderRadius: 28,
                     overflow: "hidden",
                     backgroundColor: "#111",
@@ -274,9 +274,6 @@ export default function PocketCamera({
                     else void request();
                   }}
                 />
-                <Pressable onPress={onClose} style={s.link}>
-                  <Text style={{ color: C.white }}>先不拍照</Text>
-                </Pressable>
               </View>
             )}
           </View>
