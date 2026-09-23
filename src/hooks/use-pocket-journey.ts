@@ -7,6 +7,7 @@ import {
   chooseDiscovery,
   distance,
   phaseAt,
+  shouldDiscardShortEmptyJourney,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
@@ -262,6 +263,27 @@ export function usePocketJourney() {
     const j = current.current;
     if (!j || j.phase === "finished" || finishLock.current) return;
     finishLock.current = true;
+
+    if (shouldDiscardShortEmptyJourney(j)) {
+      generation.current++;
+      try {
+        await saveQueue.current;
+        await removeStored(ACTIVE);
+        current.current = null;
+        setJourney(null);
+        legRef.current = null;
+        setLeg(null);
+        setNotice("");
+        setError("");
+        tapHaptic();
+      } catch {
+        setError("暫時無法結束這趟，請再試一次。");
+      } finally {
+        finishLock.current = false;
+      }
+      return;
+    }
+
     setFinishing(true);
     generation.current++;
     const point = j.trace.at(-1) ?? j.origin;
