@@ -178,3 +178,8 @@ These are not imported by the active app entry, but still form the historical V1
 - legacy home styles
 
 Do not delete this uncertain group opportunistically while changing Pocket behavior. Retire it as a separate cleanup once references from scripts, tests, migration paths and documentation are exhaustively confirmed.
+
+
+## Validation contract
+
+Before merging Pocket architecture changes, run `npm run lint`, `npm run typecheck` and `npm test`. The repository quality workflow also bundles the iOS app so screen extraction cannot silently introduce a module-resolution failure.
