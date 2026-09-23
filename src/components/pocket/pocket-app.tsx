@@ -43,7 +43,8 @@ import {
   HomeJourneyMotion,
   HomeMoodStamp,
 } from "./pocket-home-art";
-import { EdgeBack } from "./pocket-edge-back";import { PhotoDeck } from "./pocket-photo-deck";
+import { EdgeBack } from "./pocket-edge-back";
+import { PhotoDeck } from "./pocket-photo-deck";
 import {
   previousPocketScreen,
   type PocketScreen,
@@ -54,6 +55,14 @@ import { PocketLiveAlbum } from "./pocket-live-album";
 import { PocketHistoryGallery } from "./pocket-history-gallery";
 
 type Screen = PocketScreen;
+
+function traceMeters(journey: PocketJourney) {
+  return journey.trace.slice(1).reduce(
+    (total, point, index) => total + distance(journey.trace[index], point),
+    0,
+  );
+}
+
 export default function PocketApp() {
   const c = usePocketJourney();
   const [screen, setScreen] = useState<Screen>("home");
@@ -69,6 +78,7 @@ export default function PocketApp() {
   const [endSheet, setEndSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState("");
+  const [showShareRoute, setShowShareRoute] = useState(false);
   const shareRef = useRef<View>(null);
   const j = c.journey;
   const active = j && j.phase !== "finished";
@@ -83,7 +93,13 @@ export default function PocketApp() {
     displayed && cover
       ? displayed.photos.filter((uri) => uri !== cover).slice(0, 4)
       : [];
+  const displayedRouteMeters = displayed ? traceMeters(displayed) : 0;
+  const canShareRoute = displayedRouteMeters >= 35;
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
+  const hasJourneyMemories = !!j && (j.photos.length > 0 || j.found.length > 0);
+  const journeyHasRoute = !!j && traceMeters(j) >= 35;
+  const discardOnFinish =
+    !!j && elapsed < 60 && j.photos.length === 0 && j.found.length === 0;
   useEffect(() => {
     if (completed) setCamera(false);
   }, [completed]);
@@ -95,6 +111,7 @@ export default function PocketApp() {
     setAtHome(true);
     setCamera(false);
     setAlbum(false);
+    setShowShareRoute(false);
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
@@ -575,15 +592,58 @@ export default function PocketApp() {
                         { fontSize: 40, lineHeight: 49, marginTop: 0 },
                       ]}
                     >
-                      繞了一下，{"\n"}帶回這些
+                      {hasJourneyMemories ? (
+                        <>
+                          繞了一下，{"\n"}帶回這些
+                        </>
+                      ) : (
+                        <>繞了一下</>
+                      )}
                       <Text style={{ color: C.orange }}>。</Text>
                     </Text>
                   </View>
-                  <Enter delay={80}>
-                    <Ticket journey={j} receipt />
-                  </Enter>
-                  <PhotoDeck key={j.id} photos={j.photos} compact />
-                  <View style={{ marginTop: j.photos.length ? 10 : 20 }}>
+                  {hasJourneyMemories ? (
+                    <>
+                      <Enter delay={80}>
+                        <Ticket journey={j} receipt />
+                      </Enter>
+                      <PhotoDeck key={j.id} photos={j.photos} compact />
+                    </>
+                  ) : (
+                    <Enter delay={80}>
+                      <View
+                        style={{
+                          backgroundColor: C.white,
+                          borderWidth: 1,
+                          borderColor: "#E6E2D7",
+                          borderRadius: 22,
+                          padding: 16,
+                          minHeight: journeyHasRoute ? 190 : 118,
+                          justifyContent: "center",
+                        }}
+                      >
+                        <View style={[s.row, { marginBottom: journeyHasRoute ? 8 : 0 }]}>
+                          <DetourBrand />
+                          <Text style={s.serial}>
+                            № {j.id.slice(-5)}
+                          </Text>
+                        </View>
+                        {journeyHasRoute ? (
+                          <Trail points={j.trace} height={118} framed />
+                        ) : (
+                          <Text
+                            style={[
+                              s.muted,
+                              { textAlign: "center", paddingVertical: 20 },
+                            ]}
+                          >
+                            這趟沒有留下照片或發現。
+                          </Text>
+                        )}
+                      </View>
+                    </Enter>
+                  )}
+                  <View style={{ marginTop: hasJourneyMemories ? 10 : 18 }}>
                     <Button
                       label="分享這一趟"
                       onPress={() => {
@@ -591,6 +651,7 @@ export default function PocketApp() {
                         setShareOrigin("home");
                         setLoadedCover("");
                         setCoverError(false);
+                        setShowShareRoute(j.photos.length === 0 && traceMeters(j) >= 35);
                         setScreen("share");
                       }}
                     />
@@ -705,6 +766,9 @@ export default function PocketApp() {
                       setShareOrigin("detail");
                       setLoadedCover("");
                       setCoverError(false);
+                      setShowShareRoute(
+                        displayed.photos.length === 0 && traceMeters(displayed) >= 35,
+                      );
                       setScreen("share");
                     }}
                   />
@@ -781,6 +845,44 @@ export default function PocketApp() {
                       </ScrollView>
                     </View>
                   )}
+                  {canShareRoute && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`分享圖中的路線目前${showShareRoute ? "顯示" : "隱藏"}，點一下切換`}
+                      onPress={() => setShowShareRoute((value) => !value)}
+                      style={[
+                        s.row,
+                        {
+                          alignSelf: "flex-start",
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: showShareRoute ? C.orange : C.line,
+                          backgroundColor: showShareRoute ? "#FDE9E1" : C.white,
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          marginBottom: 14,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: showShareRoute ? C.orange : C.muted,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        路線 {showShareRoute ? "顯示中" : "不放"}
+                      </Text>
+                      <View
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: showShareRoute ? C.orange : C.line,
+                        }}
+                      />
+                    </Pressable>
+                  )}
                   <View
                     ref={shareRef}
                     collapsable={false}
@@ -809,7 +911,7 @@ export default function PocketApp() {
                               setCoverError(true);
                           }}
                           style={{
-                            width: "78%",
+                            width: showShareRoute ? "68%" : "78%",
                             aspectRatio: PHOTO_ASPECT,
                             alignSelf: "center",
                             borderRadius: 12,
@@ -876,6 +978,11 @@ export default function PocketApp() {
                             ))}
                           </View>
                         )}
+                        {showShareRoute && canShareRoute && (
+                          <View style={{ marginTop: 8 }}>
+                            <Trail points={displayed.trace} height={46} framed />
+                          </View>
+                        )}
                       </>
                     ) : (
                       <>
@@ -884,15 +991,28 @@ export default function PocketApp() {
                           style={[
                             s.title,
                             {
-                              fontSize: 28,
-                              lineHeight: 36,
+                              fontSize: 27,
+                              lineHeight: 35,
                               marginTop: 18,
-                              marginBottom: 18,
+                              marginBottom: showShareRoute && canShareRoute ? 12 : 18,
                             },
                           ]}
                         >
-                          沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                          {showShareRoute && canShareRoute ? (
+                            <>
+                              沒有特別去哪，{"\n"}但留下了這條路。
+                            </>
+                          ) : (
+                            <>
+                              沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                            </>
+                          )}
                         </Text>
+                        {showShareRoute && canShareRoute && (
+                          <View style={{ marginBottom: 13 }}>
+                            <Trail points={displayed.trace} height={165} framed />
+                          </View>
+                        )}
                         <Ticket journey={displayed} compact />
                       </>
                     )}
@@ -914,11 +1034,6 @@ export default function PocketApp() {
                   {!!shareError && (
                     <Text style={s.errorText}>{shareError}</Text>
                   )}
-                  <Text
-                    style={[s.muted, { textAlign: "center", marginTop: 12 }]}
-                  >
-                    照片、發現，還有你繞過的那段路。
-                  </Text>
                 </>
               )}
               {screen === "settings" && (
@@ -1061,13 +1176,24 @@ export default function PocketApp() {
               gap: 15,
             }}
           >
-            <Text style={s.sectionTitle}>想在這裡停下來？</Text>
+            <Text style={s.sectionTitle}>
+              {discardOnFinish ? "先停在這裡？" : "想在這裡停下來？"}
+            </Text>
             <Text style={[s.body, { marginBottom: 12 }]}>
-              找到的東西，都會留在這張票上。{"\n"}
-              先到安全、能停留的地方再收好票根。
+              {discardOnFinish ? (
+                <>
+                  這趟還不到一分鐘，也還沒有留下照片或發現。{"\n"}
+                  現在離開，不會產生票根。
+                </>
+              ) : (
+                <>
+                  找到的東西，都會留在這張票上。{"\n"}
+                  先到安全、能停留的地方再收好票根。
+                </>
+              )}
             </Text>
             <Button
-              label="在這裡收好票根"
+              label={discardOnFinish ? "結束這趟" : "在這裡收好票根"}
               onPress={() => {
                 setEndSheet(false);
                 void c.finish();
