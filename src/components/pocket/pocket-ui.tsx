@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { distance, type PocketJourney, type Point } from "../../lib/pocket-engine";
+export const PHOTO_ASPECT = 4 / 5;
 export const C = {
   paper: "#F7F4EC",
   ink: "#242921",
@@ -712,7 +713,7 @@ export const s = StyleSheet.create({
   },
   photo: {
     width: "100%",
-    aspectRatio: 4 / 5,
+    aspectRatio: PHOTO_ASPECT,
     borderRadius: 12,
     backgroundColor: C.line,
   },
