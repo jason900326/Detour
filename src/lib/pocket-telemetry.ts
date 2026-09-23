@@ -209,8 +209,8 @@ export function recordPocketReroute(journeyId: string) {
 }
 
 async function syncPocketRun(run: PocketTelemetryRun) {
-  const testerId = await getPlaytestTesterId();
   try {
+    const testerId = await getPlaytestTesterId();
     await postDetourJson(
       DETOUR_API_CONFIG.playtestEndpoint,
       {
