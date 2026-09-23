@@ -138,3 +138,25 @@ test("selection is deterministic when randomness is injected", () => {
     "second",
   );
 });
+
+
+test("future weather availability can filter content without special-case journey code", () => {
+  const rainOnly = discovery({
+    id: "rain-trace",
+    availability: { weather: "rain" },
+  });
+  const universal = discovery({ id: "universal-weather" });
+
+  assert.deepEqual(
+    filterDiscoveries([rainOnly, universal], { weather: "dry" }).map(
+      (item) => item.id,
+    ),
+    ["universal-weather"],
+  );
+  assert.deepEqual(
+    filterDiscoveries([rainOnly, universal], { weather: "rain" }).map(
+      (item) => item.id,
+    ),
+    ["rain-trace", "universal-weather"],
+  );
+});
