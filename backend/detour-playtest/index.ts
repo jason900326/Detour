@@ -190,6 +190,13 @@ function normalizePocket(body: any) {
         discoveryIndex: int(item?.discoveryIndex),
         experienceId: text(item?.experienceId, 30),
         repeatExposure: bool(item?.repeatExposure) ?? false,
+        actionType: text(item?.actionType, 40),
+        direction: text(item?.direction, 40),
+        role: text(item?.role, 40),
+        concept: text(item?.concept, 40),
+        roamGapSeconds: finiteNumber(item?.roamGapSeconds),
+        roamGapMeters: finiteNumber(item?.roamGapMeters),
+        roamRevealReason: text(item?.roamRevealReason, 30),
         selection: normalizePocketSelection(item?.selection),
       }))
     : [];
