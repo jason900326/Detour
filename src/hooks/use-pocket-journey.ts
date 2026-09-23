@@ -7,6 +7,7 @@ import {
   chooseDiscovery,
   distance,
   phaseAt,
+  shouldDiscardShortEmptyJourney,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
@@ -76,8 +77,17 @@ export function usePocketJourney() {
           readStored<PassportEntry[]>("@detour/passport/v1"),
         ]);
         if (!alive) return;
+        const cleanedSaved = (saved ?? []).filter(
+          (entry) =>
+            !shouldDiscardShortEmptyJourney(
+              entry,
+              entry.finishedAt ?? Date.now(),
+            ),
+        );
+        if (cleanedSaved.length !== (saved ?? []).length)
+          await writeStored(HISTORY, cleanedSaved);
         const imported: PocketJourney[] = (legacy ?? [])
-          .filter((e) => e.id && !(saved ?? []).some((p) => p.id === e.id))
+          .filter((e) => e.id && !cleanedSaved.some((p) => p.id === e.id))
           .map((e) => ({
             id: e.id,
             startedAt: Date.parse(e.startedAt ?? e.completedAt),
@@ -97,7 +107,7 @@ export function usePocketJourney() {
                 ? { name: e.sceneName, point: e.scenePoint }
                 : undefined,
           }));
-        historyRef.current = [...(saved ?? []), ...imported].sort(
+        historyRef.current = [...cleanedSaved, ...imported].sort(
           (a, b) => b.startedAt - a.startedAt,
         );
         setHistory(historyRef.current);
@@ -201,20 +211,27 @@ export function usePocketJourney() {
           throw new Error(
             "需要定位，才能從你現在的位置開始。請在手機設定允許定位後再試。",
           );
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const fix = await Promise.race([
-          Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          }),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("還抓不到位置，走到戶外再試一次。")),
-              15000,
-            );
-          }),
-        ]).finally(() => clearTimeout(timer));
-        if ((fix.coords.accuracy ?? 100) > 60)
-          throw new Error("定位還不夠準，走到空曠一點的地方再試。");
+        const recent = await Location.getLastKnownPositionAsync({
+          maxAge: 120000,
+          requiredAccuracy: 100,
+        });
+        let fix = recent;
+        if (!fix) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          fix = await Promise.race([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("還抓不到位置，走到戶外再試一次。")),
+                8000,
+              );
+            }),
+          ]).finally(() => clearTimeout(timer));
+        }
+        if ((fix.coords.accuracy ?? 100) > 120)
+          throw new Error("定位還不夠穩，走到空曠一點的地方再試。");
         point = {
           latitude: fix.coords.latitude,
           longitude: fix.coords.longitude,
@@ -244,7 +261,6 @@ export function usePocketJourney() {
       update(next);
       setNow(time);
       tapHaptic();
-      void routeNext();
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
     } finally {
@@ -256,6 +272,27 @@ export function usePocketJourney() {
     const j = current.current;
     if (!j || j.phase === "finished" || finishLock.current) return;
     finishLock.current = true;
+
+    if (shouldDiscardShortEmptyJourney(j)) {
+      generation.current++;
+      try {
+        await saveQueue.current;
+        await removeStored(ACTIVE);
+        current.current = null;
+        setJourney(null);
+        legRef.current = null;
+        setLeg(null);
+        setNotice("");
+        setError("");
+        tapHaptic();
+      } catch {
+        setError("暫時無法結束這趟，請再試一次。");
+      } finally {
+        finishLock.current = false;
+      }
+      return;
+    }
+
     setFinishing(true);
     generation.current++;
     const point = j.trace.at(-1) ?? j.origin;

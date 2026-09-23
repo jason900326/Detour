@@ -25,8 +25,24 @@ import {
   guidanceBearingOnPolyline,
   distanceToPolyline,
 } from "../../lib/navigation-engine";
-import { Button, C, Enter, s, Ticket, Trail } from "./pocket-ui";
+import {
+  Button,
+  C,
+  Enter,
+  PHOTO_ASPECT,
+  mono,
+  s,
+  Ticket,
+  Trail,
+} from "./pocket-ui";
 import { WanderMotion } from "./pocket-motion";
+import { DirectionBeacon } from "./pocket-direction-beacon";
+import {
+  DetourBrand,
+  HomeDoodles,
+  HomeJourneyMotion,
+  HomeMoodStamp,
+} from "./pocket-home-art";
 import { EdgeBack } from "./pocket-edge-back";
 import { PhotoDeck } from "./pocket-photo-deck";
 import {
@@ -35,8 +51,18 @@ import {
 } from "../../lib/pocket-navigation";
 import PocketMap from "./pocket-map";
 import PocketCamera from "./pocket-camera";
+import { PocketLiveAlbum } from "./pocket-live-album";
+import { PocketHistoryGallery } from "./pocket-history-gallery";
 
 type Screen = PocketScreen;
+
+function traceMeters(journey: PocketJourney) {
+  return journey.trace.slice(1).reduce(
+    (total, point, index) => total + distance(journey.trace[index], point),
+    0,
+  );
+}
+
 export default function PocketApp() {
   const c = usePocketJourney();
   const [screen, setScreen] = useState<Screen>("home");
@@ -47,6 +73,7 @@ export default function PocketApp() {
   const [shareOrigin, setShareOrigin] = useState<"home" | "detail">("home");
   const [selected, setSelected] = useState<PocketJourney | null>(null);
   const [camera, setCamera] = useState(false);
+  const [album, setAlbum] = useState(false);
   const [map, setMap] = useState(false);
   const [endSheet, setEndSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -61,7 +88,15 @@ export default function PocketApp() {
     : undefined;
   const currentCover = useRef(cover);
   currentCover.current = cover;
+  const shareThumbs =
+    displayed && cover
+      ? displayed.photos.filter((uri) => uri !== cover).slice(0, 4)
+      : [];
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
+  const hasJourneyMemories = !!j && (j.photos.length > 0 || j.found.length > 0);
+  const journeyHasRoute = !!j && traceMeters(j) >= 35;
+  const discardOnFinish =
+    !!j && elapsed < 60 && j.photos.length === 0 && j.found.length === 0;
   useEffect(() => {
     if (completed) setCamera(false);
   }, [completed]);
@@ -72,6 +107,7 @@ export default function PocketApp() {
     setMap(false);
     setAtHome(true);
     setCamera(false);
+    setAlbum(false);
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
@@ -134,9 +170,7 @@ export default function PocketApp() {
           accessibilityLabel="返回首頁"
           onPress={goHome}
         >
-          <Text style={[s.brand, { fontSize: 34, lineHeight: 44 }]}>
-            DETOUR ↗
-          </Text>
+          <DetourBrand large />
         </Pressable>
       )}
       {title && (
@@ -157,7 +191,7 @@ export default function PocketApp() {
       )}
     </View>
   );
-  if (!c.ready || c.starting || c.finishing)
+  if (!c.ready || c.finishing)
     return (
       <SafeAreaView
         style={[
@@ -165,7 +199,7 @@ export default function PocketApp() {
           { justifyContent: "center", alignItems: "center", gap: 20 },
         ]}
       >
-        <Text style={s.brand}>DETOUR ↗</Text>
+        <DetourBrand large />
         <WanderMotion />
         <Text style={[s.paperTitle, { fontSize: 30 }]}>
           {c.finishing ? "把這一點意外，收好。" : "意外，就從這裡開始。"}
@@ -192,23 +226,31 @@ export default function PocketApp() {
                   <View
                     style={{
                       flex: 1,
-                      minHeight: 310,
+                      minHeight: 405,
                       justifyContent: "center",
-                      paddingVertical: 16,
+                      paddingTop: 8,
+                      paddingBottom: 4,
+                      position: "relative",
                     }}
                   >
-                    <Text style={s.eyebrow}>約 10 分鐘 · 一人份的小探險</Text>
-                    <Text
-                      style={[
-                        s.title,
-                        { fontSize: 42, lineHeight: 53, marginTop: 18 },
-                      ]}
-                    >
-                      不知道{"\n"}要幹嘛
-                      <Text style={{ color: C.orange }}>？</Text>
-                    </Text>
-                    <View style={{ alignItems: "center", marginTop: 16 }}>
-                      <WanderMotion />
+                    <HomeDoodles />
+                    <View style={{ zIndex: 1 }}>
+                      <HomeMoodStamp />
+                      <Text
+                        style={[
+                          s.title,
+                          {
+                            fontSize: 43,
+                            lineHeight: 53,
+                            marginTop: 18,
+                            maxWidth: 280,
+                          },
+                        ]}
+                      >
+                        不知道{"\n"}要幹嘛
+                        <Text style={{ color: C.orange }}>？</Text>
+                      </Text>
+                      <HomeJourneyMotion />
                     </View>
                   </View>
                   {!!c.error && (
@@ -218,11 +260,13 @@ export default function PocketApp() {
                   )}
                   <Button
                     label={
-                      active
-                        ? "繼續這趟 ↗"
-                        : completed
-                          ? "看看這趟票根"
-                          : "繞一下？"
+                      c.starting
+                        ? "找位置中…"
+                        : active
+                          ? "繼續這趟 ↗"
+                          : completed
+                            ? "看看這趟票根"
+                            : "繞一下？"
                     }
                     onPress={() => {
                       setAtHome(false);
@@ -271,12 +315,25 @@ export default function PocketApp() {
                           s.paper,
                           {
                             alignItems: "stretch",
-                            padding: 24,
-                            borderRadius: 28,
+                            padding: 18,
+                            borderRadius: 24,
+                            minHeight: 0,
+                            marginTop: 8,
+                            marginBottom: 12,
                           },
                         ]}
                       >
-                        <View style={[s.tape, { alignSelf: "center" }]} />
+                        <View
+                          style={[
+                            s.tape,
+                            {
+                              alignSelf: "center",
+                              width: 62,
+                              height: 18,
+                              top: -8,
+                            },
+                          ]}
+                        />
                         <View style={s.row}>
                           <Text style={[s.eyebrow, { color: "#756483" }]}>
                             這一眼的任務
@@ -285,43 +342,73 @@ export default function PocketApp() {
                             NO. {String(j.found.length + 1).padStart(2, "0")}
                           </Text>
                         </View>
-                        <Text
-                          style={{
-                            fontSize: 68,
-                            marginTop: 20,
-                            textAlign: "center",
-                          }}
-                        >
-                          {j.target.emoji}
-                        </Text>
-                        <Text
+                        <View
                           style={[
-                            s.paperTitle,
-                            { fontSize: 32, lineHeight: 42 },
+                            s.row,
+                            { alignItems: "center", marginTop: 14, gap: 14 },
                           ]}
                         >
-                          {j.target.title}
-                        </Text>
-                        <Text
-                          style={[
-                            s.paperHint,
-                            { alignSelf: "center", marginBottom: 24 },
-                          ]}
-                        >
-                          {j.target.hint}
-                        </Text>
-                        <Button
-                          label="找到了"
-                          accessibilityLabel="找到了，開啟相機記錄"
-                          onPress={() => {
-                            c.discover();
-                            setCamera(true);
-                          }}
-                        />
+                          <View
+                            style={{
+                              width: 76,
+                              height: 76,
+                              borderRadius: 22,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: "#F7F4EC99",
+                              borderWidth: 1,
+                              borderColor: "#D8CEE7",
+                              transform: [{ rotate: "-4deg" }],
+                            }}
+                          >
+                            <Text style={{ fontSize: 46 }}>{j.target.emoji}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                s.paperTitle,
+                                {
+                                  fontSize: 26,
+                                  lineHeight: 34,
+                                  textAlign: "left",
+                                  marginTop: 0,
+                                },
+                              ]}
+                            >
+                              {j.target.title}
+                            </Text>
+                            <Text
+                              style={[
+                                s.paperHint,
+                                {
+                                  textAlign: "left",
+                                  marginTop: 5,
+                                  maxWidth: "100%",
+                                  fontSize: 13,
+                                  lineHeight: 20,
+                                },
+                              ]}
+                            >
+                              {j.target.hint}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={{ marginTop: 16 }}>
+                          <Button
+                            label="找到了"
+                            centered
+                            hideArrow
+                            accessibilityLabel="找到了，開啟相機記錄"
+                            onPress={() => {
+                              c.discover();
+                              setCamera(true);
+                            }}
+                          />
+                        </View>
                         <Pressable
                           accessibilityRole="button"
                           onPress={() => c.discover(true)}
-                          style={[s.link, { marginTop: 8 }]}
+                          style={[s.link, { minHeight: 38, marginTop: 2 }]}
                         >
                           <Text style={[s.linkText, { color: "#65546F" }]}>
                             ↻　換個目標
@@ -362,15 +449,8 @@ export default function PocketApp() {
                     closing={j.phase === "closing"}
                     routing={c.routing}
                     notice={c.notice}
-                    onMap={() => setMap((v) => !v)}
-                    map={map}
+                    onMap={() => setMap(true)}
                   />
-                  {map && (
-                    <PocketMap
-                      trace={j.trace}
-                      route={c.leg?.coordinates ?? []}
-                    />
-                  )}
                   {!!c.notice && !c.routing && (
                     <Pressable
                       accessibilityRole="button"
@@ -416,16 +496,66 @@ export default function PocketApp() {
                     {j.photos.at(-1) ? (
                       <Image
                         source={{ uri: j.photos.at(-1) }}
+                        resizeMode="contain"
                         style={{
-                          width: 44,
-                          height: 48,
+                          width: 40,
+                          aspectRatio: PHOTO_ASPECT,
                           borderRadius: 6,
-                          transform: [{ rotate: "6deg" }],
+                          transform: [{ rotate: "5deg" }],
+                          backgroundColor: "#343A31",
                         }}
                       />
                     ) : (
                       <Text style={{ color: C.white, fontSize: 26 }}>＋</Text>
                     )}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`即時相簿，目前有 ${j.photos.length} 張照片`}
+                    onPress={() => setAlbum(true)}
+                    style={[
+                      s.row,
+                      {
+                        backgroundColor: C.white,
+                        borderWidth: 1,
+                        borderColor: C.line,
+                        paddingHorizontal: 18,
+                        paddingVertical: 14,
+                        borderRadius: 20,
+                        marginTop: 10,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        borderWidth: 1.5,
+                        borderColor: C.ink,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ color: C.ink, fontSize: 17 }}>▦</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: C.ink,
+                          fontSize: 16,
+                          fontWeight: "700",
+                        }}
+                      >
+                        即時相簿
+                      </Text>
+                      <Text style={[s.muted, { marginTop: 2 }]}>
+                        {j.photos.length
+                          ? `${j.photos.length} 張 · 點開回看`
+                          : "拍過的照片會留在這裡"}
+                      </Text>
+                    </View>
+                    <Text style={{ color: C.muted, fontSize: 20 }}>↗</Text>
                   </Pressable>
                   {!!c.error && (
                     <View style={s.error}>
@@ -451,48 +581,80 @@ export default function PocketApp() {
               {isCompletion && j && (
                 <>
                   <Header />
-                  <View style={{ marginTop: 15, marginBottom: 26 }}>
-                    <Text style={s.eyebrow}>這段路，原本不會發生。</Text>
-                    <Text style={[s.title, { marginTop: 12 }]}>
-                      繞了一下，{"\n"}帶回這些
+                  <View style={{ marginTop: 2, marginBottom: 16 }}>
+                    <Text
+                      style={[
+                        s.title,
+                        { fontSize: 40, lineHeight: 49, marginTop: 0 },
+                      ]}
+                    >
+                      {hasJourneyMemories ? (
+                        <>
+                          繞了一下，{"\n"}帶回這些
+                        </>
+                      ) : (
+                        <>繞了一下</>
+                      )}
                       <Text style={{ color: C.orange }}>。</Text>
                     </Text>
                   </View>
-                  <Enter delay={100}>
-                    <Ticket journey={j} />
-                  </Enter>
-                  <Text
-                    style={[s.body, { marginTop: 25, textAlign: "center" }]}
-                  >
-                    這趟停在 {j.endpoint?.name ?? "街角"}。
-                  </Text>
-                  <PhotoDeck key={j.id} photos={j.photos} />
-                  <Trail points={j.trace} height={105} />
-                  <Text
-                    style={[s.muted, { textAlign: "center", marginBottom: 25 }]}
-                  >
-                    {Math.max(
-                      1,
-                      Math.round(
-                        ((j.finishedAt ?? c.now) - j.startedAt) / 60000,
-                      ),
-                    )}{" "}
-                    分鐘 · 已收進我的票根
-                  </Text>
-                  <Button
-                    label="分享這一趟"
-                    onPress={() => {
-                      setSelected(j);
-                      setShareOrigin("home");
-                      setLoadedCover("");
-                      setCoverError(false);
-                      setScreen("share");
-                    }}
-                  />
+                  {hasJourneyMemories ? (
+                    <>
+                      <Enter delay={80}>
+                        <Ticket journey={j} receipt />
+                      </Enter>
+                      <PhotoDeck key={j.id} photos={j.photos} compact />
+                    </>
+                  ) : (
+                    <Enter delay={80}>
+                      <View
+                        style={{
+                          backgroundColor: C.white,
+                          borderWidth: 1,
+                          borderColor: "#E6E2D7",
+                          borderRadius: 22,
+                          padding: 16,
+                          minHeight: journeyHasRoute ? 190 : 118,
+                          justifyContent: "center",
+                        }}
+                      >
+                        <View style={[s.row, { marginBottom: journeyHasRoute ? 8 : 0 }]}>
+                          <DetourBrand />
+                          <Text style={s.serial}>
+                            № {j.id.slice(-5)}
+                          </Text>
+                        </View>
+                        {journeyHasRoute ? (
+                          <Trail points={j.trace} height={118} framed />
+                        ) : (
+                          <Text
+                            style={[
+                              s.muted,
+                              { textAlign: "center", paddingVertical: 20 },
+                            ]}
+                          >
+                            這趟沒有留下照片或發現。
+                          </Text>
+                        )}
+                      </View>
+                    </Enter>
+                  )}
+                  <View style={{ marginTop: hasJourneyMemories ? 10 : 18 }}>
+                    <Button
+                      label="分享這一趟"
+                      onPress={() => {
+                        setSelected(j);
+                        setShareOrigin("home");
+                        setLoadedCover("");
+                        setCoverError(false);
+                        setScreen("share");
+                      }}
+                    />
+                  </View>
                   <Pressable
                     accessibilityRole="button"
                     onPress={goHome}
-                    style={[s.link, { marginTop: 10 }]}
+                    style={[s.link, { marginTop: 6 }]}
                   >
                     <Text style={s.linkText}>收好票根，回首頁</Text>
                   </Pressable>
@@ -501,14 +663,43 @@ export default function PocketApp() {
               {screen === "history" && (
                 <>
                   <Header title="我的票根" back={() => setScreen("home")} />
-                  <Text style={[s.title, { marginTop: 17 }]}>
-                    繞過的，{"\n"}都留著。
-                  </Text>
-                  <Text style={[s.body, { marginTop: 12, marginBottom: 25 }]}>
-                    {c.history.length
-                      ? `${c.history.length} 段原本不會發生的時間。`
-                      : "第一張票，就從今天開始。"}
-                  </Text>
+                  <View style={{ marginTop: 10 }}>
+                    <Text
+                      style={[
+                        s.title,
+                        {
+                          fontSize: 34,
+                          lineHeight: 42,
+                          letterSpacing: -1.1,
+                        },
+                      ]}
+                    >
+                      繞過的，都留著
+                      <Text style={{ color: C.orange }}>。</Text>
+                    </Text>
+                    <View
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 11,
+                        borderRadius: 999,
+                        backgroundColor: C.green,
+                        paddingHorizontal: 11,
+                        paddingVertical: 7,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: mono,
+                          fontSize: 11,
+                          color: "#59674A",
+                          fontWeight: "700",
+                          letterSpacing: 0.7,
+                        }}
+                      >
+                        {String(c.history.length).padStart(2, "0")} 張票根
+                      </Text>
+                    </View>
+                  </View>
                   {!c.history.length ? (
                     <View style={s.empty}>
                       <Text style={{ fontSize: 55 }}>🎟️</Text>
@@ -519,49 +710,13 @@ export default function PocketApp() {
                       />
                     </View>
                   ) : (
-                    c.history.map((entry) => (
-                      <Pressable
-                        key={entry.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`查看 ${new Date(entry.startedAt).toLocaleDateString("zh-TW")} 的票根`}
-                        onPress={() => {
-                          setSelected(entry);
-                          setScreen("detail");
-                        }}
-                        style={s.historyCard}
-                      >
-                        <View style={s.row}>
-                          <View style={{ flex: 1, gap: 11 }}>
-                            <Text style={{ fontSize: 29 }}>
-                              {entry.found.length
-                                ? entry.found.map((f) => f.emoji).join(" ")
-                                : "一段留在路上的時間"}
-                            </Text>
-                            <Text style={s.muted}>
-                              {new Date(entry.startedAt).toLocaleDateString(
-                                "zh-TW",
-                              )}{" "}
-                              ·{" "}
-                              {entry.demo
-                                ? "室內試玩"
-                                : entry.area ||
-                                  entry.endpoint?.name ||
-                                  "城市的一角"}
-                            </Text>
-                          </View>
-                          {entry.photos[0] ? (
-                            <Image
-                              source={{ uri: entry.photos[0] }}
-                              style={{ width: 75, height: 86, borderRadius: 8 }}
-                            />
-                          ) : (
-                            <Text style={{ fontSize: 23, color: C.orange }}>
-                              ↗
-                            </Text>
-                          )}
-                        </View>
-                      </Pressable>
-                    ))
+                    <PocketHistoryGallery
+                      entries={c.history}
+                      onOpen={(entry) => {
+                        setSelected(entry);
+                        setScreen("detail");
+                      }}
+                    />
                   )}
                 </>
               )}
@@ -654,7 +809,13 @@ export default function PocketApp() {
                           >
                             <Image
                               source={{ uri }}
-                              style={{ width: 62, height: 76, borderRadius: 8 }}
+                              resizeMode="contain"
+                              style={{
+                                width: 64,
+                                aspectRatio: PHOTO_ASPECT,
+                                borderRadius: 8,
+                                backgroundColor: C.white,
+                              }}
                             />
                             {cover === uri && (
                               <Text
@@ -680,77 +841,166 @@ export default function PocketApp() {
                     ref={shareRef}
                     collapsable={false}
                     style={{
+                      width: "100%",
+                      aspectRatio: 9 / 16,
                       backgroundColor: C.paper,
-                      padding: 20,
-                      borderRadius: 8,
+                      padding: 14,
+                      borderRadius: 18,
+                      overflow: "hidden",
                     }}
                   >
                     {cover ? (
-                      <>
-                        <Image
-                          key={cover}
-                          source={{ uri: cover }}
-                          onLoad={() => {
-                            if (currentCover.current !== cover) return;
-                            setLoadedCover(cover);
-                            setCoverError(false);
-                          }}
-                          onError={() => {
-                            if (currentCover.current === cover)
-                              setCoverError(true);
-                          }}
-                          style={[s.photo, { borderRadius: 3 }]}
-                        />
-                        <Text
-                          style={[s.brand, { marginTop: 21, marginBottom: 9 }]}
-                        >
-                          DETOUR ↗
-                        </Text>
-                        <Text style={{ fontSize: 33, marginVertical: 10 }}>
-                          {displayed.found.map((f) => f.emoji).join(" ")}
-                        </Text>
-                        <Text
+                      <View style={{ flex: 1, overflow: "hidden" }}>
+                        <View
                           style={{
-                            fontSize: 23,
-                            fontWeight: "800",
-                            color: C.ink,
+                            height: "68%",
+                            paddingHorizontal: 4,
+                            paddingTop: 2,
+                            paddingBottom: 8,
                           }}
                         >
-                          沒有目的地。卻遇見了這個。
-                        </Text>
-                      </>
-                    ) : (
+                          <View
+                            style={{
+                              flex: 1,
+                              width: "90%",
+                              alignSelf: "center",
+                              borderRadius: 14,
+                              overflow: "hidden",
+                              backgroundColor: C.white,
+                              borderWidth: 1,
+                              borderColor: "#E4D8C8",
+                            }}
+                          >
+                            <View style={{ flex: 1, minHeight: 0 }}>
+                              <Image
+                                key={cover}
+                                source={{ uri: cover }}
+                                resizeMode="contain"
+                                onLoad={() => {
+                                  if (currentCover.current !== cover) return;
+                                  setLoadedCover(cover);
+                                  setCoverError(false);
+                                }}
+                                onError={() => {
+                                  if (currentCover.current === cover)
+                                    setCoverError(true);
+                                }}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  backgroundColor: C.white,
+                                }}
+                              />
+                            </View>
+
+                            <View
+                              style={{
+                                height: 76,
+                                flexDirection: "row",
+                                gap: 3,
+                                padding: 4,
+                                paddingTop: 3,
+                                backgroundColor: C.paper,
+                                borderTopWidth: shareThumbs.length ? 1 : 0,
+                                borderColor: "#E4D8C8",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {shareThumbs.map((uri) => (
+                                <View
+                                  key={uri}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    borderRadius: 5,
+                                    overflow: "hidden",
+                                    backgroundColor: C.white,
+                                  }}
+                                >
+                                  <Image
+                                    source={{ uri }}
+                                    resizeMode="contain"
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      backgroundColor: C.white,
+                                    }}
+                                  />
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        </View>
+
+                        <View
+                          style={{
+                            height: "32%",
+                            justifyContent: "flex-end",
+                            paddingHorizontal: 2,
+                            paddingTop: 12,
+                            paddingBottom: 18,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <DetourBrand />
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={{
+                              fontSize: 21,
+                              lineHeight: 27,
+                              marginTop: 9,
+                            }}
+                          >
+                            {displayed.found.map((f) => f.emoji).join(" ")}
+                          </Text>
+                          <Text
+                            numberOfLines={2}
+                            adjustsFontSizeToFit
+                            style={{
+                              fontSize: 20,
+                              lineHeight: 26,
+                              fontWeight: "800",
+                              color: C.ink,
+                              marginTop: 2,
+                              paddingRight: 8,
+                            }}
+                          >
+                            沒有目的地。卻遇見了這個。
+                          </Text>
+                          <View
+                            style={{
+                              width: 38,
+                              height: 3,
+                              borderRadius: 2,
+                              backgroundColor: C.orange,
+                              marginTop: 10,
+                            }}
+                          />
+                        </View>
+                      </View>                    ) : (
                       <>
+                        <DetourBrand />
                         <Text
                           style={[
                             s.title,
-                            { fontSize: 32, lineHeight: 42, marginBottom: 22 },
+                            {
+                              fontSize: 27,
+                              lineHeight: 35,
+                              marginTop: 18,
+                              marginBottom: 18,
+                            },
                           ]}
                         >
-                          沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                          <>
+                            沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                          </>
                         </Text>
-                        <Ticket journey={displayed} />
+                        <Ticket journey={displayed} compact />
                       </>
                     )}
-                    <Trail
-                      points={displayed.trace}
-                      height={displayed.photos[0] ? 70 : 130}
-                    />
-                    <View style={s.row}>
-                      <Text style={s.muted}>
-                        {new Date(displayed.startedAt).toLocaleDateString(
-                          "zh-TW",
-                        )}
-                      </Text>
-                      <Text style={s.muted}>一點時間，一點意外。</Text>
-                    </View>
                   </View>
                   <View style={{ height: 24 }} />
-                  {sharing && (
-                    <View style={{ alignItems: "center" }}>
-                      <WanderMotion small />
-                    </View>
-                  )}
                   <Button
                     label="分享這一趟"
                     onPress={() => void share()}
@@ -767,11 +1017,6 @@ export default function PocketApp() {
                   {!!shareError && (
                     <Text style={s.errorText}>{shareError}</Text>
                   )}
-                  <Text
-                    style={[s.muted, { textAlign: "center", marginTop: 12 }]}
-                  >
-                    照片、發現，還有你繞過的那段路。
-                  </Text>
                 </>
               )}
               {screen === "settings" && (
@@ -818,6 +1063,79 @@ export default function PocketApp() {
       {camera && (
         <PocketCamera onClose={() => setCamera(false)} onSave={c.addPhoto} />
       )}
+      <PocketLiveAlbum
+        photos={j?.photos ?? []}
+        visible={album}
+        onClose={() => setAlbum(false)}
+      />
+      <Modal
+        visible={map}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMap(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "#24292166",
+          }}
+        >
+          <View
+            style={{
+              height: "70%",
+              backgroundColor: C.paper,
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              paddingHorizontal: 18,
+              paddingTop: 10,
+              paddingBottom: 24,
+              shadowColor: C.ink,
+              shadowOpacity: 0.18,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: -8 },
+            }}
+          >
+            <View
+              style={{
+                width: 42,
+                height: 5,
+                borderRadius: 3,
+                alignSelf: "center",
+                backgroundColor: C.line,
+                marginBottom: 10,
+              }}
+            />
+            <View style={[s.row, { marginBottom: 12 }]}>
+              <View>
+                <Text style={s.eyebrow}>現在的位置</Text>
+                <Text style={[s.sectionTitle, { marginVertical: 2 }]}>
+                  方向地圖
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="關閉地圖"
+                hitSlop={8}
+                onPress={() => setMap(false)}
+                style={s.round}
+              >
+                <Text style={{ fontSize: 24, color: C.ink }}>×</Text>
+              </Pressable>
+            </View>
+            {j && (
+              <PocketMap
+                trace={j.trace}
+                route={c.leg?.coordinates ?? []}
+                style={{ flex: 1 }}
+              />
+            )}
+            <Text style={[s.muted, { textAlign: "center", marginTop: 10 }]}>
+              地圖只是參考；看到有意思的，繞過去也可以。
+            </Text>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={endSheet}
         transparent
@@ -841,13 +1159,24 @@ export default function PocketApp() {
               gap: 15,
             }}
           >
-            <Text style={s.sectionTitle}>想在這裡停下來？</Text>
+            <Text style={s.sectionTitle}>
+              {discardOnFinish ? "先停在這裡？" : "想在這裡停下來？"}
+            </Text>
             <Text style={[s.body, { marginBottom: 12 }]}>
-              找到的東西，都會留在這張票上。{"\n"}
-              先到安全、能停留的地方再收好票根。
+              {discardOnFinish ? (
+                <>
+                  這趟還不到一分鐘，也還沒有留下照片或發現。{"\n"}
+                  現在離開，不會產生票根。
+                </>
+              ) : (
+                <>
+                  找到的東西，都會留在這張票上。{"\n"}
+                  先到安全、能停留的地方再收好票根。
+                </>
+              )}
             </Text>
             <Button
-              label="在這裡收好票根"
+              label={discardOnFinish ? "結束這趟" : "在這裡收好票根"}
               onPress={() => {
                 setEndSheet(false);
                 void c.finish();
@@ -910,7 +1239,6 @@ function Direction({
   routing,
   notice,
   onMap,
-  map,
 }: {
   route: { latitude: number; longitude: number }[];
   trace: { latitude: number; longitude: number }[];
@@ -919,7 +1247,6 @@ function Direction({
   routing: boolean;
   notice: string;
   onMap: () => void;
-  map: boolean;
 }) {
   const point = trace.at(-1);
   const degrees =
@@ -972,7 +1299,7 @@ function Direction({
   const title = notice
     ? "先看看這條街"
     : routing
-      ? "帶著好奇，慢慢走"
+      ? "正在找一條舒服的方向"
       : corner
         ? corner.right
           ? "前面路口，往右看看"
@@ -980,12 +1307,12 @@ function Direction({
         : degrees === null
           ? "先看看身邊的街景"
           : relative !== null
-            ? "跟著箭頭，走一小段"
+            ? "跟著大箭頭，走一小段"
             : `往${["北", "東北", "東", "東南", "南", "西南", "西", "西北"][Math.round(degrees / 45) % 8]}，走一小段`;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={map ? "收起地圖" : "查看方向地圖"}
+      accessibilityLabel="查看方向地圖"
       onPress={() => {
         tapHaptic();
         onMap();
@@ -993,41 +1320,54 @@ function Direction({
       style={[
         s.direction,
         {
-          backgroundColor: "transparent",
-          borderRadius: 0,
-          borderBottomWidth: 1,
-          borderColor: C.line,
-          paddingHorizontal: 4,
-          marginVertical: 6,
+          minHeight: 168,
+          backgroundColor: C.white,
+          borderRadius: 28,
+          borderWidth: 1,
+          borderColor: "#E4E0D5",
+          paddingVertical: 16,
+          paddingHorizontal: 15,
+          marginTop: 4,
+          marginBottom: 12,
+          gap: 12,
+          shadowColor: "#383B29",
+          shadowOpacity: 0.05,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 7 },
         },
       ]}
     >
-      {routing ? (
-        <WanderMotion small />
-      ) : (
+      <DirectionBeacon relative={relative} routing={routing} />
+      <View style={{ flex: 1, alignSelf: "stretch", justifyContent: "center" }}>
+        <Text style={[s.eyebrow, { marginBottom: 7 }]}>接下來，往這邊</Text>
         <Text
-          style={{
-            fontSize: 29,
-            color: C.ink,
-            transform: [{ rotate: `${relative ?? 0}deg` }],
-          }}
+          style={[
+            s.directionTitle,
+            { fontSize: 21, lineHeight: 29, paddingRight: 2 },
+          ]}
         >
-          {degrees === null || relative === null ? "↗" : "↑"}
-        </Text>
-      )}
-      <View style={{ flex: 1 }}>
-        <Text style={[s.eyebrow, { marginBottom: 5 }]}>接下來，往這邊</Text>
-        <Text style={[s.directionTitle, { fontSize: 19, lineHeight: 27 }]}>
           {title}
         </Text>
-        <Text style={s.directionSub}>
+        <Text style={[s.directionSub, { fontSize: 12.5, lineHeight: 19 }]}>
           {notice ||
             (closing
               ? "慢慢靠近一個可以停下的地方。"
-              : "看到有意思的，繞過去也可以。")}
+              : "不用走得很準；大方向對了，就繼續找。")}
         </Text>
+        <View
+          style={{
+            alignSelf: "flex-start",
+            marginTop: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: C.line,
+            paddingHorizontal: 11,
+            paddingVertical: 6,
+          }}
+        >
+          <Text style={[s.serial, { color: C.ink }]}>打開地圖 ↗</Text>
+        </View>
       </View>
-      <Text style={s.serial}>{map ? "收起" : "地圖"} ↗</Text>
     </Pressable>
   );
 }

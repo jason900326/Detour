@@ -28,6 +28,17 @@ export type PocketJourney = {
   area?: string;
   demo?: boolean;
 };
+
+export function shouldDiscardShortEmptyJourney(
+  journey: Pick<PocketJourney, "startedAt" | "found" | "photos">,
+  now = Date.now(),
+) {
+  return (
+    now - journey.startedAt < 60_000 &&
+    journey.found.length === 0 &&
+    journey.photos.length === 0
+  );
+}
 export const DISCOVERIES: Discovery[] = [
   {
     id: "door",

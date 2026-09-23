@@ -10,8 +10,9 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import Svg, { Circle, Path, Polyline } from "react-native-svg";
-import type { PocketJourney, Point } from "../../lib/pocket-engine";
+import Svg, { Circle, Path } from "react-native-svg";
+import { distance, type PocketJourney, type Point } from "../../lib/pocket-engine";
+export const PHOTO_ASPECT = 4 / 5;
 export const C = {
   paper: "#F7F4EC",
   ink: "#242921",
@@ -98,6 +99,8 @@ export function Button({
   secondary = false,
   disabled = false,
   small = false,
+  centered = false,
+  hideArrow = false,
   accessibilityLabel,
 }: {
   label: string;
@@ -105,6 +108,8 @@ export function Button({
   secondary?: boolean;
   disabled?: boolean;
   small?: boolean;
+  centered?: boolean;
+  hideArrow?: boolean;
   accessibilityLabel?: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -129,6 +134,7 @@ export function Button({
           s.button,
           secondary && s.secondary,
           small && s.small,
+          centered && { justifyContent: "center" },
           disabled && { opacity: 0.5 },
         ]}
       >
@@ -141,7 +147,7 @@ export function Button({
         >
           {label}
         </Text>
-        {!small && (
+        {!small && !hideArrow && (
           <Text style={[s.buttonArrow, secondary && { color: C.orange }]}>
             ↗
           </Text>
@@ -153,96 +159,203 @@ export function Button({
 export function DottedLine() {
   return <View style={s.dotted} />;
 }
-export function Barcode() {
+export function Barcode({ wide = false }: { wide?: boolean }) {
+  const count = wide ? 55 : 41;
   return (
-    <View style={s.barcode}>
-      {Array.from({ length: 41 }, (_, i) => (
+    <View
+      style={[
+        s.barcode,
+        wide && {
+          width: "100%",
+          justifyContent: "space-between",
+          gap: 0,
+        },
+      ]}
+    >
+      {Array.from({ length: count }, (_, i) => (
         <View
           key={i}
           style={{
             width: [2, 1, 3, 1, 2, 4, 1][i % 7],
             height: i % 6 === 0 ? 25 : 21,
             backgroundColor: C.ink,
-            opacity: 0.7,
+            opacity: 0.72,
           }}
         />
       ))}
     </View>
   );
 }
+
+function trailGeometry(points: Point[]) {
+  const sampled =
+    points.length <= 10
+      ? points
+      : Array.from({ length: 10 }, (_, i) => {
+          const index = Math.round((i / 9) * (points.length - 1));
+          return points[index];
+        });
+  const xs = sampled.map(
+    (p) => p.longitude * Math.cos((sampled[0].latitude * Math.PI) / 180),
+  );
+  const ys = sampled.map((p) => p.latitude);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = Math.max(maxX - minX, 0.00005);
+  const spanY = Math.max(maxY - minY, 0.00005);
+  const span = Math.max(spanX, spanY);
+  const coords = sampled.map((_, i) => ({
+    x: 22 + ((xs[i] - minX) / span) * 196,
+    y: 16 + ((maxY - ys[i]) / span) * 68,
+  }));
+  let path = `M ${coords[0].x} ${coords[0].y}`;
+  if (coords.length === 2) {
+    path += ` L ${coords[1].x} ${coords[1].y}`;
+  } else {
+    for (let i = 1; i < coords.length - 1; i++) {
+      const next = coords[i + 1];
+      const midX = (coords[i].x + next.x) / 2;
+      const midY = (coords[i].y + next.y) / 2;
+      path += ` Q ${coords[i].x} ${coords[i].y} ${midX} ${midY}`;
+    }
+    const last = coords[coords.length - 1];
+    path += ` L ${last.x} ${last.y}`;
+  }
+  return { path, start: coords[0], end: coords[coords.length - 1] };
+}
+
 export function Trail({
   points,
   color = C.orange,
-  height = 120,
+  height = 100,
+  framed = false,
 }: {
   points: Point[];
   color?: string;
   height?: number;
+  framed?: boolean;
 }) {
-  if (points.length < 2)
-    return (
-      <View style={{ height: 70, justifyContent: "center" }}>
-        <Text style={s.muted}>這一趟，從你站著的地方開始。</Text>
-      </View>
-    );
-  const xs = points.map(
-    (p) => p.longitude * Math.cos((points[0].latitude * Math.PI) / 180),
+  if (points.length < 2) return null;
+  const traveled = points.slice(1).reduce(
+    (total, point, index) => total + distance(points[index], point),
+    0,
   );
-  const ys = points.map((p) => p.latitude);
-  const minX = Math.min(...xs),
-    maxY = Math.max(...ys);
-  const span = Math.max(Math.max(...xs) - minX, maxY - Math.min(...ys), 0.0001);
-  const coords = points.map(
-    (p, i) =>
-      `${20 + ((xs[i] - minX) / span) * 200},${15 + ((maxY - ys[i]) / span) * 90}`,
-  );
-  const [x, y] = coords[coords.length - 1].split(",").map(Number);
+  if (traveled < 35) return null;
+  const geometry = trailGeometry(points);
   return (
-    <Svg height={height} width="100%" viewBox="0 0 240 120">
-      <Polyline
-        points={coords.join(" ")}
-        stroke={color}
-        strokeWidth={4}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <Circle
-        cx={20 + ((xs[0] - minX) / span) * 200}
-        cy={15 + ((maxY - ys[0]) / span) * 90}
-        r={5}
-        fill={C.white}
-        stroke={color}
-        strokeWidth={2}
-      />
-      <Circle cx={x} cy={y} r={6} fill={color} />
-    </Svg>
+    <View
+      style={
+        framed
+          ? {
+              backgroundColor: C.white,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: "#E8E2D7",
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+            }
+          : undefined
+      }
+    >
+      <Svg height={height} width="100%" viewBox="0 0 240 100">
+        {framed && (
+          <>
+            <Path
+              d="M18 25 H222 M18 50 H222 M18 75 H222"
+              stroke={C.line}
+              strokeWidth={1}
+              strokeDasharray="3 7"
+              opacity={0.42}
+            />
+            <Path
+              d="M60 10 V90 M120 10 V90 M180 10 V90"
+              stroke={C.line}
+              strokeWidth={1}
+              strokeDasharray="3 7"
+              opacity={0.32}
+            />
+          </>
+        )}
+        <Path
+          d={geometry.path}
+          stroke="#E8E2D5"
+          strokeWidth={9}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <Path
+          d={geometry.path}
+          stroke={color}
+          strokeWidth={4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <Circle
+          cx={geometry.start.x}
+          cy={geometry.start.y}
+          r={5}
+          fill={C.white}
+          stroke={color}
+          strokeWidth={2.5}
+        />
+        <Circle cx={geometry.end.x} cy={geometry.end.y} r={5.5} fill={color} />
+      </Svg>
+    </View>
   );
 }
+
 export function Ticket({
   journey,
   compact = false,
+  receipt = false,
 }: {
   journey: PocketJourney;
   compact?: boolean;
+  receipt?: boolean;
 }) {
+  const stampSize = receipt ? 30 : compact ? 33 : 44;
   return (
-    <View style={[s.ticket, compact && { padding: 20 }]}>
+    <View
+      style={[
+        s.ticket,
+        compact && { padding: 20 },
+        receipt && { padding: 18 },
+      ]}
+    >
       <View style={s.row}>
-        <Text style={s.brand}>DETOUR ↗</Text>
+        <Text style={s.brand}>DETOUR</Text>
         <Text style={s.serial}>№ {journey.id.slice(-5)}</Text>
       </View>
       <DottedLine />
-      <View style={{ minHeight: compact ? 54 : 84, justifyContent: "center" }}>
+      <View
+        style={{
+          minHeight: receipt ? 48 : compact ? 54 : 84,
+          justifyContent: "center",
+        }}
+      >
         {journey.found.length ? (
-          <View style={s.stamps}>
+          <View
+            style={[
+              s.stamps,
+              receipt && {
+                flexWrap: "nowrap",
+                justifyContent: "space-between",
+                gap: 6,
+                paddingVertical: 5,
+              },
+            ]}
+          >
             {journey.found.map((f, i) => (
               <Enter key={`${f.id}-${i}`} stamp>
                 <Text
                   accessibilityLabel={f.title}
                   style={{
-                    fontSize: compact ? 33 : 44,
-                    transform: [{ rotate: `${i % 2 ? 6 : -7}deg` }],
+                    fontSize: stampSize,
+                    transform: [{ rotate: `${i % 2 ? 4 : -4}deg` }],
                   }}
                 >
                   {f.emoji}
@@ -251,7 +364,11 @@ export function Ticket({
             ))}
           </View>
         ) : (
-          <Text style={s.emptyTicket}>第一個發現，會留在這裡。</Text>
+          <Text style={s.emptyTicket}>
+            {journey.phase === "finished"
+              ? "這趟沒有留下發現。"
+              : "第一個發現，會留在這裡。"}
+          </Text>
         )}
       </View>
       <View style={s.row}>
@@ -274,7 +391,7 @@ export function Ticket({
       {!compact && (
         <>
           <DottedLine />
-          <Barcode />
+          <Barcode wide={receipt} />
         </>
       )}
       <View style={[s.notch, { left: -9 }]} />
@@ -282,6 +399,7 @@ export function Ticket({
     </View>
   );
 }
+
 export function HomeTicket() {
   return (
     <View style={s.heroArt}>
@@ -617,7 +735,7 @@ export const s = StyleSheet.create({
   },
   photo: {
     width: "100%",
-    aspectRatio: 4 / 5,
+    aspectRatio: PHOTO_ASPECT,
     borderRadius: 12,
     backgroundColor: C.line,
   },

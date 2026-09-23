@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useRef, useState } from "react";
 import {
   Image,
@@ -10,10 +11,10 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, C, s } from "./pocket-ui";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button, C, PHOTO_ASPECT, s } from "./pocket-ui";
 import { EdgeBack } from "./pocket-edge-back";
-import { WanderMotion } from "./pocket-motion";
+
 export default function PocketCamera({
   onClose,
   onSave,
@@ -22,6 +23,7 @@ export default function PocketCamera({
   onSave: (uri: string) => void;
 }) {
   const [permission, request] = useCameraPermissions();
+  const insets = useSafeAreaInsets();
   const camera = useRef<CameraView>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,13 +31,48 @@ export default function PocketCamera({
   const [error, setError] = useState("");
   const [facing, setFacing] = useState<"back" | "front">("back");
   const lock = useRef(false);
+
   async function snap() {
     if (lock.current || !ready) return;
     lock.current = true;
     setBusy(true);
+    setError("");
     try {
-      const p = await camera.current?.takePictureAsync({ quality: 0.85 });
-      if (p) setPhoto(p.uri);
+      const p = await camera.current?.takePictureAsync({
+        quality: 0.9,
+      });
+      if (p) {
+        const sourceRatio = p.width / p.height;
+        let width = p.width;
+        let height = p.height;
+        let originX = 0;
+        let originY = 0;
+        if (sourceRatio > PHOTO_ASPECT) {
+          width = Math.round(p.height * PHOTO_ASPECT);
+          originX = Math.round((p.width - width) / 2);
+        } else if (sourceRatio < PHOTO_ASPECT) {
+          height = Math.round(p.width / PHOTO_ASPECT);
+          originY = Math.round((p.height - height) / 2);
+        }
+        const cropped = await ImageManipulator.manipulateAsync(
+          p.uri,
+          [
+            {
+              crop: {
+                originX,
+                originY,
+                width,
+                height,
+              },
+            },
+          ],
+          {
+            compress: 0.9,
+            format: ImageManipulator.SaveFormat.JPEG,
+          },
+        );
+        setPhoto(cropped.uri);
+      }
     } catch {
       setError("這張沒拍好，再試一次。");
     } finally {
@@ -43,10 +80,12 @@ export default function PocketCamera({
       setBusy(false);
     }
   }
+
   async function keep() {
     if (!photo || lock.current) return;
     lock.current = true;
     setBusy(true);
+    setError("");
     try {
       let uri = photo;
       if (Platform.OS !== "web") {
@@ -64,6 +103,7 @@ export default function PocketCamera({
       setBusy(false);
     }
   }
+
   return (
     <Modal
       animationType="slide"
@@ -74,7 +114,16 @@ export default function PocketCamera({
         }
       }}
     >
-      <SafeAreaView style={[s.screen, { backgroundColor: C.ink }]}>
+      <View
+        style={[
+          s.screen,
+          {
+            backgroundColor: C.ink,
+            paddingTop: Math.max(insets.top, 18),
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}
+      >
         <EdgeBack
           onBack={
             busy
@@ -85,27 +134,50 @@ export default function PocketCamera({
                 }
           }
         >
-          <View style={[s.page, { flex: 1 }]}>
-            <View style={s.header}>
+          <View
+            style={[
+              s.page,
+              {
+                flex: 1,
+                paddingTop: 8,
+                paddingHorizontal: 12,
+              },
+            ]}
+          >
+            <View style={[s.header, { paddingHorizontal: 4 }]}>
               <Text style={[s.brand, { color: C.white }]}>留住這一眼</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="關閉相機"
                 disabled={busy}
+                hitSlop={10}
                 onPress={onClose}
-                style={s.round}
+                style={[
+                  s.round,
+                  {
+                    width: 52,
+                    height: 52,
+                    borderRadius: 26,
+                    borderColor: "#686D64",
+                  },
+                ]}
               >
-                <Text style={{ color: C.white, fontSize: 20 }}>×</Text>
+                <Text style={{ color: C.white, fontSize: 24, lineHeight: 28 }}>
+                  ×
+                </Text>
               </Pressable>
             </View>
+
             {permission?.granted ? (
               <>
                 <View
                   style={{
-                    flex: 1,
-                    borderRadius: 24,
+                    width: "100%",
+                    aspectRatio: PHOTO_ASPECT,
+                    borderRadius: 28,
                     overflow: "hidden",
                     backgroundColor: "#111",
+                    alignSelf: "center",
                   }}
                 >
                   {photo ? (
@@ -126,27 +198,22 @@ export default function PocketCamera({
                     />
                   )}
                 </View>
-                {busy ? (
-                  <View style={{ alignItems: "center", marginVertical: 12 }}>
-                    <WanderMotion small />
-                  </View>
-                ) : (
-                  <Pressable
-                    disabled={busy}
-                    onPress={onClose}
-                    accessibilityRole="button"
-                    style={[s.link, { marginVertical: 8 }]}
-                  >
-                    <Text style={{ color: "#B4B7A9" }}>先不拍，繼續探索 →</Text>
-                  </Pressable>
-                )}
+
                 {!!error && (
-                  <Text style={{ color: "#FFB69C", marginBottom: 12 }}>
+                  <Text
+                    style={{
+                      color: "#FFB69C",
+                      marginTop: 10,
+                      marginBottom: 4,
+                      textAlign: "center",
+                    }}
+                  >
                     {error}
                   </Text>
                 )}
+
                 {photo ? (
-                  <View style={{ gap: 12 }}>
+                  <View style={{ gap: 12, paddingTop: 18 }}>
                     <Button
                       label="留下這張"
                       onPress={() => void keep()}
@@ -155,7 +222,10 @@ export default function PocketCamera({
                     <Button
                       label="再拍一次"
                       disabled={busy}
-                      onPress={() => setPhoto(null)}
+                      onPress={() => {
+                        setError("");
+                        setPhoto(null);
+                      }}
                       secondary
                     />
                   </View>
@@ -165,7 +235,8 @@ export default function PocketCamera({
                       flexDirection: "row",
                       alignItems: "center",
                       justifyContent: "space-around",
-                      paddingBottom: 20,
+                      paddingTop: 18,
+                      paddingBottom: 12,
                     }}
                   >
                     <Pressable
@@ -176,7 +247,13 @@ export default function PocketCamera({
                         setReady(false);
                         setFacing((v) => (v === "back" ? "front" : "back"));
                       }}
-                      style={s.round}
+                      style={[
+                        s.round,
+                        {
+                          borderColor: "#686D64",
+                          opacity: busy ? 0.5 : 1,
+                        },
+                      ]}
                     >
                       <Text style={{ color: C.white, fontSize: 26 }}>↻</Text>
                     </Pressable>
@@ -186,13 +263,13 @@ export default function PocketCamera({
                       disabled={!ready || busy}
                       onPress={() => void snap()}
                       style={{
-                        height: 78,
-                        width: 78,
-                        borderRadius: 39,
+                        height: 82,
+                        width: 82,
+                        borderRadius: 41,
                         borderWidth: 5,
                         borderColor: C.white,
-                        padding: 5,
-                        opacity: ready ? 1 : 0.4,
+                        padding: 6,
+                        opacity: ready && !busy ? 1 : 0.45,
                       }}
                     >
                       <View
@@ -200,6 +277,7 @@ export default function PocketCamera({
                           flex: 1,
                           borderRadius: 40,
                           backgroundColor: C.white,
+                          transform: [{ scale: busy ? 0.88 : 1 }],
                         }}
                       />
                     </Pressable>
@@ -227,14 +305,11 @@ export default function PocketCamera({
                     else void request();
                   }}
                 />
-                <Pressable onPress={onClose} style={s.link}>
-                  <Text style={{ color: C.white }}>先不拍照</Text>
-                </Pressable>
               </View>
             )}
           </View>
         </EdgeBack>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
