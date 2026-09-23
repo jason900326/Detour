@@ -28,6 +28,8 @@ const ACTIVE = "@detour/pocket/active/v2";
 const HISTORY = "@detour/pocket/history/v2";
 export function usePocketJourney() {
   const [journey, setJourney] = useState<PocketJourney | null>(null);
+  const [recoverableJourney, setRecoverableJourney] =
+    useState<PocketJourney | null>(null);
   const current = useRef<PocketJourney | null>(null);
   const [history, setHistory] = useState<PocketJourney[]>([]);
   const historyRef = useRef<PocketJourney[]>([]);
@@ -51,6 +53,7 @@ export function usePocketJourney() {
   const startLock = useRef(false);
   const finishLock = useRef(false);
   const actionAt = useRef(0);
+  const appState = useRef(AppState.currentState);
   const enqueue = (task: () => Promise<void>) => {
     saveQueue.current = saveQueue.current
       .then(task)
@@ -59,10 +62,70 @@ export function usePocketJourney() {
   };
   function update(value: PocketJourney) {
     if (finishLock.current) return;
-    current.current = value;
-    setJourney(value);
-    if (value.phase !== "finished")
-      void enqueue(() => writeStored(ACTIVE, value));
+    const next =
+      value.phase !== "finished" && !value.suspendedAt
+        ? { ...value, lastActiveAt: Date.now() }
+        : value;
+    current.current = next;
+    setJourney(next);
+    if (next.phase !== "finished")
+      void enqueue(() => writeStored(ACTIVE, next));
+  }
+
+  function resumeValue(value: PocketJourney, time = Date.now()) {
+    const pausedFrom = value.suspendedAt ?? value.lastActiveAt;
+    const pausedFor = pausedFrom ? Math.max(0, time - pausedFrom) : 0;
+    return {
+      ...value,
+      startedAt: value.startedAt + pausedFor,
+      targetSince: value.targetSince ? value.targetSince + pausedFor : 0,
+      suspendedAt: undefined,
+      lastActiveAt: time,
+    };
+  }
+
+  function resumeRecovered() {
+    const saved = recoverableJourney;
+    if (!saved) return;
+    const time = Date.now();
+    const resumed = resumeValue(saved, time);
+    generation.current++;
+    lastFix.current = time;
+    current.current = resumed;
+    setRecoverableJourney(null);
+    setJourney(resumed);
+    setNow(time);
+    void enqueue(() => writeStored(ACTIVE, resumed));
+  }
+
+  async function restartRecovered() {
+    generation.current++;
+    await saveQueue.current;
+    await removeStored(ACTIVE);
+    setRecoverableJourney(null);
+    current.current = null;
+    setJourney(null);
+    await start();
+  }
+
+  function toggleFavorite(id: string) {
+    const entries = historyRef.current.map((entry) =>
+      entry.id === id ? { ...entry, favorite: !entry.favorite } : entry,
+    );
+    return enqueue(async () => {
+      await writeStored(HISTORY, entries);
+      historyRef.current = entries;
+      setHistory(entries);
+    });
+  }
+
+  function deleteHistory(id: string) {
+    const entries = historyRef.current.filter((entry) => entry.id !== id);
+    return enqueue(async () => {
+      await writeStored(HISTORY, entries);
+      historyRef.current = entries;
+      setHistory(entries);
+    });
   }
   useEffect(() => {
     let alive = true;
@@ -113,8 +176,9 @@ export function usePocketJourney() {
           active.phase !== "finished" &&
           !historyRef.current.some((p) => p.id === active.id)
         ) {
-          current.current = active;
-          setJourney(active);
+          // A stored active journey belongs to a previous process. Keep it
+          // recoverable, but do not silently throw the user back into it.
+          setRecoverableJourney(active);
         }
       } catch {
         setError("收藏暫時無法讀取，請重新開啟再試。");
@@ -249,6 +313,7 @@ export function usePocketJourney() {
         phase: "exploration",
         closingTargetUsed: false,
         demo,
+        lastActiveAt: time,
       };
       generation.current++;
       lastFix.current = time;
@@ -298,6 +363,8 @@ export function usePocketJourney() {
       target: null,
       finishedAt: Date.now(),
       endpoint: arrived ? j.endpoint : { name: "你停下來的這一角", point },
+      suspendedAt: undefined,
+      lastActiveAt: undefined,
     };
     const entries = [
       done,
@@ -394,7 +461,12 @@ export function usePocketJourney() {
       const time = Date.now();
       setNow(time);
       const j = current.current;
-      if (!j || j.phase === "finished") return;
+      if (!j || j.phase === "finished" || j.suspendedAt) return;
+      if (time - (j.lastActiveAt ?? 0) >= 15000) {
+        const checkpoint = { ...j, lastActiveAt: time };
+        current.current = checkpoint;
+        void enqueue(() => writeStored(ACTIVE, checkpoint));
+      }
       const next = phaseAt((time - j.startedAt) / 1000, j.found.length);
       if (next === "finished") {
         void finish();
@@ -422,7 +494,31 @@ export function usePocketJourney() {
     tick();
     const interval = setInterval(tick, 1000);
     const subscription = AppState.addEventListener("change", (s) => {
-      if (s === "active") tick();
+      appState.current = s;
+      if (s !== "active") {
+        const j = current.current;
+        if (j && j.phase !== "finished" && !j.suspendedAt) {
+          const time = Date.now();
+          const suspended = {
+            ...j,
+            suspendedAt: time,
+            lastActiveAt: time,
+          };
+          current.current = suspended;
+          setJourney(suspended);
+          void enqueue(() => writeStored(ACTIVE, suspended));
+        }
+        return;
+      }
+      const j = current.current;
+      if (j?.suspendedAt) {
+        const resumed = resumeValue(j);
+        current.current = resumed;
+        setJourney(resumed);
+        setNow(Date.now());
+        void enqueue(() => writeStored(ACTIVE, resumed));
+      }
+      tick();
     });
     return () => {
       clearInterval(interval);
@@ -506,6 +602,7 @@ export function usePocketJourney() {
   }
   return {
     journey,
+    recoverableJourney,
     history,
     ready,
     starting,
@@ -517,6 +614,10 @@ export function usePocketJourney() {
     error,
     heading,
     start,
+    resumeRecovered,
+    restartRecovered,
+    toggleFavorite,
+    deleteHistory,
     discover,
     extraDiscovery,
     finish,
