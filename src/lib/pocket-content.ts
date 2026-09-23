@@ -5,6 +5,7 @@ import type {
   MissionRole,
   ObservationConcept,
 } from "./pocket-mission-grammar.ts";
+import { CURATED_CORE_EXPANSION } from "./pocket-curated-mission-expansion.ts";
 
 export type Difficulty = "easy" | "medium" | "hard";
 export type Environment = "street" | "green" | "commercial";
@@ -595,6 +596,8 @@ export const DISCOVERIES: Discovery[] = [
     tags: ["signage", "age", "texture"],
     unsuitableFor: ["night"],
   },
+
+  ...CURATED_CORE_EXPANSION,
 
   // Development-only Night Detour content.
   {
