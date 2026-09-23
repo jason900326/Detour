@@ -5,7 +5,7 @@ import type {
   Discovery,
   Environment,
   ExperienceId,
-} from "./pocket-engine";
+} from "./pocket-content";
 import type { PocketRouteQualityMetrics } from "./pocket-route-quality";
 import {
   aggregateDiscoveryQuality,
