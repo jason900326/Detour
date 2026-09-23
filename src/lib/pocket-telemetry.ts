@@ -68,6 +68,16 @@ function isObservation(value: unknown): value is PocketDiscoveryObservation {
     (value.experienceId === undefined || isString(value.experienceId)) &&
     (value.repeatExposure === undefined ||
       typeof value.repeatExposure === "boolean") &&
+    (value.actionType === undefined || isString(value.actionType)) &&
+    (value.direction === undefined || isString(value.direction)) &&
+    (value.role === undefined || isString(value.role)) &&
+    (value.concept === undefined || isString(value.concept)) &&
+    (value.roamGapSeconds === undefined ||
+      typeof value.roamGapSeconds === "number") &&
+    (value.roamGapMeters === undefined ||
+      typeof value.roamGapMeters === "number") &&
+    (value.roamRevealReason === undefined ||
+      isString(value.roamRevealReason)) &&
     (value.selection === undefined || isRecord(value.selection))
   );
 }
@@ -157,6 +167,9 @@ export function recordPocketDiscoveryShown(input: {
   discoveryIndex: number;
   experienceId?: ExperienceId;
   repeatExposure?: boolean;
+  roamGapSeconds?: number;
+  roamGapMeters?: number;
+  roamRevealReason?: PocketDiscoveryObservation["roamRevealReason"];
   selection?: DiscoverySelectionLog;
 }) {
   return mutateRun(input.journeyId, (run) => {
@@ -183,6 +196,13 @@ export function recordPocketDiscoveryShown(input: {
       discoveryIndex: input.discoveryIndex,
       experienceId: input.experienceId ?? run.experienceId ?? "core",
       repeatExposure: input.repeatExposure ?? false,
+      actionType: input.target.actionType,
+      direction: input.target.direction,
+      role: input.target.role,
+      concept: input.target.concept,
+      roamGapSeconds: input.roamGapSeconds,
+      roamGapMeters: input.roamGapMeters,
+      roamRevealReason: input.roamRevealReason,
       selection: input.selection,
     };
 
