@@ -260,6 +260,24 @@ export function Trail({
       }
     >
       <Svg height={height} width="100%" viewBox="0 0 240 100">
+        {framed && (
+          <>
+            <Path
+              d="M18 25 H222 M18 50 H222 M18 75 H222"
+              stroke={C.line}
+              strokeWidth={1}
+              strokeDasharray="3 7"
+              opacity={0.42}
+            />
+            <Path
+              d="M60 10 V90 M120 10 V90 M180 10 V90"
+              stroke={C.line}
+              strokeWidth={1}
+              strokeDasharray="3 7"
+              opacity={0.32}
+            />
+          </>
+        )}
         <Path
           d={geometry.path}
           stroke="#E8E2D5"
@@ -346,7 +364,11 @@ export function Ticket({
             ))}
           </View>
         ) : (
-          <Text style={s.emptyTicket}>第一個發現，會留在這裡。</Text>
+          <Text style={s.emptyTicket}>
+            {journey.phase === "finished"
+              ? "這趟沒有留下發現。"
+              : "第一個發現，會留在這裡。"}
+          </Text>
         )}
       </View>
       <View style={s.row}>
