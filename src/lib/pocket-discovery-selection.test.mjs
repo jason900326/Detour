@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   chooseDiscoveryDecision,
+  compactDiscoverySelectionLog,
   discoveryDifficultyPolicy,
   generateDiscoveryCandidates,
   rankDiscoveryCandidates,
@@ -368,4 +369,26 @@ test("decision logs are privacy-safe and contain no location fields", () => {
   ]) {
     assert.equal(serialized.includes(forbidden), false, forbidden);
   }
+});
+
+
+test("compacted upload logs retain the selected candidate even outside the top N", () => {
+  const catalogue = Array.from({ length: 10 }, (_, index) =>
+    discovery({ id: `item-${index}` }),
+  );
+  const decision = chooseDiscoveryDecision(context(), {
+    discoveries: catalogue,
+    randomValues: { difficulty: 0.2, selection: 0.999 },
+    timestamp: 7,
+  });
+
+  const compact = compactDiscoverySelectionLog(decision.log, 4);
+
+  assert.equal(compact.candidates.length, 4);
+  assert.equal(
+    compact.candidates.some(
+      (candidate) => candidate.id === decision.discovery.id,
+    ),
+    true,
+  );
 });
