@@ -1,5 +1,7 @@
-import { angle, bearing, distance, type Point } from "./pocket-engine";
-import { distanceToPolyline } from "./navigation-engine";
+export type RoutePoint = {
+  latitude: number;
+  longitude: number;
+};
 
 export type PocketRouteQualityMetrics = {
   novelStreetRatio: number;
@@ -9,14 +11,89 @@ export type PocketRouteQualityMetrics = {
   rerouteCount: number;
 };
 
+const EARTH_METERS_PER_DEGREE = 111_320;
+
 function ratio(numerator: number, denominator: number) {
   if (!denominator) return 0;
   return Math.round((numerator / denominator) * 10_000) / 10_000;
 }
 
+function distance(a: RoutePoint, b: RoutePoint) {
+  const r = Math.PI / 180;
+  const h =
+    Math.sin(((b.latitude - a.latitude) * r) / 2) ** 2 +
+    Math.cos(a.latitude * r) *
+      Math.cos(b.latitude * r) *
+      Math.sin(((b.longitude - a.longitude) * r) / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function bearing(a: RoutePoint, b: RoutePoint) {
+  const r = Math.PI / 180;
+  const deltaLongitude = (b.longitude - a.longitude) * r;
+  return (
+    (Math.atan2(
+      Math.sin(deltaLongitude) * Math.cos(b.latitude * r),
+      Math.cos(a.latitude * r) * Math.sin(b.latitude * r) -
+        Math.sin(a.latitude * r) *
+          Math.cos(b.latitude * r) *
+          Math.cos(deltaLongitude),
+    ) /
+      r +
+      360) %
+    360
+  );
+}
+
+function angle(a: number, b: number) {
+  return ((a - b + 540) % 360) - 180;
+}
+
+function distanceToSegment(
+  point: RoutePoint,
+  start: RoutePoint,
+  end: RoutePoint,
+) {
+  const latitudeRadians = (point.latitude * Math.PI) / 180;
+  const cosLatitude = Math.max(0.1, Math.cos(latitudeRadians));
+  const toLocal = (value: RoutePoint) => ({
+    x:
+      (value.longitude - point.longitude) *
+      EARTH_METERS_PER_DEGREE *
+      cosLatitude,
+    y:
+      (value.latitude - point.latitude) *
+      EARTH_METERS_PER_DEGREE,
+  });
+  const a = toLocal(start);
+  const b = toLocal(end);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const denominator = dx * dx + dy * dy;
+  if (!denominator) return Math.hypot(a.x, a.y);
+  const projection = Math.max(
+    0,
+    Math.min(1, -(a.x * dx + a.y * dy) / denominator),
+  );
+  return Math.hypot(a.x + projection * dx, a.y + projection * dy);
+}
+
+function distanceToPolyline(point: RoutePoint, line: RoutePoint[]) {
+  if (!line.length) return Number.POSITIVE_INFINITY;
+  if (line.length === 1) return distance(point, line[0]);
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < line.length; index++) {
+    best = Math.min(
+      best,
+      distanceToSegment(point, line[index - 1], line[index]),
+    );
+  }
+  return best;
+}
+
 function overlapsAny(
-  point: Point,
-  routes: Point[][],
+  point: RoutePoint,
+  routes: RoutePoint[][],
   thresholdMeters: number,
 ) {
   return routes.some(
@@ -32,8 +109,8 @@ function overlapsAny(
  * points are near previously walked polylines.
  */
 export function recentJourneyOverlapRatio(
-  trace: Point[],
-  recentRoutes: Point[][],
+  trace: RoutePoint[],
+  recentRoutes: RoutePoint[][],
   thresholdMeters = 18,
 ) {
   if (trace.length < 2 || !recentRoutes.some((route) => route.length > 1))
@@ -50,7 +127,7 @@ export function recentJourneyOverlapRatio(
  * current trace, which would otherwise make every point look repeated.
  */
 export function currentJourneyOverlapRatio(
-  trace: Point[],
+  trace: RoutePoint[],
   thresholdMeters = 18,
 ) {
   if (trace.length < 4) return 0;
@@ -70,7 +147,7 @@ export function currentJourneyOverlapRatio(
  * Immediate reversal is a useful approximation for backtracking even though
  * GPS traces are not authoritative street graphs.
  */
-export function backtrackRatio(trace: Point[]) {
+export function backtrackRatio(trace: RoutePoint[]) {
   if (trace.length < 3) return 0;
   let totalMeters = 0;
   let backtrackMeters = 0;
@@ -92,8 +169,8 @@ export function backtrackRatio(trace: Point[]) {
 }
 
 export function novelStreetRatio(
-  trace: Point[],
-  recentRoutes: Point[][],
+  trace: RoutePoint[],
+  recentRoutes: RoutePoint[][],
   thresholdMeters = 18,
 ) {
   if (trace.length < 2) return 0;
@@ -112,8 +189,8 @@ export function novelStreetRatio(
 }
 
 export function computePocketRouteQuality(
-  trace: Point[],
-  recentRoutes: Point[][],
+  trace: RoutePoint[],
+  recentRoutes: RoutePoint[][],
   rerouteCount: number,
 ): PocketRouteQualityMetrics {
   return {
