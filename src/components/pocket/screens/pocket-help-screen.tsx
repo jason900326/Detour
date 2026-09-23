@@ -6,10 +6,12 @@ export function PocketHelpScreen({
   active,
   onBack,
   onDemo,
+  onNightExperience,
 }: {
   active: boolean;
   onBack: () => void;
   onDemo: () => void;
+  onNightExperience: () => void;
 }) {
   return (
     <>
@@ -40,6 +42,15 @@ export function PocketHelpScreen({
             disabled={active}
             onPress={onDemo}
           />
+          <Button
+            secondary
+            label="Night Detour 內容測試"
+            disabled={active}
+            onPress={onNightExperience}
+          />
+          <Text style={s.muted}>
+            Night Detour 只在開發版出現；正式首頁仍然直接「繞一下？」。
+          </Text>
         </View>
       )}
     </>
