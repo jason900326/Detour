@@ -5,16 +5,18 @@ import * as FileSystem from "expo-file-system/legacy";
 import { playPocketFeedback } from "../lib/pocket-feedback";
 import {
   appendFix,
-  chooseDiscovery,
   distance,
-  getExperience,
   phaseAt,
   shouldDiscardShortEmptyJourney,
-  type Environment,
-  type ExperienceId,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
+import {
+  chooseDiscovery,
+  getExperience,
+  type Environment,
+  type ExperienceId,
+} from "../lib/pocket-content";
 import {
   nearbyPlaces,
   planLeg,
