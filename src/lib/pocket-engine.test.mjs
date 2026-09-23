@@ -5,6 +5,7 @@ import {
   phaseAt,
   appendFix,
   DISCOVERIES,
+  shouldDiscardShortEmptyJourney,
 } from "./pocket-engine.ts";
 test("the first discovery is always easy across random draws", () => {
   for (let i = 0; i < 100; i++)
@@ -58,5 +59,22 @@ test("GPS noise and teleportation do not contaminate the walked route", () => {
   assert.equal(
     appendFix(trace, { latitude: 25.0001, longitude: 121 }, 5, 4).length,
     2,
+  );
+});
+
+test("short empty exits do not create souvenir tickets", () => {
+  const base = { startedAt: 1_000, found: [], photos: [] };
+  assert.equal(shouldDiscardShortEmptyJourney(base, 60_999), true);
+  assert.equal(shouldDiscardShortEmptyJourney(base, 61_000), false);
+  assert.equal(
+    shouldDiscardShortEmptyJourney(
+      { ...base, found: [{ id: "x" }] },
+      20_000,
+    ),
+    false,
+  );
+  assert.equal(
+    shouldDiscardShortEmptyJourney({ ...base, photos: ["photo.jpg"] }, 20_000),
+    false,
   );
 });
