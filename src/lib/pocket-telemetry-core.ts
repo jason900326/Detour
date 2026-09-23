@@ -47,7 +47,10 @@ function aggregate(
   ).length;
   const seconds = observations
     .map((observation) => observation.secondsVisible)
-    .filter((value): value is number => Number.isFinite(value));
+    .filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    );
   const sorted = [...seconds].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   const medianSecondsVisible = !sorted.length
