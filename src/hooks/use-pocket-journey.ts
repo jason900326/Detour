@@ -133,6 +133,10 @@ export function usePocketJourney() {
         completedAt,
         photoCount: saved.photos.length,
         foundCount: saved.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (completedAt - saved.startedAt) / 1000,
+        ),
         routeQuality: computePocketRouteQuality(
           saved.trace,
           historyRef.current.slice(0, 2).map((entry) => entry.trace),
@@ -418,6 +422,10 @@ export function usePocketJourney() {
         completedAt,
         photoCount: j.photos.length,
         foundCount: j.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (completedAt - j.startedAt) / 1000,
+        ),
         routeQuality: computePocketRouteQuality(
           j.trace,
           historyRef.current.slice(0, 2).map((entry) => entry.trace),
@@ -474,6 +482,10 @@ export function usePocketJourney() {
         completedAt: done.finishedAt!,
         photoCount: done.photos.length,
         foundCount: done.found.length,
+        actualDurationSeconds: Math.max(
+          0,
+          (done.finishedAt! - done.startedAt) / 1000,
+        ),
         routeQuality: computePocketRouteQuality(
           done.trace,
           historyRef.current
