@@ -136,6 +136,18 @@ function normalizePocket(body: any) {
   };
 }
 
+function pocketCompatibilityRow(row: Record<string, unknown>) {
+  const {
+    pocket_discoveries: _discoveries,
+    discovery_summary: _summary,
+    route_quality: _routeQuality,
+    pocket_swap_count: _swapCount,
+    ...legacyColumns
+  } = row;
+
+  return legacyColumns;
+}
+
 function normalize(body: any) {
   const testerId =
     text(body?.testerId, 40);
@@ -325,7 +337,7 @@ Deno.serve(async (req: Request) => {
         },
       );
 
-    const { error } =
+    let { error } =
       await admin
         .from("playtest_runs")
         .upsert(
@@ -335,6 +347,38 @@ Deno.serve(async (req: Request) => {
               "tester_id,local_run_id",
           },
         );
+
+    // Pocket telemetry is intentionally deploy-order tolerant. If the Edge
+    // Function lands before the additive DB migration and PostgREST has not
+    // learned the new columns yet, keep the compatibility row instead of
+    // turning analytics into a Journey failure.
+    if (
+      error &&
+      body?.mode === "sync-pocket-run" &&
+      (error.code === "PGRST204" ||
+        error.message.includes("schema cache"))
+    ) {
+      const fallback =
+        await admin
+          .from("playtest_runs")
+          .upsert(
+            pocketCompatibilityRow(
+              row as Record<string, unknown>,
+            ),
+            {
+              onConflict:
+                "tester_id,local_run_id",
+            },
+          );
+      error = fallback.error;
+
+      if (!error) {
+        return json({
+          ok: true,
+          metricsStored: false,
+        });
+      }
+    }
 
     if (error) {
       console.error(error);
@@ -349,7 +393,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return json({ ok: true });
+    return json({
+      ok: true,
+      metricsStored:
+        body?.mode === "sync-pocket-run"
+          ? true
+          : undefined,
+    });
   } catch (error) {
     console.error(error);
 
