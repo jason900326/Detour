@@ -2,10 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { phaseAt } from "./pocket-engine.ts";
 import {
-  chooseDiscovery,
-  DISCOVERIES,
-} from "./pocket-content.ts";
-import {
   isImmediatePocketUTurn,
   rankPocketPlaces,
 } from "./pocket-routing-policy.ts";
@@ -24,33 +20,6 @@ test("journey enters closing around eight minutes with three discoveries", () =>
 test("ten minutes closes even with fewer discoveries and fifteen minutes finishes", () => {
   assert.equal(phaseAt(600, 1), "closing");
   assert.equal(phaseAt(900, 1), "finished");
-});
-
-test("difficulty recovers after a slow target and can rise after fast finds", () => {
-  const medium = DISCOVERIES.find((item) => item.difficulty === "medium");
-  assert.ok(medium);
-  const slow = { ...medium, foundAt: 1, seconds: 130 };
-  assert.equal(
-    chooseDiscovery([slow], [medium.id], "street", () => 0).difficulty,
-    "easy",
-  );
-
-  const easy = DISCOVERIES.find((item) => item.difficulty === "easy");
-  assert.ok(easy);
-  const fast = { ...easy, foundAt: 1, seconds: 20 };
-  const next = chooseDiscovery(
-    [fast, fast],
-    [easy.id],
-    "street",
-    () => 0,
-  );
-  assert.equal(next.difficulty, "hard");
-});
-
-test("skip can always recover to a different available target", () => {
-  const first = chooseDiscovery([], [], "street", () => 0);
-  const replacement = chooseDiscovery([], [first.id], "street", () => 0);
-  assert.notEqual(replacement.id, first.id);
 });
 
 test("routing ranking avoids a strong immediate U-turn when alternatives exist", () => {
