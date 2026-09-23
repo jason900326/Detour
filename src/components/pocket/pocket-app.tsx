@@ -901,7 +901,7 @@ export default function PocketApp() {
                                 padding: 4,
                                 paddingTop: 3,
                                 backgroundColor: C.paper,
-                                borderTopWidth: 1,
+                                borderTopWidth: shareThumbs.length ? 1 : 0,
                                 borderColor: "#E4D8C8",
                                 overflow: "hidden",
                               }}
@@ -928,15 +928,6 @@ export default function PocketApp() {
                                   />
                                 </View>
                               ))}
-                              {Array.from(
-                                { length: Math.max(0, 4 - shareThumbs.length) },
-                                (_, index) => (
-                                  <View
-                                    key={`share-empty-${index}`}
-                                    style={{ flex: 1, minWidth: 0 }}
-                                  />
-                                ),
-                              )}
                             </View>
                           </View>
                         </View>
