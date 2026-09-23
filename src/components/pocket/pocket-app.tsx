@@ -78,7 +78,6 @@ export default function PocketApp() {
   const [endSheet, setEndSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState("");
-  const [showShareRoute, setShowShareRoute] = useState(false);
   const shareRef = useRef<View>(null);
   const j = c.journey;
   const active = j && j.phase !== "finished";
@@ -93,8 +92,6 @@ export default function PocketApp() {
     displayed && cover
       ? displayed.photos.filter((uri) => uri !== cover).slice(0, 4)
       : [];
-  const displayedRouteMeters = displayed ? traceMeters(displayed) : 0;
-  const canShareRoute = displayedRouteMeters >= 35;
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
   const hasJourneyMemories = !!j && (j.photos.length > 0 || j.found.length > 0);
   const journeyHasRoute = !!j && traceMeters(j) >= 35;
@@ -111,7 +108,6 @@ export default function PocketApp() {
     setAtHome(true);
     setCamera(false);
     setAlbum(false);
-    setShowShareRoute(false);
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
@@ -651,7 +647,6 @@ export default function PocketApp() {
                         setShareOrigin("home");
                         setLoadedCover("");
                         setCoverError(false);
-                        setShowShareRoute(j.photos.length === 0 && traceMeters(j) >= 35);
                         setScreen("share");
                       }}
                     />
@@ -766,9 +761,6 @@ export default function PocketApp() {
                       setShareOrigin("detail");
                       setLoadedCover("");
                       setCoverError(false);
-                      setShowShareRoute(
-                        displayed.photos.length === 0 && traceMeters(displayed) >= 35,
-                      );
                       setScreen("share");
                     }}
                   />
@@ -845,44 +837,6 @@ export default function PocketApp() {
                       </ScrollView>
                     </View>
                   )}
-                  {canShareRoute && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`分享圖中的路線目前${showShareRoute ? "顯示" : "隱藏"}，點一下切換`}
-                      onPress={() => setShowShareRoute((value) => !value)}
-                      style={[
-                        s.row,
-                        {
-                          alignSelf: "flex-start",
-                          borderRadius: 999,
-                          borderWidth: 1,
-                          borderColor: showShareRoute ? C.orange : C.line,
-                          backgroundColor: showShareRoute ? "#FDE9E1" : C.white,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          marginBottom: 14,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          color: showShareRoute ? C.orange : C.muted,
-                          fontSize: 12,
-                          fontWeight: "700",
-                        }}
-                      >
-                        路線 {showShareRoute ? "顯示中" : "不放"}
-                      </Text>
-                      <View
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor: showShareRoute ? C.orange : C.line,
-                        }}
-                      />
-                    </Pressable>
-                  )}
                   <View
                     ref={shareRef}
                     collapsable={false}
@@ -896,159 +850,248 @@ export default function PocketApp() {
                     }}
                   >
                     {cover ? (
-                      <>
-                        <View style={{ position: "relative" }}>
-                          <Image
-                            key={cover}
-                            source={{ uri: cover }}
-                            resizeMode="contain"
-                            onLoad={() => {
-                              if (currentCover.current !== cover) return;
-                              setLoadedCover(cover);
-                              setCoverError(false);
-                            }}
-                            onError={() => {
-                              if (currentCover.current === cover)
-                                setCoverError(true);
-                            }}
-                            style={{
-                              width: showShareRoute ? "66%" : "74%",
-                              aspectRatio: PHOTO_ASPECT,
-                              alignSelf: "center",
-                              borderRadius: 12,
-                              backgroundColor: C.white,
-                            }}
-                          />
-                          <View
-                            style={{
-                              position: "absolute",
-                              right: 8,
-                              top: 8,
-                              borderRadius: 999,
-                              backgroundColor: "#F7F3EAEE",
-                              paddingHorizontal: 8,
-                              paddingVertical: 5,
-                              borderWidth: 1,
-                              borderColor: "#E7E1D6",
-                            }}
-                          >
-                            <Text
+                      <View style={{ flex: 1 }}>
+                        <View>
+                          <View style={{ position: "relative" }}>
+                            <Image
+                              key={cover}
+                              source={{ uri: cover }}
+                              resizeMode="contain"
+                              onLoad={() => {
+                                if (currentCover.current !== cover) return;
+                                setLoadedCover(cover);
+                                setCoverError(false);
+                              }}
+                              onError={() => {
+                                if (currentCover.current === cover)
+                                  setCoverError(true);
+                              }}
                               style={{
-                                fontFamily: mono,
-                                fontSize: 9,
-                                color: C.ink,
-                                letterSpacing: 0.8,
+                                width: "74%",
+                                aspectRatio: PHOTO_ASPECT,
+                                alignSelf: "center",
+                                borderRadius: 12,
+                                backgroundColor: C.white,
+                              }}
+                            />
+                            <View
+                              style={{
+                                position: "absolute",
+                                right: 8,
+                                top: 8,
+                                borderRadius: 999,
+                                backgroundColor: "#F7F3EAEE",
+                                paddingHorizontal: 8,
+                                paddingVertical: 5,
+                                borderWidth: 1,
+                                borderColor: "#E7E1D6",
                               }}
                             >
-                              № {displayed.id.slice(-5)}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {!!shareThumbs.length && (
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "center",
-                              gap: 7,
-                              marginTop: 8,
-                            }}
-                          >
-                            {shareThumbs.map((uri) => (
-                              <Image
-                                key={uri}
-                                source={{ uri }}
-                                resizeMode="contain"
+                              <Text
                                 style={{
-                                  width: "18%",
-                                  aspectRatio: PHOTO_ASPECT,
-                                  borderRadius: 8,
-                                  backgroundColor: C.white,
-                                  borderWidth: 1,
-                                  borderColor: "#E6E1D6",
+                                  fontFamily: mono,
+                                  fontSize: 9,
+                                  color: C.ink,
+                                  letterSpacing: 0.8,
                                 }}
-                              />
-                            ))}
+                              >
+                                № {displayed.id.slice(-5)}
+                              </Text>
+                            </View>
                           </View>
-                        )}
+
+                          {!!shareThumbs.length && (
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                justifyContent: "center",
+                                gap: 7,
+                                marginTop: -5,
+                                zIndex: 2,
+                              }}
+                            >
+                              {shareThumbs.map((uri, index) => (
+                                <View
+                                  key={uri}
+                                  style={{
+                                    width: "18%",
+                                    padding: 2,
+                                    borderRadius: 9,
+                                    backgroundColor: C.paper,
+                                    transform: [
+                                      {
+                                        rotate:
+                                          index % 2 === 0 ? "-1deg" : "1deg",
+                                      },
+                                    ],
+                                  }}
+                                >
+                                  <Image
+                                    source={{ uri }}
+                                    resizeMode="contain"
+                                    style={{
+                                      width: "100%",
+                                      aspectRatio: PHOTO_ASPECT,
+                                      borderRadius: 7,
+                                      backgroundColor: C.white,
+                                      borderWidth: 1,
+                                      borderColor: "#E6E1D6",
+                                    }}
+                                  />
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
 
                         <View
                           style={{
-                            marginTop: 10,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
+                            flex: 1,
+                            justifyContent: "center",
+                            paddingVertical: 8,
+                          }}
+                        >
+                          <View
+                            style={{
+                              alignSelf: "center",
+                              width: "88%",
+                              minHeight: 48,
+                              borderRadius: 14,
+                              backgroundColor: "#EEF1E3",
+                              borderWidth: 1,
+                              borderColor: "#DDE3CF",
+                              paddingHorizontal: 12,
+                              paddingVertical: 9,
+                              transform: [{ rotate: "-0.8deg" }],
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 10,
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={{
+                                  fontFamily: mono,
+                                  fontSize: 8.5,
+                                  color: "#69725F",
+                                  letterSpacing: 1,
+                                  marginBottom: 4,
+                                }}
+                              >
+                                DETOUR NOTE
+                              </Text>
+                              <Text
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={{
+                                  fontFamily: mono,
+                                  fontSize: 10.5,
+                                  color: C.ink,
+                                  letterSpacing: 0.4,
+                                }}
+                              >
+                                {new Date(
+                                  displayed.startedAt,
+                                ).toLocaleDateString("zh-TW", {
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                })}{" "}
+                                · {String(displayed.found.length).padStart(2, "0")} 發現
+                                · {String(displayed.photos.length).padStart(2, "0")} 張
+                              </Text>
+                            </View>
+                            <View
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 14,
+                                backgroundColor: C.orange,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: C.white,
+                                  fontSize: 15,
+                                  fontWeight: "900",
+                                }}
+                              >
+                                ✦
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <View
+                          style={{
+                            paddingTop: 8,
                             paddingHorizontal: 2,
                           }}
                         >
-                          <Text
-                            style={{
-                              fontFamily: mono,
-                              fontSize: 9,
-                              color: C.muted,
-                              letterSpacing: 0.9,
-                            }}
-                          >
-                            FIELD NOTE · {new Date(
-                              displayed.startedAt,
-                            ).toLocaleDateString("zh-TW", {
-                              month: "2-digit",
-                              day: "2-digit",
-                            })}
-                          </Text>
                           <View
+                            pointerEvents="none"
                             style={{
-                              width: 42,
-                              height: 1,
-                              backgroundColor: C.orange,
-                              transform: [{ rotate: "-7deg" }],
+                              position: "absolute",
+                              left: -8,
+                              right: 18,
+                              top: 14,
+                              height: 44,
+                              borderRadius: 16,
+                              backgroundColor: C.purple,
+                              opacity: 0.36,
+                              transform: [{ rotate: "-1.5deg" }],
                             }}
                           />
-                        </View>
-
-                        {showShareRoute && canShareRoute && (
-                          <View style={{ marginTop: 7 }}>
-                            <Trail points={displayed.trace} height={42} framed />
+                          <View
+                            pointerEvents="none"
+                            style={{
+                              position: "absolute",
+                              left: 28,
+                              right: -8,
+                              top: 22,
+                              height: 42,
+                              borderRadius: 16,
+                              backgroundColor: C.green,
+                              opacity: 0.42,
+                              transform: [{ rotate: "1.2deg" }],
+                            }}
+                          />
+                          <View
+                            style={{
+                              paddingTop: 12,
+                              paddingBottom: 2,
+                            }}
+                          >
+                            <DetourBrand />
+                            <Text
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              style={{
+                                fontSize: 22,
+                                lineHeight: 28,
+                                marginTop: 8,
+                              }}
+                            >
+                              {displayed.found.map((f) => f.emoji).join(" ")}
+                            </Text>
+                            <Text
+                              numberOfLines={2}
+                              adjustsFontSizeToFit
+                              style={{
+                                fontSize: 21,
+                                lineHeight: 27,
+                                fontWeight: "800",
+                                color: C.ink,
+                                marginTop: 2,
+                              }}
+                            >
+                              沒有目的地。卻遇見了這個。
+                            </Text>
                           </View>
-                        )}
-
-                        <View
-                          style={{
-                            marginTop: "auto",
-                            borderTopWidth: 1,
-                            borderStyle: "dashed",
-                            borderColor: C.line,
-                            paddingTop: 10,
-                          }}
-                        >
-                          <DetourBrand />
-                          <Text
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                            style={{
-                              fontSize: 22,
-                              lineHeight: 28,
-                              marginTop: 8,
-                            }}
-                          >
-                            {displayed.found.map((f) => f.emoji).join(" ")}
-                          </Text>
-                          <Text
-                            numberOfLines={2}
-                            adjustsFontSizeToFit
-                            style={{
-                              fontSize: 21,
-                              lineHeight: 27,
-                              fontWeight: "800",
-                              color: C.ink,
-                              marginTop: 2,
-                            }}
-                          >
-                            沒有目的地。卻遇見了這個。
-                          </Text>
                         </View>
-                      </>
-                    ) : (
+                      </View>                    ) : (
                       <>
                         <DetourBrand />
                         <Text
@@ -1058,25 +1101,14 @@ export default function PocketApp() {
                               fontSize: 27,
                               lineHeight: 35,
                               marginTop: 18,
-                              marginBottom: showShareRoute && canShareRoute ? 12 : 18,
+                              marginBottom: 18,
                             },
                           ]}
                         >
-                          {showShareRoute && canShareRoute ? (
-                            <>
-                              沒有特別去哪，{"\n"}但留下了這條路。
-                            </>
-                          ) : (
-                            <>
-                              沒有特別去哪，{"\n"}卻帶回了一點什麼。
-                            </>
-                          )}
+                          <>
+                            沒有特別去哪，{"\n"}卻帶回了一點什麼。
+                          </>
                         </Text>
-                        {showShareRoute && canShareRoute && (
-                          <View style={{ marginBottom: 13 }}>
-                            <Trail points={displayed.trace} height={165} framed />
-                          </View>
-                        )}
                         <Ticket journey={displayed} compact />
                       </>
                     )}
