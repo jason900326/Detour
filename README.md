@@ -35,4 +35,4 @@ npm run lint
 npm test
 ```
 
-完整概念見 [Playtest 規格](docs/V2_PLAYTEST_SPEC.md)，本次設計與外測注意點見 [設計筆記](docs/POCKET_PLAYTEST.md)。
+完整概念見 [Playtest 規格](docs/V2_PLAYTEST_SPEC.md)，本次設計與外測注意點見 [設計筆記](docs/POCKET_PLAYTEST.md)。內容／Experience 架構見 [Pocket architecture](docs/POCKET_ARCHITECTURE.md)；未來付費方向僅記錄在 [Monetization hypotheses](docs/MONETIZATION_HYPOTHESES.md)，目前沒有付費實作。
