@@ -166,7 +166,7 @@ export default function PocketApp() {
       )}
     </View>
   );
-  if (!c.ready || c.starting || c.finishing)
+  if (!c.ready || c.finishing)
     return (
       <SafeAreaView
         style={[
@@ -235,11 +235,13 @@ export default function PocketApp() {
                   )}
                   <Button
                     label={
-                      active
-                        ? "繼續這趟 ↗"
-                        : completed
-                          ? "看看這趟票根"
-                          : "繞一下？"
+                      c.starting
+                        ? "找位置中…"
+                        : active
+                          ? "繼續這趟 ↗"
+                          : completed
+                            ? "看看這趟票根"
+                            : "繞一下？"
                     }
                     onPress={() => {
                       setAtHome(false);
