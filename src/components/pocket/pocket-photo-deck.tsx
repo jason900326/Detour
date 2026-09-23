@@ -2,31 +2,57 @@ import { useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { C, Enter, s } from "./pocket-ui";
 
-export function PhotoDeck({ photos }: { photos: string[] }) {
+export function PhotoDeck({
+  photos,
+  compact = false,
+}: {
+  photos: string[];
+  compact?: boolean;
+}) {
   const [index, setIndex] = useState(0);
   if (!photos.length) return null;
   const selected = index % photos.length;
   return (
-    <View style={{ marginTop: 26, marginBottom: 12 }}>
-      <View style={[s.row, { marginBottom: 16 }]}>
-        <Text style={[s.sectionTitle, { marginVertical: 0 }]}>路上的幾眼</Text>
+    <View
+      style={{
+        marginTop: compact ? 16 : 26,
+        marginBottom: compact ? 8 : 12,
+      }}
+    >
+      <View style={[s.row, { marginBottom: compact ? 10 : 16 }]}>
+        <Text
+          style={[
+            s.sectionTitle,
+            {
+              marginVertical: 0,
+              fontSize: compact ? 18 : s.sectionTitle.fontSize,
+            },
+          ]}
+        >
+          路上的幾眼
+        </Text>
         <Text style={s.serial}>
           {selected + 1} / {photos.length}
         </Text>
       </View>
-      <View style={{ marginHorizontal: 14, paddingTop: 12 }}>
+      <View
+        style={{
+          marginHorizontal: compact ? 7 : 14,
+          paddingTop: compact ? 8 : 12,
+        }}
+      >
         {photos.length > 1 && (
           <View
             pointerEvents="none"
             style={{
               position: "absolute",
-              top: 5,
-              bottom: 5,
+              top: 4,
+              bottom: 4,
               left: 0,
               right: 0,
               backgroundColor: C.purple,
               borderRadius: 12,
-              transform: [{ rotate: "5deg" }],
+              transform: [{ rotate: "4deg" }],
             }}
           />
         )}
@@ -35,13 +61,13 @@ export function PhotoDeck({ photos }: { photos: string[] }) {
             pointerEvents="none"
             style={{
               position: "absolute",
-              top: 8,
+              top: 7,
               bottom: 0,
               left: 0,
               right: 0,
               backgroundColor: C.green,
               borderRadius: 12,
-              transform: [{ rotate: "-4deg" }],
+              transform: [{ rotate: "-3deg" }],
             }}
           />
         )}
@@ -54,7 +80,7 @@ export function PhotoDeck({ photos }: { photos: string[] }) {
             <View
               style={{
                 backgroundColor: C.white,
-                padding: 8,
+                padding: compact ? 6 : 8,
                 borderRadius: 12,
                 borderWidth: 1,
                 borderColor: C.line,
@@ -62,13 +88,22 @@ export function PhotoDeck({ photos }: { photos: string[] }) {
             >
               <Image
                 source={{ uri: photos[selected] }}
-                style={{ width: "100%", aspectRatio: 1.15, borderRadius: 6 }}
+                resizeMode="cover"
+                style={{
+                  width: "100%",
+                  aspectRatio: compact ? 1.55 : 1.15,
+                  borderRadius: 6,
+                }}
               />
-              <Text
-                style={[s.muted, { textAlign: "center", paddingVertical: 9 }]}
-              >
-                {photos.length > 1 ? "輕點，翻一張 →" : "今天，真的來過。"}
-              </Text>
+              {!compact && (
+                <Text
+                  style={[s.muted, { textAlign: "center", paddingVertical: 9 }]}
+                >
+                  {photos.length > 1
+                    ? "輕點，翻一張 →"
+                    : "今天，真的來過。"}
+                </Text>
+              )}
             </View>
           </Enter>
         </Pressable>
