@@ -78,6 +78,44 @@ export const DISCOVERY_ROAM_MIN_MS = 25_000;
 export const DISCOVERY_ROAM_MAX_MS = 60_000;
 export const DISCOVERY_ROAM_METERS = 35;
 
+export type DiscoveryRevealReason = "distance" | "timeout" | "demo";
+
+export function nextDiscoveryRevealReason(
+  journey: Pick<
+    PocketJourney,
+    | "phase"
+    | "target"
+    | "nextDiscoveryAt"
+    | "nextDiscoveryFrom"
+    | "trace"
+    | "demo"
+  >,
+  now: number,
+): DiscoveryRevealReason | null {
+  if (
+    journey.phase !== "exploration" ||
+    journey.target ||
+    !journey.nextDiscoveryAt ||
+    now < journey.nextDiscoveryAt
+  )
+    return null;
+
+  if (journey.demo) return "demo";
+
+  const waitedLongEnough =
+    now - journey.nextDiscoveryAt >=
+    DISCOVERY_ROAM_MAX_MS - DISCOVERY_ROAM_MIN_MS;
+  if (waitedLongEnough) return "timeout";
+
+  const from = journey.nextDiscoveryFrom;
+  const current = journey.trace.at(-1);
+  return from &&
+    current &&
+    distance(from, current) >= DISCOVERY_ROAM_METERS
+    ? "distance"
+    : null;
+}
+
 export function shouldRevealNextDiscovery(
   journey: Pick<
     PocketJourney,
@@ -90,24 +128,7 @@ export function shouldRevealNextDiscovery(
   >,
   now: number,
 ) {
-  if (
-    journey.phase !== "exploration" ||
-    journey.target ||
-    !journey.nextDiscoveryAt ||
-    now < journey.nextDiscoveryAt
-  )
-    return false;
-
-  if (journey.demo) return true;
-
-  const waitedLongEnough =
-    now - journey.nextDiscoveryAt >=
-    DISCOVERY_ROAM_MAX_MS - DISCOVERY_ROAM_MIN_MS;
-  if (waitedLongEnough) return true;
-
-  const from = journey.nextDiscoveryFrom;
-  const current = journey.trace.at(-1);
-  return !!from && !!current && distance(from, current) >= DISCOVERY_ROAM_METERS;
+  return nextDiscoveryRevealReason(journey, now) !== null;
 }
 
 export function distance(a: Point, b: Point) {
