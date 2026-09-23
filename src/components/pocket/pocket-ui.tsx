@@ -11,7 +11,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
-import type { PocketJourney, Point } from "../../lib/pocket-engine";
+import { distance, type PocketJourney, type Point } from "../../lib/pocket-engine";
 export const C = {
   paper: "#F7F4EC",
   ink: "#242921",
@@ -237,6 +237,11 @@ export function Trail({
   framed?: boolean;
 }) {
   if (points.length < 2) return null;
+  const traveled = points.slice(1).reduce(
+    (total, point, index) => total + distance(points[index], point),
+    0,
+  );
+  if (traveled < 35) return null;
   const geometry = trailGeometry(points);
   return (
     <View
