@@ -37,7 +37,9 @@ export function PhotoDeck({
       </View>
       <View
         style={{
-          marginHorizontal: compact ? 7 : 14,
+          width: compact ? "72%" : undefined,
+          alignSelf: compact ? "center" : undefined,
+          marginHorizontal: compact ? 0 : 14,
           paddingTop: compact ? 8 : 12,
         }}
       >
@@ -90,7 +92,7 @@ export function PhotoDeck({
                 source={{ uri: photos[selected] }}
                 resizeMode="contain"
                 style={{
-                  width: compact ? "70%" : "100%",
+                  width: "100%",
                   aspectRatio: PHOTO_ASPECT,
                   borderRadius: 6,
                   alignSelf: "center",
