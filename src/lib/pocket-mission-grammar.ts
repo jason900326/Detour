@@ -86,6 +86,7 @@ export type GeneratedMissionCandidate = MissionGrammarMetadata & {
   title: string;
   hint?: string;
   difficulty: "easy" | "medium" | "hard";
+  preferredEnvironments?: MissionEnvironment[];
   sourceTemplate: string;
 };
 
@@ -318,6 +319,80 @@ const TEMPLATE_SPECS: TemplateSpec[] = [
       "找一盆植物。",
       "找一片落葉。",
       "找一朵花。",
+    ],
+  },
+  {
+    sourceTemplate: "material-surface",
+    direction: "eye_level",
+    actionType: "find_one",
+    concept: "material",
+    role: "observation",
+    difficulty: "medium",
+    variants: [
+      "找一個金屬表面。",
+      "找一塊磁磚。",
+      "找一個透明材質。",
+      "找一個粗糙的表面。",
+      "找兩種材質接在一起。",
+    ],
+  },
+  {
+    sourceTemplate: "wear-age",
+    direction: "eye_level",
+    actionType: "find_one",
+    concept: "wear",
+    role: "observation",
+    difficulty: "medium",
+    variants: [
+      "找一個磨損的邊角。",
+      "找一塊掉漆的地方。",
+      "找一個褪色的標記。",
+      "找一個使用很久的痕跡。",
+      "找一條被磨亮的邊。",
+    ],
+  },
+  {
+    sourceTemplate: "layer-boundary",
+    direction: "around",
+    actionType: "find_one",
+    concept: "layer",
+    role: "observation",
+    difficulty: "medium",
+    variants: [
+      "找兩層重疊的東西。",
+      "找一條材質交界線。",
+      "找一個新舊表面的交界。",
+      "找一處露出底層的地方。",
+      "找一個被蓋住一部分的字。",
+    ],
+  },
+  {
+    sourceTemplate: "opening-boundary",
+    direction: "eye_level",
+    actionType: "find_one",
+    concept: "opening",
+    role: "quick",
+    difficulty: "easy",
+    variants: [
+      "找一扇打開的門。",
+      "找一扇關著的窗。",
+      "找一個入口。",
+      "找一個門框。",
+      "找一個欄杆的缺口。",
+    ],
+  },
+  {
+    sourceTemplate: "height-compare",
+    direction: "around",
+    actionType: "compare",
+    concept: "height",
+    role: "observation",
+    difficulty: "medium",
+    variants: [
+      "找兩個高度差很多的東西。",
+      "找一個比你高很多的東西。",
+      "找一個很低和一個很高的東西。",
+      "找一排高低不同的東西。",
     ],
   },
 ];
