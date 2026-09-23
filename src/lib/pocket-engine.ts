@@ -27,6 +27,12 @@ export type PocketJourney = {
   endpoint?: { name: string; point: Point };
   area?: string;
   demo?: boolean;
+  /** Persisted only while an active journey is backgrounded or awaiting cold-launch recovery. */
+  suspendedAt?: number;
+  /** Last foreground checkpoint; used to avoid counting time while the app was not actually running. */
+  lastActiveAt?: number;
+  /** History-only preference. Kept on the journey so it syncs naturally with future account storage. */
+  favorite?: boolean;
 };
 
 export function shouldDiscardShortEmptyJourney(
