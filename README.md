@@ -4,7 +4,7 @@
 
 按「繞一下？」→ 帶著探索紙條走 → 找到了，開相機留一眼（可略過）→ 從現在的位置繼續 → 收好這趟的 Emoji 票根。
 
-目前入口為 Pocket QR 版（0.48.0），`src/app/index.tsx` 使用 `src/components/pocket/pocket-app.tsx`。
+目前入口為 Pocket QR 版（0.49.0），`src/app/index.tsx` 使用 `src/components/pocket/pocket-app.tsx`。Pocket 架構與資料邊界見 [`docs/POCKET_ARCHITECTURE.md`](docs/POCKET_ARCHITECTURE.md)。
 
 ## 本機試玩
 
