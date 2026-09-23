@@ -53,6 +53,8 @@ Analytics failure is intentionally isolated from journey persistence. A telemetr
 - the lightweight Experience catalogue
 - Experience / availability metadata
 - curated discovery catalogue
+- mission grammar metadata (direction, action, concept, role, environment suitability)
+- development-time mission validation and generated-candidate review workflow
 
 `src/lib/pocket-discovery-selection.ts` owns the explainable selection pipeline:
 
