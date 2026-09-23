@@ -152,7 +152,9 @@ export async function planLeg(args: {
   elapsed: number;
   places: LocalPlace[];
   recentRoutes?: Point[][];
-}): Promise<PocketLeg | null> {
+},
+fetchRoute: typeof fetchWalkingRoute = fetchWalkingRoute,
+): Promise<PocketLeg | null> {
   const candidates = rankPlaces(
     args.places,
     args.current,
@@ -163,7 +165,7 @@ export async function planLeg(args: {
   );
   for (const destination of candidates.slice(0, 3)) {
     try {
-      const fetched = await fetchWalkingRoute(
+      const fetched = await fetchRoute(
         args.current,
         destination.point,
         4500,
