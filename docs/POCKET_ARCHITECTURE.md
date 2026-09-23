@@ -51,9 +51,18 @@ Analytics failure is intentionally isolated from journey persistence. A telemetr
 - the discovery catalogue
 - content metadata such as tags, weak environment hints, daylight/weather availability and Experience suitability
 - the lightweight Experience catalogue
-- difficulty selection
-- Experience-aware filtering and weighting
+- Experience / availability metadata
+- curated discovery catalogue
+
+`src/lib/pocket-discovery-selection.ts` owns the explainable selection pipeline:
+
+- adaptive difficulty policy
+- candidate generation
+- Experience-aware filtering
+- inspectable score breakdowns
+- weak environment / recency / historical-performance weighting
 - deterministic weighted selection with injectable randomness
+- privacy-safe selection logs and replay
 
 `src/lib/pocket-engine.ts` owns Journey rules that should stay testable without React Native or network access:
 
@@ -61,7 +70,6 @@ Analytics failure is intentionally isolated from journey persistence. A telemetr
 - phase timing
 - GPS trace acceptance
 - short-empty-journey discard rule
-- re-exports of the content API for existing Pocket imports
 
 UI components never choose discovery difficulty or directly special-case themed content.
 
@@ -140,8 +148,12 @@ Pocket telemetry is split into:
 - `pocket-telemetry-core.ts` — pure aggregation
 - `pocket-telemetry.ts` — local-first persistence and best-effort sync
 
-For each shown discovery, Pocket records only:
+For each shown discovery, Pocket records the selection decision together with the outcome lifecycle:
 
+- selected discovery ID
+- ranked eligible candidate IDs and score breakdowns
+- selection reason / fallback flag / random values
+- recent discovery IDs and coarse selection context
 - discovery ID
 - difficulty and kind
 - coarse environment
@@ -158,6 +170,10 @@ Aggregates expose shown/found/skip rates, average/median resolution time, enviro
 `aggregateDiscoveryQuality()` additionally exposes per-discovery descriptive signals: shown count, found/skip rate, median observation time, environment breakdown and repeat exposure. It intentionally does not rank or auto-remove discoveries. Completion percentage is not treated as the objective; a discovery can be valuable because it creates attention and curiosity rather than because it is instantly easy.
 
 At finish, only route-quality ratios/counts are added. Raw coordinates are never included in telemetry payloads.
+
+Full local selection logs keep the eligible ranked candidate list. Backend sync compacts candidate arrays to the top 8 while retaining the selected discovery. Historical discovery performance can weakly influence future local selection only after a minimum sample size; low completion alone is never treated as proof that content is bad.
+
+The selection pipeline, ranking factors, reproducibility contract and tunable playtest parameters are documented in [DISCOVERY_SELECTION.md](./DISCOVERY_SELECTION.md).
 
 ## Network dependencies
 
@@ -191,6 +207,7 @@ Ticket/photo storage remains on-device. The playtest backend accepts additive Po
 - `src/hooks/use-pocket-journey.ts`
 - `src/lib/pocket-engine.ts`
 - `src/lib/pocket-content.ts`
+- `src/lib/pocket-discovery-selection.ts`
 - `src/lib/pocket-routing.ts`
 - `src/lib/navigation-engine.ts`
 - `src/lib/routing-engine.ts`
