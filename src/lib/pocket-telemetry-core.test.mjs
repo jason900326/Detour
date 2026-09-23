@@ -49,12 +49,14 @@ test("discovery aggregates expose shown/found/skip rates and timing", () => {
   assert.equal(summary.byEnvironment.commercial.skipRate, 1);
   assert.equal(summary.byJourneyPosition["2"].skippedCount, 1);
   assert.equal(summary.byActionType.unknown.shownCount, 3);
+  assert.deepEqual(summary.actionSequence, ["unknown", "unknown", "unknown"]);
   assert.deepEqual(summary.roaming, {
     count: 0,
     averageSeconds: null,
     medianSeconds: null,
     averageMeters: null,
     revealReasonCounts: {},
+    samples: [],
   });
 });
 
@@ -263,8 +265,33 @@ test("discovery summary exposes mechanic mix and roaming gap timing", () => {
   assert.equal(summary.roaming.averageSeconds, 43.3);
   assert.equal(summary.roaming.medianSeconds, 42);
   assert.equal(summary.roaming.averageMeters, 27);
+  assert.deepEqual(summary.actionSequence, [
+    "find_one",
+    "compare",
+    "find_pattern",
+  ]);
   assert.deepEqual(summary.roaming.revealReasonCounts, {
     distance: 2,
     timeout: 1,
   });
+  assert.deepEqual(summary.roaming.samples, [
+    {
+      discoveryIndex: 1,
+      seconds: 28,
+      meters: 38,
+      reason: "distance",
+    },
+    {
+      discoveryIndex: 2,
+      seconds: 60,
+      meters: 12,
+      reason: "timeout",
+    },
+    {
+      discoveryIndex: 3,
+      seconds: 42,
+      meters: 31,
+      reason: "distance",
+    },
+  ]);
 });
