@@ -850,15 +850,20 @@ export default function PocketApp() {
                     }}
                   >
                     {cover ? (
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, overflow: "hidden" }}>
                         <View
                           style={{
-                            width: "88%",
-                            alignSelf: "center",
+                            height: "68%",
+                            paddingHorizontal: 4,
+                            paddingTop: 2,
+                            paddingBottom: 8,
                           }}
                         >
                           <View
                             style={{
+                              flex: 1,
+                              width: "90%",
+                              alignSelf: "center",
                               borderRadius: 14,
                               overflow: "hidden",
                               backgroundColor: C.white,
@@ -866,62 +871,84 @@ export default function PocketApp() {
                               borderColor: "#E4D8C8",
                             }}
                           >
-                            <Image
-                              key={cover}
-                              source={{ uri: cover }}
-                              resizeMode="contain"
-                              onLoad={() => {
-                                if (currentCover.current !== cover) return;
-                                setLoadedCover(cover);
-                                setCoverError(false);
-                              }}
-                              onError={() => {
-                                if (currentCover.current === cover)
-                                  setCoverError(true);
-                              }}
-                              style={{
-                                width: "100%",
-                                aspectRatio: PHOTO_ASPECT,
-                                backgroundColor: C.white,
-                              }}
-                            />
-                            {!!shareThumbs.length && (
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  gap: 3,
-                                  padding: 4,
-                                  paddingTop: 3,
-                                  backgroundColor: C.paper,
-                                  borderTopWidth: 1,
-                                  borderColor: "#E4D8C8",
+                            <View style={{ flex: 1, minHeight: 0 }}>
+                              <Image
+                                key={cover}
+                                source={{ uri: cover }}
+                                resizeMode="contain"
+                                onLoad={() => {
+                                  if (currentCover.current !== cover) return;
+                                  setLoadedCover(cover);
+                                  setCoverError(false);
                                 }}
-                              >
-                                {shareThumbs.map((uri) => (
+                                onError={() => {
+                                  if (currentCover.current === cover)
+                                    setCoverError(true);
+                                }}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  backgroundColor: C.white,
+                                }}
+                              />
+                            </View>
+
+                            <View
+                              style={{
+                                height: 76,
+                                flexDirection: "row",
+                                gap: 3,
+                                padding: 4,
+                                paddingTop: 3,
+                                backgroundColor: C.paper,
+                                borderTopWidth: 1,
+                                borderColor: "#E4D8C8",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {shareThumbs.map((uri) => (
+                                <View
+                                  key={uri}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    borderRadius: 5,
+                                    overflow: "hidden",
+                                    backgroundColor: C.white,
+                                  }}
+                                >
                                   <Image
-                                    key={uri}
                                     source={{ uri }}
                                     resizeMode="contain"
                                     style={{
-                                      flex: 1,
-                                      aspectRatio: PHOTO_ASPECT,
-                                      borderRadius: 5,
+                                      width: "100%",
+                                      height: "100%",
                                       backgroundColor: C.white,
                                     }}
                                   />
-                                ))}
-                              </View>
-                            )}
+                                </View>
+                              ))}
+                              {Array.from(
+                                { length: Math.max(0, 4 - shareThumbs.length) },
+                                (_, index) => (
+                                  <View
+                                    key={`share-empty-${index}`}
+                                    style={{ flex: 1, minWidth: 0 }}
+                                  />
+                                ),
+                              )}
+                            </View>
                           </View>
                         </View>
 
                         <View
                           style={{
-                            flex: 1,
+                            height: "32%",
                             justifyContent: "flex-end",
                             paddingHorizontal: 2,
+                            paddingTop: 12,
                             paddingBottom: 18,
-                            paddingTop: 13,
+                            overflow: "hidden",
                           }}
                         >
                           <DetourBrand />
