@@ -1,24 +1,18 @@
-import {
-  type Discovery,
-  type ExperienceId,
+import type {
+  Discovery,
+  ExperienceId,
 } from "./pocket-content";
 
-export {
-  chooseDiscovery,
-  DISCOVERIES,
-  EXPERIENCES,
-  filterDiscoveries,
-  getExperience,
-  selectDiscovery,
-  type Daylight,
-  type DetourExperience,
-  type Difficulty,
-  type Discovery,
-  type DiscoveryKind,
-  type DiscoverySelectionContext,
-  type Environment,
-  type ExperienceId,
-  type Weather,
+export type {
+  Daylight,
+  DetourExperience,
+  Difficulty,
+  Discovery,
+  DiscoveryKind,
+  DiscoverySelectionContext,
+  Environment,
+  ExperienceId,
+  Weather,
 } from "./pocket-content";
 
 export type Point = { latitude: number; longitude: number };
