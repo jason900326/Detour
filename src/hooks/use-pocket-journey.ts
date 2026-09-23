@@ -5,9 +5,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import { playPocketFeedback } from "../lib/pocket-feedback";
 import {
   appendFix,
+  DISCOVERY_ROAM_MIN_MS,
   distance,
   phaseAt,
   shouldDiscardShortEmptyJourney,
+  shouldRevealNextDiscovery,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
@@ -172,6 +174,9 @@ export function usePocketJourney() {
       ...value,
       startedAt: value.startedAt + pausedFor,
       targetSince: value.targetSince ? value.targetSince + pausedFor : 0,
+      nextDiscoveryAt: value.nextDiscoveryAt
+        ? value.nextDiscoveryAt + pausedFor
+        : undefined,
       suspendedAt: undefined,
       lastActiveAt: time,
     };
@@ -520,6 +525,70 @@ export function usePocketJourney() {
       setStarting(false);
     }
   }
+  function revealNextDiscovery(time = Date.now()) {
+    const j = current.current;
+    if (
+      !j ||
+      j.phase !== "exploration" ||
+      j.target ||
+      !shouldRevealNextDiscovery(j, time)
+    )
+      return false;
+
+    const previousFound = j.found.at(-1);
+    const previousDiscovery: PreviousDiscoveryContext | undefined =
+      previousFound
+        ? {
+            id: previousFound.id,
+            kind: previousFound.kind,
+            difficulty: previousFound.difficulty,
+            result: "found",
+            secondsVisible: previousFound.seconds,
+            direction: previousFound.direction,
+            actionType: previousFound.actionType,
+            role: previousFound.role,
+          }
+        : undefined;
+    const environment =
+      legRef.current?.destination.environment ?? "street";
+    const decision = chooseDiscoveryDecision(
+      selectionContext({
+        journey: j,
+        environment,
+        elapsedSeconds: (time - j.startedAt) / 1000,
+        discoveryIndex: j.seen.length + 1,
+        phase: "exploration",
+        previousDiscovery,
+        recentlySeenIds: j.seen,
+        recentlyFoundIds: j.found.map((item) => item.id),
+        found: j.found,
+      }),
+      { timestamp: time },
+    );
+    const target = decision.discovery;
+    const nextSeen = [...j.seen, target.id];
+    update({
+      ...j,
+      target,
+      targetSince: time,
+      seen: nextSeen,
+      nextDiscoveryAt: undefined,
+      nextDiscoveryFrom: undefined,
+    });
+    void recordPocketDiscoveryShown({
+      journeyId: j.id,
+      target,
+      environment,
+      shownAt: time,
+      journeyStartedAt: j.startedAt,
+      discoveryIndex: nextSeen.length,
+      experienceId: j.experienceId ?? "core",
+      repeatExposure: j.seen.includes(target.id),
+      selection: decision.log,
+    });
+    return true;
+  }
+
   async function finish() {
     const j = current.current;
     if (!j || j.phase === "finished" || finishLock.current) return;
@@ -657,26 +726,45 @@ export function usePocketJourney() {
       actionType: j.target.actionType,
       role: j.target.role,
     };
-    const decision =
-      phase === "closing" && !skip
-        ? null
-        : chooseDiscoveryDecision(
-            selectionContext({
-              journey: j,
-              environment,
-              elapsedSeconds: (time - j.startedAt) / 1000,
-              discoveryIndex: j.seen.length + 1,
-              phase,
-              previousDiscovery,
-              recentlySeenIds: j.seen,
-              recentlyFoundIds: found.map((item) => item.id),
-              found,
-            }),
-            { timestamp: time },
-          );
-    const target = decision?.discovery ?? null;
-    const repeatExposure = target ? j.seen.includes(target.id) : false;
-    const nextSeen = target ? [...j.seen, target.id] : j.seen;
+
+    if (!skip) {
+      update({
+        ...j,
+        found,
+        phase,
+        target: null,
+        targetSince: 0,
+        nextDiscoveryAt:
+          phase === "exploration"
+            ? time + (j.demo ? 3_000 : DISCOVERY_ROAM_MIN_MS)
+            : undefined,
+        nextDiscoveryFrom:
+          phase === "exploration"
+            ? (j.trace.at(-1) ?? j.origin)
+            : undefined,
+      });
+      playPocketFeedback("discovery");
+      void routeNext("discovery");
+      return true;
+    }
+
+    const decision = chooseDiscoveryDecision(
+      selectionContext({
+        journey: j,
+        environment,
+        elapsedSeconds: (time - j.startedAt) / 1000,
+        discoveryIndex: j.seen.length + 1,
+        phase,
+        previousDiscovery,
+        recentlySeenIds: j.seen,
+        recentlyFoundIds: found.map((item) => item.id),
+        found,
+      }),
+      { timestamp: time },
+    );
+    const target = decision.discovery;
+    const repeatExposure = j.seen.includes(target.id);
+    const nextSeen = [...j.seen, target.id];
     update({
       ...j,
       found,
@@ -684,22 +772,20 @@ export function usePocketJourney() {
       target,
       targetSince: time,
       seen: nextSeen,
+      nextDiscoveryAt: undefined,
+      nextDiscoveryFrom: undefined,
     });
-    if (target) {
-      void recordPocketDiscoveryShown({
-        journeyId: j.id,
-        target,
-        environment,
-        shownAt: time,
-        journeyStartedAt: j.startedAt,
-        discoveryIndex: nextSeen.length,
-        experienceId: j.experienceId ?? "core",
-        repeatExposure,
-        selection: decision?.log,
-      });
-    }
-    if (!skip) playPocketFeedback("discovery");
-    if (!skip) void routeNext("discovery");
+    void recordPocketDiscoveryShown({
+      journeyId: j.id,
+      target,
+      environment,
+      shownAt: time,
+      journeyStartedAt: j.startedAt,
+      discoveryIndex: nextSeen.length,
+      experienceId: j.experienceId ?? "core",
+      repeatExposure,
+      selection: decision.log,
+    });
     return true;
   }
   function extraDiscovery() {
@@ -775,9 +861,23 @@ export function usePocketJourney() {
         return;
       }
       if (next === "closing" && j.phase === "exploration") {
-        update({ ...j, phase: "closing", target: null });
+        update({
+          ...j,
+          phase: "closing",
+          target: null,
+          targetSince: 0,
+          nextDiscoveryAt: undefined,
+          nextDiscoveryFrom: undefined,
+        });
         void routeNext("closing");
+        return;
       }
+      if (
+        j.phase === "exploration" &&
+        !j.target &&
+        j.nextDiscoveryAt
+      )
+        revealNextDiscovery(time);
       if (
         j.phase === "closing" &&
         time - j.startedAt >= 480000 &&
@@ -849,7 +949,14 @@ export function usePocketJourney() {
         );
         if (trace !== j.trace) {
           lastFix.current = Date.now();
-          update({ ...j, trace });
+          const traced = { ...j, trace };
+          update(traced);
+          if (
+            traced.phase === "exploration" &&
+            !traced.target &&
+            traced.nextDiscoveryAt
+          )
+            revealNextDiscovery(Date.now());
         }
         const route = legRef.current;
         if (trace !== j.trace && Date.now() - lastPlan.current > 20000) {
