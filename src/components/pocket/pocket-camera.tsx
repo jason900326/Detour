@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useRef, useState } from "react";
 import {
   Image,
@@ -11,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Button, C, s } from "./pocket-ui";
+import { Button, C, PHOTO_ASPECT, s } from "./pocket-ui";
 import { EdgeBack } from "./pocket-edge-back";
 
 export default function PocketCamera({
@@ -40,7 +41,38 @@ export default function PocketCamera({
       const p = await camera.current?.takePictureAsync({
         quality: 0.9,
       });
-      if (p) setPhoto(p.uri);
+      if (p) {
+        const sourceRatio = p.width / p.height;
+        let width = p.width;
+        let height = p.height;
+        let originX = 0;
+        let originY = 0;
+        if (sourceRatio > PHOTO_ASPECT) {
+          width = Math.round(p.height * PHOTO_ASPECT);
+          originX = Math.round((p.width - width) / 2);
+        } else if (sourceRatio < PHOTO_ASPECT) {
+          height = Math.round(p.width / PHOTO_ASPECT);
+          originY = Math.round((p.height - height) / 2);
+        }
+        const cropped = await ImageManipulator.manipulateAsync(
+          p.uri,
+          [
+            {
+              crop: {
+                originX,
+                originY,
+                width,
+                height,
+              },
+            },
+          ],
+          {
+            compress: 0.9,
+            format: ImageManipulator.SaveFormat.JPEG,
+          },
+        );
+        setPhoto(cropped.uri);
+      }
     } catch {
       setError("這張沒拍好，再試一次。");
     } finally {
@@ -141,7 +173,7 @@ export default function PocketCamera({
                 <View
                   style={{
                     width: "100%",
-                    aspectRatio: 4 / 5,
+                    aspectRatio: PHOTO_ASPECT,
                     borderRadius: 28,
                     overflow: "hidden",
                     backgroundColor: "#111",
@@ -152,7 +184,7 @@ export default function PocketCamera({
                     <Image
                       source={{ uri: photo }}
                       style={{ width: "100%", height: "100%" }}
-                      resizeMode="cover"
+                      resizeMode="contain"
                     />
                   ) : (
                     <CameraView
