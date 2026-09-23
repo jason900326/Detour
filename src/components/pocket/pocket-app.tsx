@@ -30,6 +30,7 @@ import {
   C,
   Enter,
   PHOTO_ASPECT,
+  mono,
   s,
   Ticket,
   Trail,
@@ -42,8 +43,7 @@ import {
   HomeJourneyMotion,
   HomeMoodStamp,
 } from "./pocket-home-art";
-import { EdgeBack } from "./pocket-edge-back";
-import { PhotoDeck } from "./pocket-photo-deck";
+import { EdgeBack } from "./pocket-edge-back";import { PhotoDeck } from "./pocket-photo-deck";
 import {
   previousPocketScreen,
   type PocketScreen,
