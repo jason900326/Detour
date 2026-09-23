@@ -5,7 +5,10 @@ import {
   DISCOVERIES,
   phaseAt,
 } from "./pocket-engine.ts";
-import { planLeg, rankPlaces } from "./pocket-routing.ts";
+import {
+  isImmediatePocketUTurn,
+  rankPocketPlaces,
+} from "./pocket-routing-policy.ts";
 
 const point = (latitude, longitude) => ({ latitude, longitude });
 const start = point(25, 121);
@@ -69,7 +72,7 @@ test("routing ranking avoids a strong immediate U-turn when alternatives exist",
     stop: false,
     environment: "street",
   };
-  const ranked = rankPlaces(
+  const ranked = rankPocketPlaces(
     [behind, ahead],
     current,
     trace[0],
@@ -96,7 +99,7 @@ test("closing only considers places that are valid stops", () => {
       environment: "street",
     },
   ];
-  const ranked = rankPlaces(
+  const ranked = rankPocketPlaces(
     candidates,
     start,
     start,
@@ -108,26 +111,11 @@ test("closing only considers places that are valid stops", () => {
   assert.deepEqual(ranked.map((place) => place.name), ["small square"]);
 });
 
-test("routing never invents a straight-line fallback when walking fetches fail", async () => {
-  const destination = {
-    point: point(25.0012, 121),
-    name: "candidate",
-    stop: true,
-    environment: "green",
-  };
-  const result = await planLeg(
-    {
-      current: start,
-      origin: start,
-      trace: [start],
-      closing: true,
-      elapsed: 600,
-      places: [destination],
-      recentRoutes: [],
-    },
-    async () => {
-      throw new Error("router unavailable");
-    },
-  );
-  assert.equal(result, null);
+test("the U-turn rule rejects a route that immediately reverses the walked heading", () => {
+  const previous = point(25, 121);
+  const current = point(25, 121.001);
+  const behind = point(25, 120.9998);
+  const ahead = point(25, 121.002);
+  assert.equal(isImmediatePocketUTurn(previous, current, behind), true);
+  assert.equal(isImmediatePocketUTurn(previous, current, ahead), false);
 });
