@@ -32,6 +32,6 @@ comment on column public.playtest_runs.route_quality is
   'Approximate route-quality ratios and reroute count; contains no coordinates or route trace.';
 ```
 
-The Edge Function keeps the existing `sync-run` mode unchanged. `sync-pocket-run` should be deployed only with (or after) this additive schema change if full Pocket metrics need to persist.
+The Edge Function keeps the existing `sync-run` mode unchanged. `sync-pocket-run` is deploy-order tolerant: if PostgREST reports that the new columns are not in its schema cache yet, it falls back to writing only the legacy-compatible run fields and returns `metricsStored: false`. Full Pocket metrics begin persisting once the additive schema migration is deployed.
 
 Pocket payloads intentionally exclude GPS coordinates, route traces, photos and destination names.
