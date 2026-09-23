@@ -53,6 +53,22 @@ Missions can declare preferred or inappropriate environments such as street, com
 
 Routing currently supplies only a coarse environment signal. Suitability changes probability; it never claims an object definitely exists.
 
+## Production pool
+
+The current production catalogue contains **150 core missions**, plus development-only Night Detour content.
+
+The larger pool is intentional: short Pocket journeys should be able to vary direction, action, concept, and environment without cycling back to the same visible prompt after only a few swaps.
+
+The expansion is stored as fixed reviewed strings in `src/lib/pocket-curated-mission-expansion.ts`. It uses family helpers only to avoid repeating metadata boilerplate; titles are not generated at runtime.
+
+## Repeat cooldown
+
+A shown mission enters a **12-mission cooldown window**.
+
+When fresh eligible alternatives exist, missions inside that window are temporarily excluded from candidate generation. If every eligible candidate is on cooldown, the selector fails open and allows reuse rather than leaving the Journey without a task.
+
+This is different from permanently banning previously seen content: older missions naturally become eligible again after enough variety has passed.
+
 ## Sequencing
 
 The explainable selector in `pocket-discovery-selection.ts` adds mission-mix factors to each score:
