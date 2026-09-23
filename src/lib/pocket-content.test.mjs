@@ -1,12 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  chooseDiscovery,
-  chooseDiscoveryDifficulty,
-  discoveryWeight,
   filterDiscoveries,
   getExperience,
-  selectDiscovery,
 } from "./pocket-content.ts";
 
 const discovery = (overrides = {}) => ({
@@ -19,7 +15,7 @@ const discovery = (overrides = {}) => ({
   ...overrides,
 });
 
-test("experience filtering keeps Night-only content out of core and unavailable daylight", () => {
+test("experience filtering keeps Night-only content out of core and respects daylight", () => {
   const night = discovery({
     id: "night-light",
     suitableFor: ["night"],
@@ -48,7 +44,7 @@ test("experience filtering keeps Night-only content out of core and unavailable 
   );
 });
 
-test("environment is a weak weight, not a hard filter", () => {
+test("environment metadata does not hard-filter the curated catalogue", () => {
   const street = discovery({
     id: "street",
     environments: ["street"],
@@ -58,90 +54,15 @@ test("environment is a weak weight, not a hard filter", () => {
     environments: ["green"],
   });
 
-  assert.ok(
-    discoveryWeight(street, { environment: "street" }) >
-      discoveryWeight(green, { environment: "street" }),
-  );
-  assert.ok(
-    filterDiscoveries([street, green], { environment: "street" }).some(
-      (item) => item.id === "green",
+  assert.deepEqual(
+    filterDiscoveries([street, green], { environment: "street" }).map(
+      (item) => item.id,
     ),
+    ["street", "green"],
   );
 });
 
-test("difficulty starts easy, recovers after slow finds and never makes hard consecutive", () => {
-  assert.equal(chooseDiscoveryDifficulty([], () => 0), "easy");
-
-  const mediumSlow = discovery({
-    id: "slow",
-    difficulty: "medium",
-    seconds: 130,
-  });
-  assert.equal(
-    chooseDiscoveryDifficulty([mediumSlow], () => 0),
-    "easy",
-  );
-
-  const hardFast = discovery({
-    id: "hard",
-    difficulty: "hard",
-    seconds: 20,
-  });
-  assert.notEqual(
-    chooseDiscoveryDifficulty([hardFast, hardFast], () => 0),
-    "hard",
-  );
-});
-
-test("a themed Experience falls back to universal content when its themed pool is exhausted", () => {
-  const themed = discovery({
-    id: "night-only",
-    tags: ["night", "light"],
-    suitableFor: ["night"],
-    availability: { daylight: "night" },
-  });
-  const universal = discovery({ id: "universal" });
-
-  const selected = selectDiscovery(
-    [themed, universal],
-    [],
-    ["night-only"],
-    {
-      experienceId: "night",
-      daylight: "night",
-      environment: "street",
-    },
-    () => 0,
-  );
-
-  assert.equal(selected.id, "universal");
-});
-
-test("core experience works when no Experience is specified", () => {
-  for (let index = 0; index < 20; index++) {
-    const selected = chooseDiscovery([], [], {}, () => index / 20);
-    assert.equal(selected.suitableFor?.includes("night") ?? false, false);
-  }
-});
-
-test("selection is deterministic when randomness is injected", () => {
-  const catalogue = [
-    discovery({ id: "first" }),
-    discovery({ id: "second" }),
-  ];
-
-  assert.equal(
-    selectDiscovery(catalogue, [], [], {}, () => 0).id,
-    "first",
-  );
-  assert.equal(
-    selectDiscovery(catalogue, [], [], {}, () => 0.999).id,
-    "second",
-  );
-});
-
-
-test("future weather availability can filter content without special-case journey code", () => {
+test("future weather availability can filter content without journey special cases", () => {
   const rainOnly = discovery({
     id: "rain-trace",
     availability: { weather: "rain" },
@@ -162,8 +83,7 @@ test("future weather availability can filter content without special-case journe
   );
 });
 
-
-test("Night is development-only while core remains the implicit production Experience", () => {
+test("Night remains development-only while core is the implicit Experience", () => {
   assert.equal(getExperience().id, "core");
   assert.notEqual(getExperience("core").developmentOnly, true);
   assert.equal(getExperience("night").developmentOnly, true);

@@ -12,11 +12,16 @@ import {
   type Point,
 } from "../lib/pocket-engine";
 import {
-  chooseDiscovery,
   getExperience,
   type Environment,
   type ExperienceId,
 } from "../lib/pocket-content";
+import {
+  chooseDiscoveryDecision,
+  type DiscoveryContext,
+  type DiscoveryPerformance,
+  type PreviousDiscoveryContext,
+} from "../lib/pocket-discovery-selection";
 import {
   nearbyPlaces,
   planLeg,
@@ -32,6 +37,7 @@ import { computePocketRouteQuality } from "../lib/pocket-route-quality";
 import {
   beginPocketTelemetryRun,
   finalizePocketTelemetryRun,
+  loadPocketDiscoveryPerformance,
   recordPocketDiscoveryShown,
   recordPocketReroute,
   resolvePocketDiscovery,
@@ -68,18 +74,61 @@ export function usePocketJourney() {
   const finishLock = useRef(false);
   const actionAt = useRef(0);
   const appState = useRef(AppState.currentState);
-  function discoveryContext(
-    experienceId: ExperienceId | undefined,
-    environment: Environment,
-  ) {
+  const discoveryPerformance = useRef<Record<string, DiscoveryPerformance>>({});
+
+  function daylightForExperience(experienceId: ExperienceId | undefined) {
     const experience = getExperience(experienceId);
     const hour = new Date().getHours();
+    return (
+      experience.availability?.daylight ??
+      (hour >= 18 || hour < 6 ? ("night" as const) : ("day" as const))
+    );
+  }
+
+  function quickFindStreak(
+    found: PocketJourney["found"],
+    previous?: PreviousDiscoveryContext,
+  ) {
+    if (previous?.result === "skipped") return 0;
+    let streak = 0;
+    for (let index = found.length - 1; index >= 0; index--) {
+      if (found[index].seconds >= 60) break;
+      streak += 1;
+    }
+    return streak;
+  }
+
+  function selectionContext(input: {
+    journey?: PocketJourney;
+    experienceId?: ExperienceId;
+    environment: Environment;
+    elapsedSeconds: number;
+    discoveryIndex: number;
+    phase: "exploration" | "closing";
+    previousDiscovery?: PreviousDiscoveryContext;
+    recentlySeenIds?: string[];
+    recentlyFoundIds?: string[];
+    found?: PocketJourney["found"];
+    forceLight?: boolean;
+  }): DiscoveryContext {
+    const experienceId =
+      input.experienceId ?? input.journey?.experienceId ?? "core";
+    const found = input.found ?? input.journey?.found ?? [];
     return {
-      environment,
-      experienceId: experience.id,
-      daylight:
-        experience.availability?.daylight ??
-        (hour >= 18 || hour < 6 ? ("night" as const) : ("day" as const)),
+      environment: input.environment,
+      experienceId,
+      elapsedSeconds: Math.max(0, input.elapsedSeconds),
+      discoveryIndex: Math.max(1, input.discoveryIndex),
+      phase: input.phase,
+      daylight: daylightForExperience(experienceId),
+      previousDiscovery: input.previousDiscovery,
+      recentlySeenIds: input.recentlySeenIds ?? input.journey?.seen ?? [],
+      recentlyFoundIds:
+        input.recentlyFoundIds ??
+        found.map((item) => item.id),
+      quickFindStreak: quickFindStreak(found, input.previousDiscovery),
+      performanceById: discoveryPerformance.current,
+      forceLight: input.forceLight,
     };
   }
 
@@ -211,11 +260,13 @@ export function usePocketJourney() {
     let alive = true;
     void (async () => {
       try {
-        const [active, saved, legacy] = await Promise.all([
+        const [active, saved, legacy, performance] = await Promise.all([
           readStored<PocketJourney>(ACTIVE),
           readStored<PocketJourney[]>(HISTORY),
           readStored<PassportEntry[]>("@detour/passport/v1"),
+          loadPocketDiscoveryPerformance(),
         ]);
+        discoveryPerformance.current = performance;
         if (!alive) return;
         const cleanedSaved = (saved ?? []).filter(
           (entry) =>
@@ -393,11 +444,20 @@ export function usePocketJourney() {
         };
       }
       const time = Date.now();
-      const target = chooseDiscovery(
-        [],
-        [],
-        discoveryContext(experienceId, "street"),
+      const decision = chooseDiscoveryDecision(
+        selectionContext({
+          experienceId,
+          environment: "street",
+          elapsedSeconds: 0,
+          discoveryIndex: 1,
+          phase: "exploration",
+          found: [],
+          recentlySeenIds: [],
+          recentlyFoundIds: [],
+        }),
+        { timestamp: time },
       );
+      const target = decision.discovery;
       const next: PocketJourney = {
         id: `${time}`,
         startedAt: time,
@@ -436,6 +496,7 @@ export function usePocketJourney() {
         discoveryIndex: 1,
         experienceId: next.experienceId ?? "core",
         repeatExposure: false,
+        selection: decision.log,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
@@ -571,16 +632,31 @@ export function usePocketJourney() {
       return false;
     }
     const environment = legRef.current?.destination.environment ?? "street";
-    const target =
+    const previousDiscovery: PreviousDiscoveryContext = {
+      id: j.target.id,
+      kind: j.target.kind,
+      difficulty: j.target.difficulty,
+      result: skip ? "skipped" : "found",
+      secondsVisible: Math.max(0, (time - j.targetSince) / 1000),
+    };
+    const decision =
       phase === "closing" && !skip
         ? null
-        : chooseDiscovery(
-            found,
-            j.seen,
-            discoveryContext(j.experienceId, environment),
-            Math.random,
-            phase === "closing" || skip,
+        : chooseDiscoveryDecision(
+            selectionContext({
+              journey: j,
+              environment,
+              elapsedSeconds: (time - j.startedAt) / 1000,
+              discoveryIndex: j.seen.length + 1,
+              phase,
+              previousDiscovery,
+              recentlySeenIds: j.seen,
+              recentlyFoundIds: found.map((item) => item.id),
+              found,
+            }),
+            { timestamp: time },
           );
+    const target = decision?.discovery ?? null;
     const repeatExposure = target ? j.seen.includes(target.id) : false;
     const nextSeen = target ? [...j.seen, target.id] : j.seen;
     update({
@@ -601,6 +677,7 @@ export function usePocketJourney() {
         discoveryIndex: nextSeen.length,
         experienceId: j.experienceId ?? "core",
         repeatExposure,
+        selection: decision?.log,
       });
     }
     if (!skip) playPocketFeedback("discovery");
@@ -610,14 +687,33 @@ export function usePocketJourney() {
   function extraDiscovery() {
     const j = current.current;
     if (!j || j.closingTargetUsed || j.target) return;
-    const target = chooseDiscovery(
-      j.found,
-      j.seen,
-      discoveryContext(j.experienceId, "street"),
-      Math.random,
-      true,
-    );
     const time = Date.now();
+    const previousFound = j.found.at(-1);
+    const previousDiscovery: PreviousDiscoveryContext | undefined =
+      previousFound
+        ? {
+            id: previousFound.id,
+            kind: previousFound.kind,
+            difficulty: previousFound.difficulty,
+            result: "found",
+            secondsVisible: previousFound.seconds,
+          }
+        : undefined;
+    const environment =
+      legRef.current?.destination.environment ?? "street";
+    const decision = chooseDiscoveryDecision(
+      selectionContext({
+        journey: j,
+        environment,
+        elapsedSeconds: (time - j.startedAt) / 1000,
+        discoveryIndex: j.seen.length + 1,
+        phase: "closing",
+        previousDiscovery,
+        forceLight: true,
+      }),
+      { timestamp: time },
+    );
+    const target = decision.discovery;
     const repeatExposure = j.seen.includes(target.id);
     const nextSeen = [...j.seen, target.id];
     update({
@@ -630,12 +726,13 @@ export function usePocketJourney() {
     void recordPocketDiscoveryShown({
       journeyId: j.id,
       target,
-      environment: legRef.current?.destination.environment ?? "street",
+      environment,
       shownAt: time,
       journeyStartedAt: j.startedAt,
       discoveryIndex: nextSeen.length,
       experienceId: j.experienceId ?? "core",
       repeatExposure,
+      selection: decision.log,
     });
   }
   const active = journey !== null && journey.phase !== "finished";

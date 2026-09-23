@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  aggregateDiscoveryPerformance,
   aggregateDiscoveryQuality,
   aggregateDiscoveryTelemetry,
+  analyzeDiscoverySelections,
 } from "./pocket-telemetry-core.ts";
 
 const row = (overrides = {}) => ({
@@ -92,5 +94,128 @@ test("discovery quality exposes repeat exposure and environment breakdown withou
   assert.equal(
     "score" in quality.reflection || "ranking" in quality.reflection,
     false,
+  );
+});
+
+
+const selection = (overrides = {}) => ({
+  selectedDiscoveryId: "door",
+  timestamp: 1_000,
+  context: {
+    environment: "street",
+    experienceId: "core",
+    elapsedSeconds: 30,
+    discoveryIndex: 2,
+    phase: "exploration",
+    previousResult: "found",
+    previousSecondsVisible: 20,
+    previousDifficulty: "easy",
+    recentlySeenIds: ["number"],
+    recentlyFoundIds: ["number"],
+    quickFindStreak: 1,
+  },
+  candidates: [
+    {
+      id: "door",
+      score: 1.5,
+      weight: 1.5,
+      scoreBreakdown: {
+        base: 1,
+        environment: 0.35,
+        difficulty: 0.55,
+        variety: 0.16,
+        recency: 0,
+        performance: 0,
+        experience: 0,
+        phase: 0,
+        total: 2.06,
+      },
+    },
+  ],
+  reason: "normal-selection",
+  fallbackUsed: false,
+  randomValue: 0.2,
+  difficultyRandomValue: 0.8,
+  ...overrides,
+});
+
+test("historical discovery performance exposes stable selector inputs", () => {
+  const performance = aggregateDiscoveryPerformance([
+    row({ discoveryId: "door", result: "found", secondsVisible: 20 }),
+    row({ discoveryId: "door", result: "skipped", secondsVisible: 40 }),
+    row({ discoveryId: "tree", result: "found", secondsVisible: 30 }),
+  ]);
+
+  assert.deepEqual(performance.door, {
+    shown: 2,
+    found: 1,
+    skipped: 1,
+    averageSeconds: 30,
+    medianSeconds: 30,
+  });
+});
+
+test("selection analytics answer fallback, skip-recovery, quick-hard and recency questions", () => {
+  const observations = [
+    row({
+      discoveryId: "door",
+      selection: selection({
+        selectedDiscoveryId: "door",
+        fallbackUsed: true,
+        reason: "fallback",
+      }),
+    }),
+    row({
+      discoveryId: "reflection",
+      difficulty: "easy",
+      result: "skipped",
+      selection: selection({
+        selectedDiscoveryId: "reflection",
+        reason: "skip-recovery",
+      }),
+    }),
+    row({
+      discoveryId: "mural",
+      difficulty: "hard",
+      result: "found",
+      selection: selection({
+        selectedDiscoveryId: "mural",
+        context: {
+          ...selection().context,
+          quickFindStreak: 2,
+        },
+      }),
+    }),
+    row({
+      discoveryId: "door",
+      environment: "commercial",
+      result: "skipped",
+      selection: selection({
+        selectedDiscoveryId: "door",
+        context: {
+          ...selection().context,
+          environment: "commercial",
+          recentlySeenIds: ["tree", "door"],
+        },
+      }),
+    }),
+  ];
+
+  const report = analyzeDiscoverySelections(observations);
+
+  assert.equal(report.fallback.count, 1);
+  assert.equal(report.fallback.rate, 0.25);
+  assert.equal(report.skipRecovery.shownCount, 1);
+  assert.equal(report.skipRecovery.skipRate, 1);
+  assert.equal(report.hardAfterQuickFinds.shownCount, 1);
+  assert.equal(report.hardAfterQuickFinds.foundRate, 1);
+  assert.equal(
+    report.repeatedTooSoon.find((item) => item.discoveryId === "door")?.count,
+    1,
+  );
+  assert.ok(
+    report.environmentDifferences.some(
+      (item) => item.discoveryId === "door",
+    ),
   );
 });
