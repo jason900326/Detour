@@ -201,20 +201,27 @@ export function usePocketJourney() {
           throw new Error(
             "需要定位，才能從你現在的位置開始。請在手機設定允許定位後再試。",
           );
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const fix = await Promise.race([
-          Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          }),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("還抓不到位置，走到戶外再試一次。")),
-              15000,
-            );
-          }),
-        ]).finally(() => clearTimeout(timer));
-        if ((fix.coords.accuracy ?? 100) > 60)
-          throw new Error("定位還不夠準，走到空曠一點的地方再試。");
+        const recent = await Location.getLastKnownPositionAsync({
+          maxAge: 120000,
+          requiredAccuracy: 100,
+        });
+        let fix = recent;
+        if (!fix) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          fix = await Promise.race([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("還抓不到位置，走到戶外再試一次。")),
+                8000,
+              );
+            }),
+          ]).finally(() => clearTimeout(timer));
+        }
+        if ((fix.coords.accuracy ?? 100) > 120)
+          throw new Error("定位還不夠穩，走到空曠一點的地方再試。");
         point = {
           latitude: fix.coords.latitude,
           longitude: fix.coords.longitude,
@@ -244,7 +251,6 @@ export function usePocketJourney() {
       update(next);
       setNow(time);
       tapHaptic();
-      void routeNext();
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
     } finally {
