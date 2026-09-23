@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import * as Location from "expo-location";
+import * as FileSystem from "expo-file-system/legacy";
 import { playPocketFeedback } from "../lib/pocket-feedback";
 import {
   appendFix,
@@ -120,8 +121,19 @@ export function usePocketJourney() {
   }
 
   function deleteHistory(id: string) {
+    const target = historyRef.current.find((entry) => entry.id === id);
     const entries = historyRef.current.filter((entry) => entry.id !== id);
     return enqueue(async () => {
+      const root = FileSystem.documentDirectory;
+      if (target && root) {
+        await Promise.all(
+          target.photos
+            .filter((uri) => uri.startsWith(`${root}pocket-photos/`))
+            .map((uri) =>
+              FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {}),
+            ),
+        );
+      }
       await writeStored(HISTORY, entries);
       historyRef.current = entries;
       setHistory(entries);
