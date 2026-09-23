@@ -51,6 +51,7 @@ import {
 import PocketMap from "./pocket-map";
 import PocketCamera from "./pocket-camera";
 import { PocketLiveAlbum } from "./pocket-live-album";
+import { PocketHistoryGallery } from "./pocket-history-gallery";
 
 type Screen = PocketScreen;
 export default function PocketApp() {
@@ -606,14 +607,43 @@ export default function PocketApp() {
               {screen === "history" && (
                 <>
                   <Header title="我的票根" back={() => setScreen("home")} />
-                  <Text style={[s.title, { marginTop: 17 }]}>
-                    繞過的，{"\n"}都留著。
-                  </Text>
-                  <Text style={[s.body, { marginTop: 12, marginBottom: 25 }]}>
-                    {c.history.length
-                      ? `${c.history.length} 段原本不會發生的時間。`
-                      : "第一張票，就從今天開始。"}
-                  </Text>
+                  <View style={{ marginTop: 10 }}>
+                    <Text
+                      style={[
+                        s.title,
+                        {
+                          fontSize: 34,
+                          lineHeight: 42,
+                          letterSpacing: -1.1,
+                        },
+                      ]}
+                    >
+                      繞過的，都留著
+                      <Text style={{ color: C.orange }}>。</Text>
+                    </Text>
+                    <View
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 11,
+                        borderRadius: 999,
+                        backgroundColor: C.green,
+                        paddingHorizontal: 11,
+                        paddingVertical: 7,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: mono,
+                          fontSize: 11,
+                          color: "#59674A",
+                          fontWeight: "700",
+                          letterSpacing: 0.7,
+                        }}
+                      >
+                        {String(c.history.length).padStart(2, "0")} 張票根
+                      </Text>
+                    </View>
+                  </View>
                   {!c.history.length ? (
                     <View style={s.empty}>
                       <Text style={{ fontSize: 55 }}>🎟️</Text>
@@ -624,49 +654,13 @@ export default function PocketApp() {
                       />
                     </View>
                   ) : (
-                    c.history.map((entry) => (
-                      <Pressable
-                        key={entry.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`查看 ${new Date(entry.startedAt).toLocaleDateString("zh-TW")} 的票根`}
-                        onPress={() => {
-                          setSelected(entry);
-                          setScreen("detail");
-                        }}
-                        style={s.historyCard}
-                      >
-                        <View style={s.row}>
-                          <View style={{ flex: 1, gap: 11 }}>
-                            <Text style={{ fontSize: 29 }}>
-                              {entry.found.length
-                                ? entry.found.map((f) => f.emoji).join(" ")
-                                : "一段留在路上的時間"}
-                            </Text>
-                            <Text style={s.muted}>
-                              {new Date(entry.startedAt).toLocaleDateString(
-                                "zh-TW",
-                              )}{" "}
-                              ·{" "}
-                              {entry.demo
-                                ? "室內試玩"
-                                : entry.area ||
-                                  entry.endpoint?.name ||
-                                  "城市的一角"}
-                            </Text>
-                          </View>
-                          {entry.photos[0] ? (
-                            <Image
-                              source={{ uri: entry.photos[0] }}
-                              style={{ width: 75, height: 86, borderRadius: 8 }}
-                            />
-                          ) : (
-                            <Text style={{ fontSize: 23, color: C.orange }}>
-                              ↗
-                            </Text>
-                          )}
-                        </View>
-                      </Pressable>
-                    ))
+                    <PocketHistoryGallery
+                      entries={c.history}
+                      onOpen={(entry) => {
+                        setSelected(entry);
+                        setScreen("detail");
+                      }}
+                    />
                   )}
                 </>
               )}
