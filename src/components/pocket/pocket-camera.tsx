@@ -1,3 +1,4 @@
+import { playPocketFeedback } from "../../lib/pocket-feedback";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -40,8 +41,10 @@ export default function PocketCamera({
     try {
       const p = await camera.current?.takePictureAsync({
         quality: 0.9,
+        shutterSound: false,
       });
       if (p) {
+        playPocketFeedback("photo");
         const sourceRatio = p.width / p.height;
         let width = p.width;
         let height = p.height;

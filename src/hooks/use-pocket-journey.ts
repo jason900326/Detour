@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import * as Location from "expo-location";
-import * as Haptics from "expo-haptics";
+import { playPocketFeedback } from "../lib/pocket-feedback";
 import {
   appendFix,
   chooseDiscovery,
@@ -26,9 +26,6 @@ import type { PassportEntry } from "../lib/app-model";
 
 const ACTIVE = "@detour/pocket/active/v2";
 const HISTORY = "@detour/pocket/history/v2";
-export const tapHaptic = () => {
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-};
 export function usePocketJourney() {
   const [journey, setJourney] = useState<PocketJourney | null>(null);
   const current = useRef<PocketJourney | null>(null);
@@ -260,7 +257,6 @@ export function usePocketJourney() {
       setNotice("");
       update(next);
       setNow(time);
-      tapHaptic();
     } catch (e) {
       setError(e instanceof Error ? e.message : "無法開始，請稍後再試。");
     } finally {
@@ -284,7 +280,6 @@ export function usePocketJourney() {
         setLeg(null);
         setNotice("");
         setError("");
-        tapHaptic();
       } catch {
         setError("暫時無法結束這趟，請再試一次。");
       } finally {
@@ -318,9 +313,7 @@ export function usePocketJourney() {
       setJourney(done);
       legRef.current = null;
       setLeg(null);
-      void Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success,
-      ).catch(() => {});
+      playPocketFeedback("completion");
     } catch {
       setError("票根還沒存好，請再按一次完成。");
     } finally {
@@ -329,10 +322,10 @@ export function usePocketJourney() {
     }
   }
   function discover(skip = false) {
-    if (Date.now() - actionAt.current < 600) return;
+    if (finishLock.current || Date.now() - actionAt.current < 600) return false;
     actionAt.current = Date.now();
     const j = current.current;
-    if (!j?.target || j.phase === "finished") return;
+    if (!j?.target || j.phase === "finished") return false;
     const time = Date.now();
     const found = skip
       ? j.found
@@ -349,8 +342,9 @@ export function usePocketJourney() {
         ? "closing"
         : phaseAt((time - j.startedAt) / 1000, found.length);
     if (phase === "finished") {
+      update({ ...j, found });
       void finish();
-      return;
+      return false;
     }
     const environment = legRef.current?.destination.environment ?? "street";
     const target =
@@ -371,8 +365,9 @@ export function usePocketJourney() {
       targetSince: time,
       seen: target ? [...j.seen, target.id] : j.seen,
     });
-    tapHaptic();
+    if (!skip) playPocketFeedback("discovery");
     if (!skip) void routeNext();
+    return true;
   }
   function extraDiscovery() {
     const j = current.current;
@@ -391,7 +386,6 @@ export function usePocketJourney() {
       seen: [...j.seen, target.id],
       closingTargetUsed: true,
     });
-    tapHaptic();
   }
   const active = journey !== null && journey.phase !== "finished";
   useEffect(() => {
