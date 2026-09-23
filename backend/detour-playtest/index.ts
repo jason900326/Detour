@@ -79,6 +79,73 @@ function safeJson(value: unknown, fallback: unknown) {
   return value;
 }
 
+function normalizeScoreBreakdown(value: any) {
+  return {
+    base: finiteNumber(value?.base),
+    environment: finiteNumber(value?.environment),
+    difficulty: finiteNumber(value?.difficulty),
+    variety: finiteNumber(value?.variety),
+    recency: finiteNumber(value?.recency),
+    performance: finiteNumber(value?.performance),
+    experience: finiteNumber(value?.experience),
+    phase: finiteNumber(value?.phase),
+    total: finiteNumber(value?.total),
+  };
+}
+
+function normalizePocketSelection(value: any) {
+  if (!value || typeof value !== "object") return null;
+
+  const candidates = Array.isArray(value.candidates)
+    ? value.candidates.slice(0, 8).map((candidate: any) => ({
+        id: text(candidate?.id, 80),
+        score: finiteNumber(candidate?.score),
+        weight: finiteNumber(candidate?.weight),
+        scoreBreakdown: normalizeScoreBreakdown(
+          candidate?.scoreBreakdown,
+        ),
+      }))
+    : [];
+
+  return {
+    selectedDiscoveryId: text(value?.selectedDiscoveryId, 80),
+    timestamp: finiteNumber(value?.timestamp),
+    context: {
+      environment: text(value?.context?.environment, 20),
+      experienceId: text(value?.context?.experienceId, 30),
+      elapsedSeconds: finiteNumber(value?.context?.elapsedSeconds),
+      discoveryIndex: int(value?.context?.discoveryIndex),
+      phase: text(value?.context?.phase, 20),
+      daylight: text(value?.context?.daylight, 20),
+      weather: text(value?.context?.weather, 20),
+      previousResult: text(value?.context?.previousResult, 20),
+      previousSecondsVisible: finiteNumber(
+        value?.context?.previousSecondsVisible,
+      ),
+      previousDifficulty: text(
+        value?.context?.previousDifficulty,
+        20,
+      ),
+      recentlySeenIds: textArray(
+        value?.context?.recentlySeenIds,
+        12,
+      ),
+      recentlyFoundIds: textArray(
+        value?.context?.recentlyFoundIds,
+        12,
+      ),
+      quickFindStreak: int(value?.context?.quickFindStreak) ?? 0,
+    },
+    candidates,
+    reason: text(value?.reason, 40),
+    fallbackUsed: bool(value?.fallbackUsed) ?? false,
+    randomValue: finiteNumber(value?.randomValue),
+    difficultyRandomValue: finiteNumber(
+      value?.difficultyRandomValue,
+    ),
+  };
+}
+
 function normalizePocket(body: any) {
   const testerId = text(body?.testerId, 40);
   const run = body?.run ?? {};
@@ -108,6 +175,7 @@ function normalizePocket(body: any) {
         discoveryIndex: int(item?.discoveryIndex),
         experienceId: text(item?.experienceId, 30),
         repeatExposure: bool(item?.repeatExposure) ?? false,
+        selection: normalizePocketSelection(item?.selection),
       }))
     : [];
 
