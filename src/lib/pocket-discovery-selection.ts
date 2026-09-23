@@ -1,10 +1,8 @@
 import {
   DISCOVERIES,
-  discoveryAvailable,
   discoveryMatchesExperience,
   effectiveEnvironments,
   filterDiscoveries,
-  getExperience,
   type Daylight,
   type Difficulty,
   type Discovery,
