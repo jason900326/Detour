@@ -822,14 +822,7 @@ export default function PocketApp() {
                             backgroundColor: C.white,
                           }}
                         />
-                        <View
-                          style={{
-                            marginTop: 10,
-                            marginBottom: 2,
-                            transform: [{ scale: 0.86 }],
-                            transformOrigin: "left center",
-                          }}
-                        >
+                        <View style={{ marginTop: 10, marginBottom: 2 }}>
                           <DetourBrand />
                         </View>
                         <View
