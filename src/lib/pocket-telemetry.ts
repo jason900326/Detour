@@ -8,8 +8,14 @@ import type {
 } from "./pocket-content";
 import type { PocketRouteQualityMetrics } from "./pocket-route-quality";
 import {
+  compactDiscoverySelectionLog,
+  type DiscoverySelectionLog,
+} from "./pocket-discovery-selection";
+import {
+  aggregateDiscoveryPerformance,
   aggregateDiscoveryQuality,
   aggregateDiscoveryTelemetry,
+  analyzeDiscoverySelections,
   type PocketDiscoveryObservation,
 } from "./pocket-telemetry-core";
 import {
@@ -61,7 +67,8 @@ function isObservation(value: unknown): value is PocketDiscoveryObservation {
     typeof value.discoveryIndex === "number" &&
     (value.experienceId === undefined || isString(value.experienceId)) &&
     (value.repeatExposure === undefined ||
-      typeof value.repeatExposure === "boolean")
+      typeof value.repeatExposure === "boolean") &&
+    (value.selection === undefined || isRecord(value.selection))
   );
 }
 
@@ -150,6 +157,7 @@ export function recordPocketDiscoveryShown(input: {
   discoveryIndex: number;
   experienceId?: ExperienceId;
   repeatExposure?: boolean;
+  selection?: DiscoverySelectionLog;
 }) {
   return mutateRun(input.journeyId, (run) => {
     if (
@@ -175,6 +183,7 @@ export function recordPocketDiscoveryShown(input: {
       discoveryIndex: input.discoveryIndex,
       experienceId: input.experienceId ?? run.experienceId ?? "core",
       repeatExposure: input.repeatExposure ?? false,
+      selection: input.selection,
     };
 
     return {
@@ -224,6 +233,12 @@ export function recordPocketReroute(journeyId: string) {
 async function syncPocketRun(run: PocketTelemetryRun) {
   try {
     const testerId = await getPlaytestTesterId();
+    const uploadedDiscoveries = run.discoveries.map((observation) => ({
+      ...observation,
+      selection: observation.selection
+        ? compactDiscoverySelectionLog(observation.selection, 8)
+        : undefined,
+    }));
     await postDetourJson(
       DETOUR_API_CONFIG.playtestEndpoint,
       {
@@ -232,9 +247,11 @@ async function syncPocketRun(run: PocketTelemetryRun) {
         testerId,
         run: {
           ...run,
+          discoveries: uploadedDiscoveries,
           discoverySummary: {
             aggregate: aggregateDiscoveryTelemetry(run.discoveries),
             quality: aggregateDiscoveryQuality(run.discoveries),
+            selection: analyzeDiscoverySelections(run.discoveries),
           },
         },
       },
@@ -286,5 +303,16 @@ export async function loadPocketTelemetryRuns() {
     return await loadRuns();
   } catch {
     return [];
+  }
+}
+
+export async function loadPocketDiscoveryPerformance() {
+  try {
+    const runs = await loadRuns();
+    return aggregateDiscoveryPerformance(
+      runs.flatMap((run) => run.discoveries),
+    );
+  } catch {
+    return {};
   }
 }
