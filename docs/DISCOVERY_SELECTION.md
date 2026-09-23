@@ -67,10 +67,13 @@ Current factors are product hypotheses, intentionally kept in one pure function.
 - **base** — stable starting value.
 - **environment** — weakly favors content whose metadata matches the current coarse environment; never treats OSM context as proof an object exists.
 - **difficulty** — favors the difficulty selected by the adaptive policy.
-- **variety** — slightly discourages repeating the previous observation kind.
+- **variety** — slightly discourages repeating the previous low-level discovery kind.
 - **recency** — strongly discourages immediate repeats and gradually decays for older exposure; it never permanently removes content.
 - **performance** — weak historical signal with a minimum sample threshold.
 - **experience** — favors content matching the current themed Experience.
+- **directionVariety** — discourages repeatedly looking at the same physical visual zone.
+- **actionVariety** — discourages repeating the same mission action.
+- **rhythm** — keeps rest / stop / viewpoint missions occasional and rewards appropriate Closing rhythm.
 - **phase** — keeps Closing optional targets lightweight.
 
 The score is converted to a positive selection weight. Ranking itself contains no random calls.
@@ -215,3 +218,8 @@ The following values are deliberately centralized hypotheses:
 - uploaded candidate-list limit
 
 Tune them only after looking at real playtest behavior. Do not optimize one metric—especially completion rate—in isolation.
+
+
+## Mission grammar layer
+
+Mission wording and sequencing metadata are documented in [MISSION_SYSTEM.md](./MISSION_SYSTEM.md). The selection pipeline treats mission direction, action type, role, and environment suitability as explicit factors rather than inferring them from text.

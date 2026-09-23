@@ -29,6 +29,9 @@ const context = (overrides = {}) => ({
   daylight: "day",
   recentlySeenIds: [],
   recentlyFoundIds: [],
+  recentDirections: [],
+  recentActionTypes: [],
+  recentRoles: [],
   quickFindStreak: 0,
   ...overrides,
 });
@@ -311,6 +314,9 @@ test("score breakdown total equals the sum of inspectable factors", () => {
     score.recency +
     score.performance +
     score.experience +
+    score.directionVariety +
+    score.actionVariety +
+    score.rhythm +
     score.phase;
 
   assert.equal(score.total, Math.round(calculated * 1000) / 1000);
@@ -390,5 +396,254 @@ test("compacted upload logs retain the selected candidate even outside the top N
       (candidate) => candidate.id === decision.discovery.id,
     ),
     true,
+  );
+});
+
+
+test("repeated observation direction receives a ranking penalty", () => {
+  const up = discovery({
+    id: "up",
+    difficulty: "medium",
+    direction: "up",
+    actionType: "find_one",
+    role: "observation",
+  });
+  const down = discovery({
+    id: "down",
+    difficulty: "medium",
+    direction: "down",
+    actionType: "find_one",
+    role: "observation",
+  });
+  const ctx = context({
+    discoveryIndex: 3,
+    recentDirections: ["eye_level", "up"],
+    recentActionTypes: ["find_one", "find_pattern"],
+    recentRoles: ["quick", "observation"],
+    previousDiscovery: {
+      id: "previous",
+      kind: "feature",
+      difficulty: "easy",
+      result: "found",
+      secondsVisible: 50,
+    },
+  });
+
+  const upScore = scoreDiscoveryCandidate(up, ctx, "medium");
+  const downScore = scoreDiscoveryCandidate(down, ctx, "medium");
+  assert.ok(upScore.directionVariety < 0);
+  assert.ok(downScore.total > upScore.total);
+});
+
+test("repeated action type receives a ranking penalty", () => {
+  const repeated = discovery({
+    id: "repeated-action",
+    difficulty: "medium",
+    direction: "down",
+    actionType: "find_one",
+    role: "observation",
+  });
+  const varied = discovery({
+    id: "varied-action",
+    difficulty: "medium",
+    direction: "down",
+    actionType: "compare",
+    role: "observation",
+  });
+  const ctx = context({
+    discoveryIndex: 3,
+    recentDirections: ["eye_level"],
+    recentActionTypes: ["find_one"],
+    recentRoles: ["observation"],
+    previousDiscovery: {
+      id: "previous",
+      kind: "feature",
+      difficulty: "easy",
+      result: "found",
+      secondsVisible: 50,
+    },
+  });
+
+  assert.ok(
+    scoreDiscoveryCandidate(repeated, ctx, "medium").actionVariety <
+      scoreDiscoveryCandidate(varied, ctx, "medium").actionVariety,
+  );
+});
+
+test("environment suitability prefers matching missions and penalizes inappropriate ones", () => {
+  const preferred = discovery({
+    id: "preferred",
+    difficulty: "medium",
+    environmentSuitability: { preferred: ["street"] },
+  });
+  const inappropriate = discovery({
+    id: "avoid",
+    difficulty: "medium",
+    environmentSuitability: { inappropriate: ["street"] },
+  });
+  const ctx = context({
+    discoveryIndex: 2,
+    previousDiscovery: {
+      id: "previous",
+      kind: "object",
+      difficulty: "easy",
+      result: "found",
+      secondsVisible: 70,
+    },
+  });
+
+  const preferredScore = scoreDiscoveryCandidate(preferred, ctx, "medium");
+  const inappropriateScore = scoreDiscoveryCandidate(
+    inappropriate,
+    ctx,
+    "medium",
+  );
+  assert.ok(preferredScore.environment > 0);
+  assert.ok(inappropriateScore.environment < 0);
+  assert.ok(preferredScore.total > inappropriateScore.total);
+});
+
+test("recent rest missions receive a strong frequency penalty", () => {
+  const rest = discovery({
+    id: "rest",
+    difficulty: "medium",
+    direction: "stop_and_watch",
+    actionType: "rest",
+    role: "rhythm_change",
+  });
+  const normal = discovery({
+    id: "normal",
+    difficulty: "medium",
+    direction: "down",
+    actionType: "find_one",
+    role: "observation",
+  });
+  const ctx = context({
+    discoveryIndex: 5,
+    recentDirections: ["down", "stop_and_watch"],
+    recentActionTypes: ["find_one", "rest"],
+    recentRoles: ["observation", "rhythm_change"],
+    previousDiscovery: {
+      id: "previous",
+      kind: "feature",
+      difficulty: "easy",
+      result: "found",
+      secondsVisible: 50,
+    },
+  });
+
+  assert.ok(
+    scoreDiscoveryCandidate(rest, ctx, "medium").rhythm <
+      scoreDiscoveryCandidate(normal, ctx, "medium").rhythm,
+  );
+});
+
+test("stop-and-watch missions are not selected consecutively when alternatives exist", () => {
+  const stop = discovery({
+    id: "stop",
+    difficulty: "medium",
+    direction: "stop_and_watch",
+    actionType: "stop_and_observe",
+    role: "rhythm_change",
+  });
+  const normal = discovery({
+    id: "normal",
+    difficulty: "medium",
+    direction: "down",
+    actionType: "find_one",
+    role: "observation",
+  });
+  const generated = generateDiscoveryCandidates(
+    [stop, normal],
+    context({
+      discoveryIndex: 4,
+      recentActionTypes: ["find_one", "stop_and_observe"],
+      recentDirections: ["down", "stop_and_watch"],
+      recentRoles: ["observation", "rhythm_change"],
+      previousDiscovery: {
+        id: "previous",
+        kind: "feature",
+        difficulty: "easy",
+        result: "found",
+        secondsVisible: 50,
+      },
+    }),
+    0.8,
+  );
+
+  assert.equal(
+    generated.candidates.some(
+      (candidate) => candidate.actionType === "stop_and_observe",
+    ),
+    false,
+  );
+});
+
+test("closing prefers lightweight rest or viewpoint missions", () => {
+  const rest = discovery({
+    id: "rest",
+    difficulty: "easy",
+    direction: "stop_and_watch",
+    actionType: "rest",
+    role: "rhythm_change",
+  });
+  const viewpoint = discovery({
+    id: "viewpoint",
+    difficulty: "easy",
+    direction: "distance",
+    actionType: "choose_viewpoint",
+    role: "rhythm_change",
+  });
+  const normal = discovery({
+    id: "normal",
+    difficulty: "easy",
+    direction: "eye_level",
+    actionType: "find_one",
+    role: "quick",
+  });
+  const ctx = context({
+    discoveryIndex: 6,
+    phase: "closing",
+    recentDirections: ["down", "around"],
+    recentActionTypes: ["find_one", "compare"],
+    recentRoles: ["observation", "observation"],
+  });
+
+  const ranked = rankDiscoveryCandidates(
+    [normal, rest, viewpoint],
+    ctx,
+    "easy",
+  );
+  assert.ok(
+    ["rest", "viewpoint"].includes(ranked[0].discovery.id),
+  );
+});
+
+test("first mission favors quick, easy, immediately readable content", () => {
+  const quick = discovery({
+    id: "quick",
+    title: "找一個數字。",
+    difficulty: "easy",
+    direction: "eye_level",
+    actionType: "find_one",
+    role: "quick",
+  });
+  const rhythm = discovery({
+    id: "rhythm",
+    title: "停 30 秒，看人往哪邊走。",
+    difficulty: "easy",
+    direction: "stop_and_watch",
+    actionType: "stop_and_observe",
+    role: "rhythm_change",
+  });
+
+  const generated = generateDiscoveryCandidates(
+    [rhythm, quick],
+    context(),
+    0.5,
+  );
+  assert.deepEqual(
+    generated.candidates.map((candidate) => candidate.id),
+    ["quick"],
   );
 });

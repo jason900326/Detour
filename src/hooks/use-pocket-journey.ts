@@ -12,6 +12,7 @@ import {
   type Point,
 } from "../lib/pocket-engine";
 import {
+  DISCOVERIES,
   getExperience,
   type Environment,
   type ExperienceId,
@@ -114,6 +115,11 @@ export function usePocketJourney() {
     const experienceId =
       input.experienceId ?? input.journey?.experienceId ?? "core";
     const found = input.found ?? input.journey?.found ?? [];
+    const recentIds =
+      input.recentlySeenIds ?? input.journey?.seen ?? [];
+    const recentMissions = recentIds
+      .map((id) => DISCOVERIES.find((discovery) => discovery.id === id))
+      .filter((discovery) => discovery !== undefined);
     return {
       environment: input.environment,
       experienceId,
@@ -122,10 +128,19 @@ export function usePocketJourney() {
       phase: input.phase,
       daylight: daylightForExperience(experienceId),
       previousDiscovery: input.previousDiscovery,
-      recentlySeenIds: input.recentlySeenIds ?? input.journey?.seen ?? [],
+      recentlySeenIds: recentIds,
       recentlyFoundIds:
         input.recentlyFoundIds ??
         found.map((item) => item.id),
+      recentDirections: recentMissions
+        .map((mission) => mission.direction)
+        .filter((value) => value !== undefined),
+      recentActionTypes: recentMissions
+        .map((mission) => mission.actionType)
+        .filter((value) => value !== undefined),
+      recentRoles: recentMissions
+        .map((mission) => mission.role)
+        .filter((value) => value !== undefined),
       quickFindStreak: quickFindStreak(found, input.previousDiscovery),
       performanceById: discoveryPerformance.current,
       forceLight: input.forceLight,
@@ -638,6 +653,9 @@ export function usePocketJourney() {
       difficulty: j.target.difficulty,
       result: skip ? "skipped" : "found",
       secondsVisible: Math.max(0, (time - j.targetSince) / 1000),
+      direction: j.target.direction,
+      actionType: j.target.actionType,
+      role: j.target.role,
     };
     const decision =
       phase === "closing" && !skip
@@ -697,6 +715,9 @@ export function usePocketJourney() {
             difficulty: previousFound.difficulty,
             result: "found",
             secondsVisible: previousFound.seconds,
+            direction: previousFound.direction,
+            actionType: previousFound.actionType,
+            role: previousFound.role,
           }
         : undefined;
     const environment =

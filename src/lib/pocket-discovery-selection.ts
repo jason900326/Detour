@@ -11,6 +11,11 @@ import {
   type ExperienceId,
   type Weather,
 } from "./pocket-content.ts";
+import type {
+  MissionActionType,
+  MissionDirection,
+  MissionRole,
+} from "./pocket-mission-grammar.ts";
 
 export type DiscoveryResult = "found" | "skipped";
 export type DiscoveryPhase = "exploration" | "closing";
@@ -29,6 +34,9 @@ export type PreviousDiscoveryContext = {
   difficulty: Difficulty;
   result: DiscoveryResult;
   secondsVisible: number;
+  direction?: MissionDirection;
+  actionType?: MissionActionType;
+  role?: MissionRole;
 };
 
 export type DiscoveryContext = {
@@ -42,6 +50,9 @@ export type DiscoveryContext = {
   previousDiscovery?: PreviousDiscoveryContext;
   recentlySeenIds: string[];
   recentlyFoundIds: string[];
+  recentDirections: MissionDirection[];
+  recentActionTypes: MissionActionType[];
+  recentRoles: MissionRole[];
   quickFindStreak: number;
   /** Optional local playtest aggregate. Small samples intentionally have no effect. */
   performanceById?: Record<string, DiscoveryPerformance>;
@@ -71,6 +82,9 @@ export type DiscoveryScoreBreakdown = {
   recency: number;
   performance: number;
   experience: number;
+  directionVariety: number;
+  actionVariety: number;
+  rhythm: number;
   phase: number;
   total: number;
 };
@@ -112,6 +126,9 @@ export type DiscoverySelectionLog = {
     previousDifficulty?: Difficulty;
     recentlySeenIds: string[];
     recentlyFoundIds: string[];
+    recentDirections: MissionDirection[];
+    recentActionTypes: MissionActionType[];
+    recentRoles: MissionRole[];
     quickFindStreak: number;
   };
   candidates: DiscoverySelectionLogCandidate[];
@@ -209,6 +226,27 @@ function experiencePreferredPool(
   return themed.length ? themed : candidates;
 }
 
+function applyMissionMixEligibility(
+  candidates: Discovery[],
+  context: DiscoveryContext,
+) {
+  let next = candidates;
+
+  if (context.discoveryIndex <= 1) {
+    const quick = next.filter((discovery) => discovery.role === "quick");
+    if (quick.length) next = quick;
+  }
+
+  if (context.recentActionTypes.at(-1) === "stop_and_observe") {
+    const nonStop = next.filter(
+      (discovery) => discovery.actionType !== "stop_and_observe",
+    );
+    if (nonStop.length) next = nonStop;
+  }
+
+  return next;
+}
+
 /**
  * Stage 1: decide which curated discoveries are eligible for this moment.
  *
@@ -238,6 +276,7 @@ export function generateDiscoveryCandidates(
     (discovery) => discovery.difficulty === policy.target,
   );
   ideal = experiencePreferredPool(ideal, context.experienceId);
+  ideal = applyMissionMixEligibility(ideal, context);
 
   if (ideal.length) {
     return {
@@ -250,6 +289,7 @@ export function generateDiscoveryCandidates(
 
   let fallback = available.filter((discovery) => discovery.difficulty !== "hard");
   fallback = experiencePreferredPool(fallback, context.experienceId);
+  fallback = applyMissionMixEligibility(fallback, context);
 
   if (fallback.length) {
     return {
@@ -293,6 +333,64 @@ function recencyScore(discovery: Discovery, context: DiscoveryContext) {
     .slice(-6)
     .includes(discovery.id);
   return foundRecently ? -0.22 : -0.12;
+}
+
+function directionVarietyScore(
+  discovery: Discovery,
+  context: DiscoveryContext,
+) {
+  if (!discovery.direction) return 0;
+  const recent = context.recentDirections;
+  if (recent.at(-1) === discovery.direction) return -0.38;
+  if (recent.slice(-3).includes(discovery.direction)) return -0.16;
+  return recent.length ? 0.08 : 0;
+}
+
+function actionVarietyScore(
+  discovery: Discovery,
+  context: DiscoveryContext,
+) {
+  if (!discovery.actionType) return 0;
+  const recent = context.recentActionTypes;
+  if (recent.at(-1) === discovery.actionType) return -0.32;
+  if (recent.slice(-3).includes(discovery.actionType)) return -0.14;
+  return recent.length ? 0.06 : 0;
+}
+
+function rhythmScore(
+  discovery: Discovery,
+  context: DiscoveryContext,
+) {
+  if (discovery.role !== "rhythm_change") return 0.04;
+
+  const recentActions = context.recentActionTypes;
+  const recentRoles = context.recentRoles;
+  if (
+    discovery.actionType === "stop_and_observe" &&
+    recentActions.at(-1) === "stop_and_observe"
+  )
+    return -1.4;
+  if (
+    discovery.actionType === "rest" &&
+    recentActions.slice(-4).includes("rest")
+  )
+    return -1.05;
+  if (recentRoles.slice(-3).includes("rhythm_change")) return -0.72;
+  if (context.discoveryIndex <= 2) return -0.7;
+
+  if (
+    context.phase === "closing" &&
+    (discovery.actionType === "rest" ||
+      discovery.actionType === "choose_viewpoint")
+  )
+    return 0.48;
+  if (
+    context.phase === "closing" &&
+    discovery.actionType === "stop_and_observe"
+  )
+    return 0.12;
+
+  return -0.18;
 }
 
 function historicalPerformanceScore(
@@ -344,12 +442,17 @@ export function scoreDiscoveryCandidate(
   const performance = context.performanceById?.[discovery.id];
 
   const base = 1;
+  const suitability = discovery.environmentSuitability;
   const environment =
-    environments.length === 0
-      ? 0
-      : environments.includes(context.environment)
-        ? 0.35
-        : -0.08;
+    suitability?.inappropriate?.includes(context.environment)
+      ? -0.62
+      : suitability?.preferred?.includes(context.environment)
+        ? 0.4
+        : environments.length === 0
+          ? 0
+          : environments.includes(context.environment)
+            ? 0.35
+            : -0.08;
   const difficulty =
     discovery.difficulty === targetDifficulty
       ? 0.55
@@ -363,6 +466,9 @@ export function scoreDiscoveryCandidate(
     : 0;
   const recency = recencyScore(discovery, context);
   const performanceScore = historicalPerformanceScore(performance, context);
+  const directionVariety = directionVarietyScore(discovery, context);
+  const actionVariety = actionVarietyScore(discovery, context);
+  const rhythm = rhythmScore(discovery, context);
   const experience =
     context.experienceId !== "core" &&
     discoveryMatchesExperience(discovery, context.experienceId)
@@ -379,6 +485,9 @@ export function scoreDiscoveryCandidate(
       recency +
       performanceScore +
       experience +
+      directionVariety +
+      actionVariety +
+      rhythm +
       phase,
   );
 
@@ -390,6 +499,9 @@ export function scoreDiscoveryCandidate(
     recency,
     performance: performanceScore,
     experience,
+    directionVariety,
+    actionVariety,
+    rhythm,
     phase,
     total,
   };
@@ -456,6 +568,9 @@ function publicLogContext(context: DiscoveryContext) {
     previousDifficulty: context.previousDiscovery?.difficulty,
     recentlySeenIds: [...context.recentlySeenIds],
     recentlyFoundIds: [...context.recentlyFoundIds],
+    recentDirections: [...context.recentDirections],
+    recentActionTypes: [...context.recentActionTypes],
+    recentRoles: [...context.recentRoles],
     quickFindStreak: context.quickFindStreak,
   };
 }
