@@ -7,9 +7,9 @@ import {
   appendFix,
   DISCOVERY_ROAM_MIN_MS,
   distance,
+  nextDiscoveryRevealReason,
   phaseAt,
   shouldDiscardShortEmptyJourney,
-  shouldRevealNextDiscovery,
   type PocketJourney,
   type Point,
 } from "../lib/pocket-engine";
@@ -527,13 +527,18 @@ export function usePocketJourney() {
   }
   function revealNextDiscovery(time = Date.now()) {
     const j = current.current;
-    if (
-      !j ||
-      j.phase !== "exploration" ||
-      j.target ||
-      !shouldRevealNextDiscovery(j, time)
-    )
-      return false;
+    if (!j || j.phase !== "exploration" || j.target) return false;
+    const revealReason = nextDiscoveryRevealReason(j, time);
+    if (!revealReason) return false;
+
+    const roamStartedAt = j.nextDiscoveryAt
+      ? j.nextDiscoveryAt - (j.demo ? 3_000 : DISCOVERY_ROAM_MIN_MS)
+      : time;
+    const roamGapSeconds = Math.max(0, (time - roamStartedAt) / 1000);
+    const roamFrom = j.nextDiscoveryFrom;
+    const roamCurrent = j.trace.at(-1);
+    const roamGapMeters =
+      roamFrom && roamCurrent ? distance(roamFrom, roamCurrent) : undefined;
 
     const previousFound = j.found.at(-1);
     const previousDiscovery: PreviousDiscoveryContext | undefined =
@@ -584,6 +589,9 @@ export function usePocketJourney() {
       discoveryIndex: nextSeen.length,
       experienceId: j.experienceId ?? "core",
       repeatExposure: j.seen.includes(target.id),
+      roamGapSeconds,
+      roamGapMeters,
+      roamRevealReason: revealReason,
       selection: decision.log,
     });
     return true;
