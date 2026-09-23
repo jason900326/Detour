@@ -62,7 +62,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types src/lib/*.test.mjs",
     "quality": "npm run lint && npm run typecheck && npm test",
-    "lint:expo": "expo lint"
+    "lint:expo": "expo lint",
+    "missions:generate": "node --experimental-strip-types scripts/generate-mission-candidates.mjs"
   },
   "private": true
 }
