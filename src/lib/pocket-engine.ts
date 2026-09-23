@@ -1,9 +1,5 @@
 import {
-  chooseDiscovery,
-  DISCOVERIES,
-  type Difficulty,
   type Discovery,
-  type Environment,
   type ExperienceId,
 } from "./pocket-content";
 
