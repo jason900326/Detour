@@ -867,24 +867,26 @@ export default function PocketApp() {
                                   setCoverError(true);
                               }}
                               style={{
-                                width: "74%",
+                                width: "86%",
                                 aspectRatio: PHOTO_ASPECT,
                                 alignSelf: "center",
-                                borderRadius: 12,
+                                borderRadius: 13,
                                 backgroundColor: C.white,
                               }}
                             />
                             <View
                               style={{
                                 position: "absolute",
-                                right: 8,
-                                top: 8,
-                                borderRadius: 999,
-                                backgroundColor: "#F7F3EAEE",
-                                paddingHorizontal: 8,
-                                paddingVertical: 5,
+                                right: 2,
+                                top: 10,
+                                backgroundColor: C.paper,
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                borderTopLeftRadius: 12,
+                                borderBottomLeftRadius: 12,
                                 borderWidth: 1,
-                                borderColor: "#E7E1D6",
+                                borderRightWidth: 0,
+                                borderColor: "#E1DACB",
                               }}
                             >
                               <Text
@@ -905,25 +907,19 @@ export default function PocketApp() {
                               style={{
                                 flexDirection: "row",
                                 justifyContent: "center",
-                                gap: 7,
-                                marginTop: -5,
+                                gap: 6,
+                                marginTop: -4,
                                 zIndex: 2,
                               }}
                             >
-                              {shareThumbs.map((uri, index) => (
+                              {shareThumbs.map((uri) => (
                                 <View
                                   key={uri}
                                   style={{
-                                    width: "18%",
+                                    width: "20%",
                                     padding: 2,
                                     borderRadius: 9,
                                     backgroundColor: C.paper,
-                                    transform: [
-                                      {
-                                        rotate:
-                                          index % 2 === 0 ? "-1deg" : "1deg",
-                                      },
-                                    ],
                                   }}
                                 >
                                   <Image
@@ -935,7 +931,7 @@ export default function PocketApp() {
                                       borderRadius: 7,
                                       backgroundColor: C.white,
                                       borderWidth: 1,
-                                      borderColor: "#E6E1D6",
+                                      borderColor: "#E1DACB",
                                     }}
                                   />
                                 </View>
@@ -948,39 +944,88 @@ export default function PocketApp() {
                           style={{
                             flex: 1,
                             justifyContent: "center",
-                            paddingVertical: 8,
+                            paddingVertical: 5,
                           }}
                         >
                           <View
                             style={{
+                              width: "96%",
                               alignSelf: "center",
-                              width: "88%",
-                              minHeight: 48,
+                              minHeight: 58,
                               borderRadius: 14,
-                              backgroundColor: "#EEF1E3",
+                              backgroundColor: "#F5EEDF",
                               borderWidth: 1,
-                              borderColor: "#DDE3CF",
-                              paddingHorizontal: 12,
-                              paddingVertical: 9,
-                              transform: [{ rotate: "-0.8deg" }],
+                              borderColor: "#E3D6C0",
+                              overflow: "hidden",
                               flexDirection: "row",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 10,
+                              alignItems: "stretch",
+                              transform: [{ rotate: "-0.6deg" }],
                             }}
                           >
-                            <View style={{ flex: 1 }}>
-                              <Text
+                            <View
+                              pointerEvents="none"
+                              style={{
+                                position: "absolute",
+                                width: 18,
+                                height: 18,
+                                borderRadius: 9,
+                                left: -9,
+                                top: 20,
+                                backgroundColor: C.paper,
+                                borderWidth: 1,
+                                borderColor: "#E3D6C0",
+                              }}
+                            />
+                            <View
+                              pointerEvents="none"
+                              style={{
+                                position: "absolute",
+                                width: 18,
+                                height: 18,
+                                borderRadius: 9,
+                                right: -9,
+                                top: 20,
+                                backgroundColor: C.paper,
+                                borderWidth: 1,
+                                borderColor: "#E3D6C0",
+                                zIndex: 3,
+                              }}
+                            />
+                            <View
+                              style={{
+                                flex: 1,
+                                paddingLeft: 17,
+                                paddingRight: 12,
+                                paddingVertical: 10,
+                                justifyContent: "center",
+                              }}
+                            >
+                              <View
                                 style={{
-                                  fontFamily: mono,
-                                  fontSize: 8.5,
-                                  color: "#69725F",
-                                  letterSpacing: 1,
-                                  marginBottom: 4,
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 5,
                                 }}
                               >
-                                DETOUR NOTE
-                              </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: "900",
+                                    color: C.orange,
+                                    letterSpacing: 1.2,
+                                  }}
+                                >
+                                  DETOUR
+                                </Text>
+                                <View
+                                  style={{
+                                    height: 1,
+                                    flex: 1,
+                                    backgroundColor: "#DDCDB3",
+                                  }}
+                                />
+                              </View>
                               <Text
                                 numberOfLines={1}
                                 adjustsFontSizeToFit
@@ -988,7 +1033,7 @@ export default function PocketApp() {
                                   fontFamily: mono,
                                   fontSize: 10.5,
                                   color: C.ink,
-                                  letterSpacing: 0.4,
+                                  letterSpacing: 0.3,
                                 }}
                               >
                                 {new Date(
@@ -997,28 +1042,49 @@ export default function PocketApp() {
                                   month: "2-digit",
                                   day: "2-digit",
                                 })}{" "}
-                                · {String(displayed.found.length).padStart(2, "0")} 發現
-                                · {String(displayed.photos.length).padStart(2, "0")} 張
+                                · {String(displayed.found.length).padStart(2, "0")} FOUND
+                                · {String(displayed.photos.length).padStart(2, "0")} SHOTS
                               </Text>
                             </View>
                             <View
                               style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 14,
+                                width: 64,
                                 backgroundColor: C.orange,
+                                borderLeftWidth: 1,
+                                borderStyle: "dashed",
+                                borderColor: "#F8B39F",
                                 alignItems: "center",
                                 justifyContent: "center",
+                                gap: 3,
                               }}
                             >
                               <Text
                                 style={{
+                                  fontFamily: mono,
                                   color: C.white,
-                                  fontSize: 15,
+                                  fontSize: 8,
+                                  letterSpacing: 1,
+                                }}
+                              >
+                                ADMIT
+                              </Text>
+                              <Text
+                                style={{
+                                  color: C.white,
+                                  fontSize: 20,
                                   fontWeight: "900",
                                 }}
                               >
                                 ✦
+                              </Text>
+                              <Text
+                                style={{
+                                  fontFamily: mono,
+                                  color: C.white,
+                                  fontSize: 7.5,
+                                }}
+                              >
+                                DTR
                               </Text>
                             </View>
                           </View>
@@ -1026,7 +1092,7 @@ export default function PocketApp() {
 
                         <View
                           style={{
-                            paddingTop: 8,
+                            paddingTop: 7,
                             paddingHorizontal: 2,
                           }}
                         >
@@ -1034,33 +1100,35 @@ export default function PocketApp() {
                             pointerEvents="none"
                             style={{
                               position: "absolute",
-                              left: -8,
-                              right: 18,
+                              left: -7,
+                              right: 24,
                               top: 14,
-                              height: 44,
+                              height: 42,
                               borderRadius: 16,
-                              backgroundColor: C.purple,
-                              opacity: 0.36,
-                              transform: [{ rotate: "-1.5deg" }],
+                              backgroundColor: "#F7E8DE",
+                              borderWidth: 1,
+                              borderColor: "#F0CABB",
+                              transform: [{ rotate: "-1.2deg" }],
                             }}
                           />
                           <View
                             pointerEvents="none"
                             style={{
                               position: "absolute",
-                              left: 28,
-                              right: -8,
-                              top: 22,
-                              height: 42,
-                              borderRadius: 16,
-                              backgroundColor: C.green,
-                              opacity: 0.42,
-                              transform: [{ rotate: "1.2deg" }],
+                              left: 32,
+                              right: -5,
+                              top: 20,
+                              height: 38,
+                              borderRadius: 14,
+                              backgroundColor: "#F2E7D4",
+                              borderWidth: 1,
+                              borderColor: "#E8D8BF",
+                              transform: [{ rotate: "1deg" }],
                             }}
                           />
                           <View
                             style={{
-                              paddingTop: 12,
+                              paddingTop: 11,
                               paddingBottom: 2,
                             }}
                           >
