@@ -25,7 +25,15 @@ import {
   guidanceBearingOnPolyline,
   distanceToPolyline,
 } from "../../lib/navigation-engine";
-import { Button, C, Enter, s, Ticket, Trail } from "./pocket-ui";
+import {
+  Button,
+  C,
+  Enter,
+  PHOTO_ASPECT,
+  s,
+  Ticket,
+  Trail,
+} from "./pocket-ui";
 import { WanderMotion } from "./pocket-motion";
 import { DirectionBeacon } from "./pocket-direction-beacon";
 import {
@@ -42,6 +50,7 @@ import {
 } from "../../lib/pocket-navigation";
 import PocketMap from "./pocket-map";
 import PocketCamera from "./pocket-camera";
+import { PocketLiveAlbum } from "./pocket-live-album";
 
 type Screen = PocketScreen;
 export default function PocketApp() {
@@ -54,6 +63,7 @@ export default function PocketApp() {
   const [shareOrigin, setShareOrigin] = useState<"home" | "detail">("home");
   const [selected, setSelected] = useState<PocketJourney | null>(null);
   const [camera, setCamera] = useState(false);
+  const [album, setAlbum] = useState(false);
   const [map, setMap] = useState(false);
   const [endSheet, setEndSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -83,6 +93,7 @@ export default function PocketApp() {
     setMap(false);
     setAtHome(true);
     setCamera(false);
+    setAlbum(false);
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
@@ -471,16 +482,66 @@ export default function PocketApp() {
                     {j.photos.at(-1) ? (
                       <Image
                         source={{ uri: j.photos.at(-1) }}
+                        resizeMode="contain"
                         style={{
-                          width: 44,
-                          height: 48,
+                          width: 40,
+                          aspectRatio: PHOTO_ASPECT,
                           borderRadius: 6,
-                          transform: [{ rotate: "6deg" }],
+                          transform: [{ rotate: "5deg" }],
+                          backgroundColor: "#343A31",
                         }}
                       />
                     ) : (
                       <Text style={{ color: C.white, fontSize: 26 }}>＋</Text>
                     )}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`即時相簿，目前有 ${j.photos.length} 張照片`}
+                    onPress={() => setAlbum(true)}
+                    style={[
+                      s.row,
+                      {
+                        backgroundColor: C.white,
+                        borderWidth: 1,
+                        borderColor: C.line,
+                        paddingHorizontal: 18,
+                        paddingVertical: 14,
+                        borderRadius: 20,
+                        marginTop: 10,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        borderWidth: 1.5,
+                        borderColor: C.ink,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ color: C.ink, fontSize: 17 }}>▦</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: C.ink,
+                          fontSize: 16,
+                          fontWeight: "700",
+                        }}
+                      >
+                        即時相簿
+                      </Text>
+                      <Text style={[s.muted, { marginTop: 2 }]}>
+                        {j.photos.length
+                          ? `${j.photos.length} 張 · 點開回看`
+                          : "拍過的照片會留在這裡"}
+                      </Text>
+                    </View>
+                    <Text style={{ color: C.muted, fontSize: 20 }}>↗</Text>
                   </Pressable>
                   {!!c.error && (
                     <View style={s.error}>
@@ -698,7 +759,13 @@ export default function PocketApp() {
                           >
                             <Image
                               source={{ uri }}
-                              style={{ width: 62, height: 76, borderRadius: 8 }}
+                              resizeMode="contain"
+                              style={{
+                                width: 64,
+                                aspectRatio: PHOTO_ASPECT,
+                                borderRadius: 8,
+                                backgroundColor: C.white,
+                              }}
                             />
                             {cover === uri && (
                               <Text
@@ -724,9 +791,12 @@ export default function PocketApp() {
                     ref={shareRef}
                     collapsable={false}
                     style={{
+                      width: "100%",
+                      aspectRatio: 9 / 16,
                       backgroundColor: C.paper,
-                      padding: 18,
+                      padding: 14,
                       borderRadius: 18,
+                      overflow: "hidden",
                     }}
                   >
                     {cover ? (
@@ -734,7 +804,7 @@ export default function PocketApp() {
                         <Image
                           key={cover}
                           source={{ uri: cover }}
-                          resizeMode="cover"
+                          resizeMode="contain"
                           onLoad={() => {
                             if (currentCover.current !== cover) return;
                             setLoadedCover(cover);
@@ -745,30 +815,52 @@ export default function PocketApp() {
                               setCoverError(true);
                           }}
                           style={{
-                            width: "100%",
-                            aspectRatio: 4 / 5,
-                            borderRadius: 14,
-                            backgroundColor: C.line,
+                            width: "78%",
+                            aspectRatio: PHOTO_ASPECT,
+                            alignSelf: "center",
+                            borderRadius: 12,
+                            backgroundColor: C.white,
                           }}
                         />
-                        <View style={{ marginTop: 16, marginBottom: 6 }}>
-                          <DetourBrand />
-                        </View>
-                        <Text
+                        <View
                           style={{
-                            fontSize: 27,
-                            marginTop: 8,
-                            marginBottom: 7,
+                            marginTop: 10,
+                            marginBottom: 2,
+                            transform: [{ scale: 0.86 }],
+                            transformOrigin: "left center",
                           }}
                         >
-                          {displayed.found.map((f) => f.emoji).join(" ")}
-                        </Text>
-                        <Text
+                          <DetourBrand />
+                        </View>
+                        <View
                           style={{
-                            fontSize: 24,
-                            lineHeight: 32,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 10,
+                            marginTop: 2,
+                          }}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={{
+                              flex: 1,
+                              fontSize: 24,
+                              lineHeight: 30,
+                            }}
+                          >
+                            {displayed.found.map((f) => f.emoji).join(" ")}
+                          </Text>
+                        </View>
+                        <Text
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          style={{
+                            fontSize: 21,
+                            lineHeight: 27,
                             fontWeight: "800",
                             color: C.ink,
+                            marginTop: 2,
                           }}
                         >
                           沒有目的地。卻遇見了這個。
@@ -777,32 +869,24 @@ export default function PocketApp() {
                           <View
                             style={{
                               flexDirection: "row",
-                              gap: 8,
-                              marginTop: 15,
+                              justifyContent: "center",
+                              gap: 7,
+                              marginTop: 9,
                             }}
                           >
                             {shareThumbs.map((uri) => (
                               <Image
                                 key={uri}
                                 source={{ uri }}
-                                resizeMode="cover"
+                                resizeMode="contain"
                                 style={{
-                                  flex: 1,
-                                  aspectRatio: 1,
-                                  borderRadius: 10,
-                                  backgroundColor: C.line,
+                                  width: "19%",
+                                  aspectRatio: PHOTO_ASPECT,
+                                  borderRadius: 8,
+                                  backgroundColor: C.white,
                                 }}
                               />
                             ))}
-                            {Array.from(
-                              { length: Math.max(0, 4 - shareThumbs.length) },
-                              (_, index) => (
-                                <View
-                                  key={`share-spacer-${index}`}
-                                  style={{ flex: 1, aspectRatio: 1 }}
-                                />
-                              ),
-                            )}
                           </View>
                         )}
                       </>
@@ -813,8 +897,8 @@ export default function PocketApp() {
                           style={[
                             s.title,
                             {
-                              fontSize: 30,
-                              lineHeight: 39,
+                              fontSize: 28,
+                              lineHeight: 36,
                               marginTop: 18,
                               marginBottom: 18,
                             },
@@ -825,17 +909,6 @@ export default function PocketApp() {
                         <Ticket journey={displayed} compact />
                       </>
                     )}
-                    <View style={{ marginTop: 12 }}>
-                      <Trail points={displayed.trace} height={62} framed />
-                    </View>
-                    <View style={[s.row, { marginTop: 12 }]}>
-                      <Text style={s.muted}>
-                        {new Date(displayed.startedAt).toLocaleDateString(
-                          "zh-TW",
-                        )}
-                      </Text>
-                      <Text style={s.muted}>一點時間，一點意外。</Text>
-                    </View>
                   </View>
                   <View style={{ height: 24 }} />
                   <Button
@@ -905,6 +978,11 @@ export default function PocketApp() {
       {camera && (
         <PocketCamera onClose={() => setCamera(false)} onSave={c.addPhoto} />
       )}
+      <PocketLiveAlbum
+        photos={j?.photos ?? []}
+        visible={album}
+        onClose={() => setAlbum(false)}
+      />
       <Modal
         visible={map}
         transparent
