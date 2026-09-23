@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  chooseDiscovery,
   phaseAt,
   appendFix,
-  DISCOVERIES,
   shouldDiscardShortEmptyJourney,
 } from "./pocket-engine.ts";
+import {
+  chooseDiscovery,
+  DISCOVERIES,
+} from "./pocket-content.ts";
 test("the first discovery is always easy across random draws", () => {
   for (let i = 0; i < 100; i++)
     assert.equal(
