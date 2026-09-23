@@ -3,7 +3,7 @@ import { Animated, Text, View } from "react-native";
 import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 import { C, useReducedMotion } from "./pocket-ui";
 
-export function DetourBrand({ large = false }: { large?: boolean }) {
+export function DetourBrand({ large = false, allowFontScaling = true }: { large?: boolean; allowFontScaling?: boolean }) {
   return (
     <View
       accessible
@@ -27,6 +27,7 @@ export function DetourBrand({ large = false }: { large?: boolean }) {
         <Circle cx="6" cy="28" r="3.2" fill={C.ink} />
       </Svg>
       <Text
+        allowFontScaling={allowFontScaling}
         style={{
           color: C.ink,
           fontSize: large ? 29 : 23,

@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as Sharing from "expo-sharing";
 import { captureRef } from "react-native-view-shot";
-import { usePocketJourney, tapHaptic } from "../../hooks/use-pocket-journey";
+import { usePocketJourney } from "../../hooks/use-pocket-journey";
 import {
   angle,
   bearing,
@@ -54,6 +54,10 @@ import PocketCamera from "./pocket-camera";
 import { PocketLiveAlbum } from "./pocket-live-album";
 import { PocketHistoryGallery } from "./pocket-history-gallery";
 
+import { PocketShareCard } from "./pocket-share-card";
+import { sharePhotos } from "../../lib/pocket-share";
+import { preparePocketFeedback, playPocketFeedback } from "../../lib/pocket-feedback";
+
 type Screen = PocketScreen;
 
 function traceMeters(journey: PocketJourney) {
@@ -68,7 +72,7 @@ export default function PocketApp() {
   const [screen, setScreen] = useState<Screen>("home");
   const [atHome, setAtHome] = useState(false);
   const [covers, setCovers] = useState<Record<string, string>>({});
-  const [loadedCover, setLoadedCover] = useState("");
+  const [loadedPhotos, setLoadedPhotos] = useState<Record<string, boolean>>({});
   const [coverError, setCoverError] = useState(false);
   const [shareOrigin, setShareOrigin] = useState<"home" | "detail">("home");
   const [selected, setSelected] = useState<PocketJourney | null>(null);
@@ -76,6 +80,7 @@ export default function PocketApp() {
   const [album, setAlbum] = useState(false);
   const [map, setMap] = useState(false);
   const [endSheet, setEndSheet] = useState(false);
+  const [deleteSheet, setDeleteSheet] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState("");
   const shareRef = useRef<View>(null);
@@ -83,15 +88,18 @@ export default function PocketApp() {
   const active = j && j.phase !== "finished";
   const completed = j?.phase === "finished";
   const displayed = selected ?? j;
+  const displayedFavorite = displayed
+    ? (c.history.find((entry) => entry.id === displayed.id)?.favorite ??
+      displayed.favorite ??
+      false)
+    : false;
   const cover = displayed
     ? (covers[displayed.id] ?? displayed.photos[0])
     : undefined;
-  const currentCover = useRef(cover);
-  currentCover.current = cover;
-  const shareThumbs =
-    displayed && cover
-      ? displayed.photos.filter((uri) => uri !== cover).slice(0, 4)
-      : [];
+  const selectedPhotos = displayed ? sharePhotos(displayed.photos, cover) : [];
+  const photosReady = selectedPhotos.every(uri => loadedPhotos[uri]);
+  const shareLock = useRef(false);
+  useEffect(preparePocketFeedback, []);
   const elapsed = j ? Math.max(0, Math.floor((c.now - j.startedAt) / 1000)) : 0;
   const hasJourneyMemories = !!j && (j.photos.length > 0 || j.found.length > 0);
   const journeyHasRoute = !!j && traceMeters(j) >= 35;
@@ -111,6 +119,15 @@ export default function PocketApp() {
   }
   const isJourney = screen === "home" && active && !atHome;
   const isCompletion = screen === "home" && completed && !atHome;
+  const revealed = useRef(new Set<string>());
+  const feedbackVisible = !!isJourney && !camera && !album && !map && !endSheet;
+  useEffect(() => {
+    if (!feedbackVisible || !j?.target) return;
+    const key = `${j.id}:${j.target.id}:${j.targetSince}`;
+    if (revealed.current.has(key)) return;
+    revealed.current.add(key);
+    playPocketFeedback("mission");
+  }, [feedbackVisible, j?.id, j?.target?.id, j?.targetSince]);
   function back() {
     const previous = previousPocketScreen(screen, shareOrigin);
     if (previous) setScreen(previous);
@@ -131,12 +148,14 @@ export default function PocketApp() {
     return () => sub.remove();
   });
   async function share() {
-    if (sharing || (cover && (loadedCover !== cover || coverError))) return;
+    if (shareLock.current || !photosReady || coverError) return;
+    shareLock.current = true;
     setSharing(true);
     setShareError("");
     try {
       if (Platform.OS !== "web" && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(shareRef, { format: "png", quality: 1 });
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        const uri = await captureRef(shareRef, { format: "png", quality: 1, width: 1080, height: 1920 });
         await Sharing.shareAsync(uri, {
           mimeType: "image/png",
           dialogTitle: "分享這一趟 Detour",
@@ -149,6 +168,7 @@ export default function PocketApp() {
     } catch {
       setShareError("分享沒有完成，可以再試一次。");
     } finally {
+      shareLock.current = false;
       setSharing(false);
     }
   }
@@ -253,27 +273,102 @@ export default function PocketApp() {
                       <HomeJourneyMotion />
                     </View>
                   </View>
+                  {c.recoverableJourney && (
+                    <Enter>
+                      <View
+                        style={{
+                          marginBottom: 16,
+                          padding: 18,
+                          borderRadius: 22,
+                          borderWidth: 1,
+                          borderColor: "#E5DED0",
+                          backgroundColor: C.white,
+                          shadowColor: "#383B29",
+                          shadowOpacity: 0.05,
+                          shadowRadius: 14,
+                          shadowOffset: { width: 0, height: 7 },
+                        }}
+                      >
+                        <View style={[s.row, { alignItems: "flex-start" }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[s.eyebrow, { color: C.orange }]}>
+                              上次還停在路上
+                            </Text>
+                            <Text
+                              style={{
+                                color: C.ink,
+                                fontSize: 22,
+                                lineHeight: 30,
+                                fontWeight: "800",
+                                marginTop: 7,
+                                letterSpacing: -0.5,
+                              }}
+                            >
+                              要接著走，還是重新來一趟？
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 28 }}>↻</Text>
+                        </View>
+                        <Text style={[s.muted, { marginTop: 10, marginBottom: 14 }]}>
+                          {new Date(
+                            c.recoverableJourney.startedAt,
+                          ).toLocaleString("zh-TW", {
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" · "}
+                          {c.recoverableJourney.found.length} 個發現
+                          {" · "}
+                          {c.recoverableJourney.photos.length} 張照片
+                        </Text>
+                        <View style={{ gap: 9 }}>
+                          <Button
+                            small
+                            label="繼續這趟"
+                            onPress={() => {
+                              c.resumeRecovered();
+                              setAtHome(false);
+                            }}
+                          />
+                          <Button
+                            small
+                            secondary
+                            label="重新開始"
+                            disabled={c.starting}
+                            onPress={() => {
+                              setAtHome(false);
+                              void c.restartRecovered();
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </Enter>
+                  )}
                   {!!c.error && (
                     <View style={s.error}>
                       <Text style={s.errorText}>{c.error}</Text>
                     </View>
                   )}
-                  <Button
-                    label={
-                      c.starting
-                        ? "找位置中…"
-                        : active
-                          ? "繼續這趟 ↗"
-                          : completed
-                            ? "看看這趟票根"
-                            : "繞一下？"
-                    }
-                    onPress={() => {
-                      setAtHome(false);
-                      if (!j) void c.start();
-                    }}
-                    disabled={c.starting}
-                  />
+                  {!c.recoverableJourney && (
+                    <Button
+                      label={
+                        c.starting
+                          ? "找位置中…"
+                          : active
+                            ? "繼續這趟 ↗"
+                            : completed
+                              ? "看看這趟票根"
+                              : "繞一下？"
+                      }
+                      onPress={() => {
+                        setAtHome(false);
+                        if (!j) void c.start();
+                      }}
+                      disabled={c.starting}
+                    />
+                  )}
                   <View style={{ marginTop: 14, marginBottom: 16 }}>
                     <Button
                       secondary
@@ -400,8 +495,7 @@ export default function PocketApp() {
                             hideArrow
                             accessibilityLabel="找到了，開啟相機記錄"
                             onPress={() => {
-                              c.discover();
-                              setCamera(true);
+                              if (c.discover()) setCamera(true);
                             }}
                           />
                         </View>
@@ -443,6 +537,8 @@ export default function PocketApp() {
                     </Enter>
                   )}
                   <Direction
+                    feedbackVisible={feedbackVisible}
+                    journeyId={j.id}
                     route={c.leg?.coordinates ?? []}
                     trace={j.trace}
                     heading={c.heading}
@@ -645,7 +741,7 @@ export default function PocketApp() {
                       onPress={() => {
                         setSelected(j);
                         setShareOrigin("home");
-                        setLoadedCover("");
+                        setLoadedPhotos({});
                         setCoverError(false);
                         setScreen("share");
                       }}
@@ -726,6 +822,79 @@ export default function PocketApp() {
                     title="一張舊票根"
                     back={() => setScreen("history")}
                   />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "flex-end",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        displayedFavorite ? "從最愛移除" : "加入最愛"
+                      }
+                      accessibilityState={{ selected: displayedFavorite }}
+                      onPress={() => void c.toggleFavorite(displayed.id)}
+                      style={{
+                        minHeight: 40,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: displayedFavorite ? C.orange : C.line,
+                        backgroundColor: displayedFavorite ? "#FBE8DF" : C.white,
+                        paddingHorizontal: 13,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: displayedFavorite ? C.orange : C.muted,
+                          fontSize: 15,
+                        }}
+                      >
+                        {displayedFavorite ? "♥" : "♡"}
+                      </Text>
+                      <Text
+                        style={{
+                          color: displayedFavorite ? C.orange : C.ink,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {displayedFavorite ? "已收藏" : "加到最愛"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="更多票根操作"
+                      onPress={() => setDeleteSheet(true)}
+                      style={[
+                        s.round,
+                        {
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: C.white,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: C.ink,
+                          fontSize: 18,
+                          lineHeight: 20,
+                          marginTop: -6,
+                          letterSpacing: 1,
+                        }}
+                      >
+                        •••
+                      </Text>
+                    </Pressable>
+                  </View>
                   <Ticket journey={displayed} />
                   <Text style={s.sectionTitle}>
                     {displayed.endpoint?.name ?? "城市的一角"}
@@ -759,7 +928,7 @@ export default function PocketApp() {
                     label="分享這一趟"
                     onPress={() => {
                       setShareOrigin("detail");
-                      setLoadedCover("");
+                      setLoadedPhotos({});
                       setCoverError(false);
                       setScreen("share");
                     }}
@@ -791,7 +960,7 @@ export default function PocketApp() {
                             disabled={sharing}
                             onPress={() => {
                               if (cover !== uri) {
-                                setLoadedCover("");
+                                setLoadedPhotos({});
                                 setCoverError(false);
                                 setCovers((v) => ({
                                   ...v,
@@ -837,181 +1006,24 @@ export default function PocketApp() {
                       </ScrollView>
                     </View>
                   )}
-                  <View
-                    ref={shareRef}
-                    collapsable={false}
-                    style={{
-                      width: "100%",
-                      aspectRatio: 9 / 16,
-                      backgroundColor: C.paper,
-                      padding: 14,
-                      borderRadius: 18,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {cover ? (
-                      <View style={{ flex: 1, overflow: "hidden" }}>
-                        <View
-                          style={{
-                            height: "68%",
-                            paddingHorizontal: 4,
-                            paddingTop: 2,
-                            paddingBottom: 8,
-                          }}
-                        >
-                          <View
-                            style={{
-                              flex: 1,
-                              width: "90%",
-                              alignSelf: "center",
-                              borderRadius: 14,
-                              overflow: "hidden",
-                              backgroundColor: C.white,
-                              borderWidth: 1,
-                              borderColor: "#E4D8C8",
-                            }}
-                          >
-                            <View style={{ flex: 1, minHeight: 0 }}>
-                              <Image
-                                key={cover}
-                                source={{ uri: cover }}
-                                resizeMode="contain"
-                                onLoad={() => {
-                                  if (currentCover.current !== cover) return;
-                                  setLoadedCover(cover);
-                                  setCoverError(false);
-                                }}
-                                onError={() => {
-                                  if (currentCover.current === cover)
-                                    setCoverError(true);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  backgroundColor: C.white,
-                                }}
-                              />
-                            </View>
-
-                            <View
-                              style={{
-                                height: 76,
-                                flexDirection: "row",
-                                gap: 3,
-                                padding: 4,
-                                paddingTop: 3,
-                                backgroundColor: C.paper,
-                                borderTopWidth: shareThumbs.length ? 1 : 0,
-                                borderColor: "#E4D8C8",
-                                overflow: "hidden",
-                              }}
-                            >
-                              {shareThumbs.map((uri) => (
-                                <View
-                                  key={uri}
-                                  style={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    borderRadius: 5,
-                                    overflow: "hidden",
-                                    backgroundColor: C.white,
-                                  }}
-                                >
-                                  <Image
-                                    source={{ uri }}
-                                    resizeMode="contain"
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      backgroundColor: C.white,
-                                    }}
-                                  />
-                                </View>
-                              ))}
-                            </View>
-                          </View>
-                        </View>
-
-                        <View
-                          style={{
-                            height: "32%",
-                            justifyContent: "flex-end",
-                            paddingHorizontal: 2,
-                            paddingTop: 12,
-                            paddingBottom: 18,
-                            overflow: "hidden",
-                          }}
-                        >
-                          <DetourBrand />
-                          <Text
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                            style={{
-                              fontSize: 21,
-                              lineHeight: 27,
-                              marginTop: 9,
-                            }}
-                          >
-                            {displayed.found.map((f) => f.emoji).join(" ")}
-                          </Text>
-                          <Text
-                            numberOfLines={2}
-                            adjustsFontSizeToFit
-                            style={{
-                              fontSize: 20,
-                              lineHeight: 26,
-                              fontWeight: "800",
-                              color: C.ink,
-                              marginTop: 2,
-                              paddingRight: 8,
-                            }}
-                          >
-                            沒有目的地。卻遇見了這個。
-                          </Text>
-                          <View
-                            style={{
-                              width: 38,
-                              height: 3,
-                              borderRadius: 2,
-                              backgroundColor: C.orange,
-                              marginTop: 10,
-                            }}
-                          />
-                        </View>
-                      </View>                    ) : (
-                      <>
-                        <DetourBrand />
-                        <Text
-                          style={[
-                            s.title,
-                            {
-                              fontSize: 27,
-                              lineHeight: 35,
-                              marginTop: 18,
-                              marginBottom: 18,
-                            },
-                          ]}
-                        >
-                          <>
-                            沒有特別去哪，{"\n"}卻帶回了一點什麼。
-                          </>
-                        </Text>
-                        <Ticket journey={displayed} compact />
-                      </>
-                    )}
-                  </View>
+                  <PocketShareCard
+                    key={`${displayed.id}:${cover ?? "empty"}`}
+                    journey={displayed} cover={cover} cardRef={shareRef}
+                    onPhotoLoad={uri => setLoadedPhotos(v => v[uri] ? v : ({ ...v, [uri]: true }))}
+                    onPhotoError={() => setCoverError(true)}
+                  />
                   <View style={{ height: 24 }} />
                   <Button
                     label="分享這一趟"
                     onPress={() => void share()}
                     disabled={
                       sharing ||
-                      (!!cover && (loadedCover !== cover || coverError))
+                      (!photosReady || coverError)
                     }
                   />
                   {coverError && (
                     <Text style={s.errorText}>
-                      這張照片無法讀取，請選另一張。
+                      部分照片無法讀取，請返回後再試一次。
                     </Text>
                   )}
                   {!!shareError && (
@@ -1137,6 +1149,73 @@ export default function PocketApp() {
         </View>
       </Modal>
       <Modal
+        visible={deleteSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteSheet(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "#24292155",
+          }}
+        >
+          <View
+            style={{
+              padding: 28,
+              paddingBottom: 45,
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              backgroundColor: C.paper,
+              gap: 14,
+            }}
+          >
+            <Text style={s.sectionTitle}>刪掉這張票根？</Text>
+            <Text style={[s.body, { marginBottom: 8 }]}>
+              這趟記錄和 Detour 裡保存的照片會一起刪除。這個動作不能復原。
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="確認刪除這張票根"
+              onPress={() => {
+                const id = displayed?.id;
+                if (!id) return;
+                setDeleteSheet(false);
+                setSelected(null);
+                setScreen("history");
+                void c.deleteHistory(id);
+              }}
+              style={{
+                minHeight: 58,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: "#D9A18C",
+                backgroundColor: "#F9E5D9",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 20,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#964B32",
+                  fontSize: 17,
+                  fontWeight: "800",
+                }}
+              >
+                刪除這張票根
+              </Text>
+            </Pressable>
+            <Button
+              secondary
+              label="先留著"
+              onPress={() => setDeleteSheet(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+      <Modal
         visible={endSheet}
         transparent
         animationType="fade"
@@ -1232,6 +1311,8 @@ function CameraGlyph() {
   );
 }
 function Direction({
+  feedbackVisible,
+  journeyId,
   route,
   trace,
   heading,
@@ -1240,6 +1321,8 @@ function Direction({
   notice,
   onMap,
 }: {
+  feedbackVisible: boolean;
+  journeyId: string;
   route: { latitude: number; longitude: number }[];
   trace: { latitude: number; longitude: number }[];
   heading: number | null;
@@ -1289,13 +1372,19 @@ function Direction({
     }
   }
   const seenTurns = useRef(new Set<string>());
-  const cornerKey = corner?.key;
+  const end = route.at(-1);
+  const directionKey = corner?.key ?? (degrees !== null && end ? `leg:${end.latitude.toFixed(5)},${end.longitude.toFixed(5)}` : null);
+  const cornerKey = directionKey ? `${journeyId}:${directionKey}` : null;
   useEffect(() => {
-    if (cornerKey && !seenTurns.current.has(cornerKey)) {
-      seenTurns.current.add(cornerKey);
-      tapHaptic();
+    if (feedbackVisible && !routing && !notice && cornerKey && !seenTurns.current.has(cornerKey)) {
+      // Let the objective card's entrance land first; cancel if hidden or replaced.
+      const timer = setTimeout(() => {
+        seenTurns.current.add(cornerKey);
+        playPocketFeedback("direction");
+      }, 360);
+      return () => clearTimeout(timer);
     }
-  }, [cornerKey]);
+  }, [cornerKey, feedbackVisible, routing, notice]);
   const title = notice
     ? "先看看這條街"
     : routing
@@ -1314,7 +1403,6 @@ function Direction({
       accessibilityRole="button"
       accessibilityLabel="查看方向地圖"
       onPress={() => {
-        tapHaptic();
         onMap();
       }}
       style={[
