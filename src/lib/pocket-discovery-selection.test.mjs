@@ -140,11 +140,11 @@ test("two quick finds can open hard difficulty without making it mandatory", () 
   assert.equal(discoveryDifficultyPolicy(ctx, 0.8).target, "medium");
 });
 
-test("recently seen tasks receive a transparent penalty instead of a global ban", () => {
+test("recently seen tasks stay on cooldown when fresh alternatives exist", () => {
   const repeated = discovery({ id: "repeat", difficulty: "medium" });
   const fresh = discovery({ id: "fresh", difficulty: "medium" });
   const ctx = context({
-    discoveryIndex: 3,
+    discoveryIndex: 6,
     previousDiscovery: {
       id: "previous",
       kind: "object",
@@ -152,7 +152,7 @@ test("recently seen tasks receive a transparent penalty instead of a global ban"
       result: "found",
       secondsVisible: 40,
     },
-    recentlySeenIds: ["older", "repeat"],
+    recentlySeenIds: ["a", "b", "c", "repeat"],
     recentlyFoundIds: [],
   });
 
@@ -163,10 +163,32 @@ test("recently seen tasks receive a transparent penalty instead of a global ban"
   assert.ok(freshScore.total > repeatedScore.total);
 
   const generated = generateDiscoveryCandidates([repeated, fresh], ctx, 0.8);
-  assert.equal(
-    generated.candidates.some((item) => item.id === "repeat"),
-    true,
+  assert.deepEqual(
+    generated.candidates.map((item) => item.id),
+    ["fresh"],
   );
+});
+
+test("cooldown fails open when every eligible task was recently shown", () => {
+  const first = discovery({ id: "first", difficulty: "medium" });
+  const second = discovery({ id: "second", difficulty: "medium" });
+  const generated = generateDiscoveryCandidates(
+    [first, second],
+    context({
+      discoveryIndex: 8,
+      recentlySeenIds: ["first", "second"],
+      previousDiscovery: {
+        id: "second",
+        kind: "feature",
+        difficulty: "easy",
+        result: "found",
+        secondsVisible: 40,
+      },
+    }),
+    0.8,
+  );
+
+  assert.equal(generated.candidates.length, 2);
 });
 
 test("environment-matching discoveries are preferred in ranking, not hard-filtered", () => {
