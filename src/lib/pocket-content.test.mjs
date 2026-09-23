@@ -5,6 +5,7 @@ import {
   chooseDiscoveryDifficulty,
   discoveryWeight,
   filterDiscoveries,
+  getExperience,
   selectDiscovery,
 } from "./pocket-content.ts";
 
@@ -159,4 +160,11 @@ test("future weather availability can filter content without special-case journe
     ),
     ["rain-trace", "universal-weather"],
   );
+});
+
+
+test("Night is development-only while core remains the implicit production Experience", () => {
+  assert.equal(getExperience().id, "core");
+  assert.notEqual(getExperience("core").developmentOnly, true);
+  assert.equal(getExperience("night").developmentOnly, true);
 });
