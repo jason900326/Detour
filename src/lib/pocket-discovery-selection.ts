@@ -10,7 +10,7 @@ import {
   type Environment,
   type ExperienceId,
   type Weather,
-} from "./pocket-content";
+} from "./pocket-content.ts";
 
 export type DiscoveryResult = "found" | "skipped";
 export type DiscoveryPhase = "exploration" | "closing";
