@@ -12,6 +12,7 @@ import {
   guidanceBearingOnPolyline,
 } from "../../../lib/navigation-engine";
 import { playPocketFeedback } from "../../../lib/pocket-feedback";
+import type { MissionActionType } from "../../../lib/pocket-mission-grammar";
 import { Button, C, Enter, PHOTO_ASPECT, s } from "../pocket-ui";
 import { DirectionBeacon } from "../pocket-direction-beacon";
 
@@ -108,7 +109,7 @@ export function PocketJourneyScreen({
             />
             <View style={s.row}>
               <Text style={[s.eyebrow, { color: "#756483" }]}>
-                這一眼的任務
+                {missionEyebrow(journey.target.actionType)}
               </Text>
               <Text style={s.serial}>
                 NO. {String(journey.found.length + 1).padStart(2, "0")}
@@ -185,7 +186,7 @@ export function PocketJourneyScreen({
             </Pressable>
           </View>
         </Enter>
-      ) : (
+      ) : journey.phase === "closing" ? (
         <Enter>
           <View
             style={[
@@ -210,6 +211,22 @@ export function PocketJourneyScreen({
             />
           )}
         </Enter>
+      ) : (
+        <View
+          accessibilityLabel="這一段先走走看，下一張紙條會自己出現"
+          style={{
+            minHeight: 58,
+            justifyContent: "center",
+            alignItems: "center",
+            marginTop: 6,
+            marginBottom: 6,
+          }}
+        >
+          <Text style={[s.eyebrow, { color: C.muted }]}>先走走看</Text>
+          <Text style={[s.muted, { marginTop: 4 }]}>
+            下一張紙條會自己來。
+          </Text>
+        </View>
       )}
 
       <Direction
@@ -353,6 +370,25 @@ export function PocketJourneyScreen({
       )}
     </>
   );
+}
+
+function missionEyebrow(actionType: MissionActionType | undefined) {
+  switch (actionType) {
+    case "compare":
+      return "比一比";
+    case "find_pattern":
+      return "找規律";
+    case "count":
+      return "數一數";
+    case "choose_viewpoint":
+      return "換個角度";
+    case "stop_and_observe":
+      return "停一下";
+    case "rest":
+      return "喘口氣";
+    default:
+      return "找找看";
+  }
 }
 
 function CameraGlyph() {

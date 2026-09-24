@@ -1,8 +1,10 @@
 import type {
   Difficulty,
+  Discovery,
   Environment,
   ExperienceId,
 } from "./pocket-content";
+import type { DiscoveryRevealReason } from "./pocket-engine";
 import type {
   DiscoveryPerformance,
   DiscoverySelectionLog,
@@ -23,6 +25,13 @@ export type PocketDiscoveryObservation = {
   discoveryIndex: number;
   experienceId?: ExperienceId;
   repeatExposure?: boolean;
+  actionType?: Discovery["actionType"];
+  direction?: Discovery["direction"];
+  role?: Discovery["role"];
+  concept?: Discovery["concept"];
+  roamGapSeconds?: number;
+  roamGapMeters?: number;
+  roamRevealReason?: DiscoveryRevealReason;
   selection?: DiscoverySelectionLog;
 };
 
@@ -39,6 +48,21 @@ export type DiscoveryAggregate = {
 export type PocketDiscoverySummary = DiscoveryAggregate & {
   byEnvironment: Record<string, DiscoveryAggregate>;
   byJourneyPosition: Record<string, DiscoveryAggregate>;
+  byActionType: Record<string, DiscoveryAggregate>;
+  actionSequence: string[];
+  roaming: {
+    count: number;
+    averageSeconds: number | null;
+    medianSeconds: number | null;
+    averageMeters: number | null;
+    revealReasonCounts: Record<string, number>;
+    samples: Array<{
+      discoveryIndex: number;
+      seconds: number;
+      meters: number | null;
+      reason?: DiscoveryRevealReason;
+    }>;
+  };
 };
 
 export type DiscoveryQualitySignal = {
@@ -167,6 +191,25 @@ function byDiscovery(
 export function aggregateDiscoveryTelemetry(
   observations: PocketDiscoveryObservation[],
 ): PocketDiscoverySummary {
+  const roaming = observations.filter(
+    (observation) =>
+      typeof observation.roamGapSeconds === "number" &&
+      Number.isFinite(observation.roamGapSeconds),
+  );
+  const roamSeconds = roaming.map((observation) => observation.roamGapSeconds!);
+  const roamMeters = roaming
+    .map((observation) => observation.roamGapMeters)
+    .filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    );
+  const revealReasonCounts: Record<string, number> = {};
+  for (const observation of roaming) {
+    if (!observation.roamRevealReason) continue;
+    revealReasonCounts[observation.roamRevealReason] =
+      (revealReasonCounts[observation.roamRevealReason] ?? 0) + 1;
+  }
+
   return {
     ...aggregate(observations),
     byEnvironment: grouped(
@@ -177,6 +220,44 @@ export function aggregateDiscoveryTelemetry(
       observations,
       (observation) => String(observation.discoveryIndex),
     ),
+    byActionType: grouped(
+      observations,
+      (observation) => observation.actionType ?? "unknown",
+    ),
+    actionSequence: observations.map(
+      (observation) => observation.actionType ?? "unknown",
+    ),
+    roaming: {
+      count: roaming.length,
+      averageSeconds: roamSeconds.length
+        ? Math.round(
+            (roamSeconds.reduce((sum, value) => sum + value, 0) /
+              roamSeconds.length) *
+              10,
+          ) / 10
+        : null,
+      medianSeconds: roamSeconds.length
+        ? Math.round(median(roamSeconds)! * 10) / 10
+        : null,
+      averageMeters: roamMeters.length
+        ? Math.round(
+            (roamMeters.reduce((sum, value) => sum + value, 0) /
+              roamMeters.length) *
+              10,
+          ) / 10
+        : null,
+      revealReasonCounts,
+      samples: roaming.map((observation) => ({
+        discoveryIndex: observation.discoveryIndex,
+        seconds: Math.round(observation.roamGapSeconds! * 10) / 10,
+        meters:
+          typeof observation.roamGapMeters === "number" &&
+          Number.isFinite(observation.roamGapMeters)
+            ? Math.round(observation.roamGapMeters * 10) / 10
+            : null,
+        reason: observation.roamRevealReason,
+      })),
+    },
   };
 }
 

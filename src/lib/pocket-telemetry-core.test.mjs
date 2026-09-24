@@ -48,6 +48,16 @@ test("discovery aggregates expose shown/found/skip rates and timing", () => {
   assert.equal(summary.byEnvironment.street.foundRate, 1);
   assert.equal(summary.byEnvironment.commercial.skipRate, 1);
   assert.equal(summary.byJourneyPosition["2"].skippedCount, 1);
+  assert.equal(summary.byActionType.unknown.shownCount, 3);
+  assert.deepEqual(summary.actionSequence, ["unknown", "unknown", "unknown"]);
+  assert.deepEqual(summary.roaming, {
+    count: 0,
+    averageSeconds: null,
+    medianSeconds: null,
+    averageMeters: null,
+    revealReasonCounts: {},
+    samples: [],
+  });
 });
 
 test("unresolved shown targets count as shown without inventing an outcome", () => {
@@ -218,4 +228,70 @@ test("selection analytics answer fallback, skip-recovery, quick-hard and recency
       (item) => item.discoveryId === "door",
     ),
   );
+});
+
+
+test("discovery summary exposes mechanic mix and roaming gap timing", () => {
+  const summary = aggregateDiscoveryTelemetry([
+    row({
+      discoveryId: "door",
+      actionType: "find_one",
+      roamGapSeconds: 28,
+      roamGapMeters: 38,
+      roamRevealReason: "distance",
+    }),
+    row({
+      discoveryId: "old-new",
+      actionType: "compare",
+      roamGapSeconds: 60,
+      roamGapMeters: 12,
+      roamRevealReason: "timeout",
+      discoveryIndex: 2,
+    }),
+    row({
+      discoveryId: "pattern",
+      actionType: "find_pattern",
+      roamGapSeconds: 42,
+      roamGapMeters: 31,
+      roamRevealReason: "distance",
+      discoveryIndex: 3,
+    }),
+  ]);
+
+  assert.equal(summary.byActionType.find_one.shownCount, 1);
+  assert.equal(summary.byActionType.compare.shownCount, 1);
+  assert.equal(summary.byActionType.find_pattern.shownCount, 1);
+  assert.equal(summary.roaming.count, 3);
+  assert.equal(summary.roaming.averageSeconds, 43.3);
+  assert.equal(summary.roaming.medianSeconds, 42);
+  assert.equal(summary.roaming.averageMeters, 27);
+  assert.deepEqual(summary.actionSequence, [
+    "find_one",
+    "compare",
+    "find_pattern",
+  ]);
+  assert.deepEqual(summary.roaming.revealReasonCounts, {
+    distance: 2,
+    timeout: 1,
+  });
+  assert.deepEqual(summary.roaming.samples, [
+    {
+      discoveryIndex: 1,
+      seconds: 28,
+      meters: 38,
+      reason: "distance",
+    },
+    {
+      discoveryIndex: 2,
+      seconds: 60,
+      meters: 12,
+      reason: "timeout",
+    },
+    {
+      discoveryIndex: 3,
+      seconds: 42,
+      meters: 31,
+      reason: "distance",
+    },
+  ]);
 });

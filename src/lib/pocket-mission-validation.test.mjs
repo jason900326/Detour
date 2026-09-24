@@ -78,3 +78,25 @@ test("grammar tooling generates a large deduplicated review pool", () => {
   );
   assert.deepEqual(errors, []);
 });
+
+
+test("production pool keeps roughly 150 core missions for playtest variety", () => {
+  const night = DISCOVERIES.filter((mission) =>
+    mission.suitableFor?.includes("night"),
+  );
+  const core = DISCOVERIES.filter(
+    (mission) => !mission.suitableFor?.includes("night"),
+  );
+
+  assert.equal(core.length, 150);
+  assert.equal(night.length, 7);
+  assert.equal(DISCOVERIES.length, 157);
+  assert.equal(
+    new Set(DISCOVERIES.map((mission) => mission.id)).size,
+    DISCOVERIES.length,
+  );
+  assert.equal(
+    new Set(DISCOVERIES.map((mission) => mission.title)).size,
+    DISCOVERIES.length,
+  );
+});

@@ -68,7 +68,7 @@ Current factors are product hypotheses, intentionally kept in one pure function.
 - **environment** — weakly favors content whose metadata matches the current coarse environment; never treats OSM context as proof an object exists.
 - **difficulty** — favors the difficulty selected by the adaptive policy.
 - **variety** — slightly discourages repeating the previous low-level discovery kind.
-- **recency** — strongly discourages immediate repeats and gradually decays for older exposure; it never permanently removes content.
+- **recency** — adds a score penalty for prior exposure. In addition, the mission-mix layer temporarily excludes the last 12 shown mission IDs whenever fresh eligible alternatives exist; it fails open when the eligible pool would otherwise be empty.
 - **performance** — weak historical signal with a minimum sample threshold.
 - **experience** — favors content matching the current themed Experience.
 - **directionVariety** — discourages repeatedly looking at the same physical visual zone.
